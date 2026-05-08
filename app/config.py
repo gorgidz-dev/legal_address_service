@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     s3_secret_key: str = ""
     s3_bucket: str = "legal-address"
     s3_region: str = "ru-central1"
+    storage_backend: str = "local"
+
+    session_cookie_name: str = "legal_address_session"
+    session_ttl_hours: int = 24 * 14
+    invitation_ttl_hours: int = 24 * 7
 
     egrn_extract_validity_days: int = 30
     initial_application_validity_days: int = 30

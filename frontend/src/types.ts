@@ -8,6 +8,41 @@ export type ApplicationStatus =
   | "expired"
   | "terminated";
 export type NoticePeriod = "1d" | "7d" | "1m";
+export type UserRole = "manager" | "lawyer" | "admin";
+
+export interface CurrentUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+}
+
+export interface BootstrapState {
+  can_bootstrap: boolean;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: UserRole;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface InvitationCreateResult {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: UserRole;
+  expires_at: string;
+  accepted_at: string | null;
+  invitation_token: string;
+  invitation_path: string;
+}
 
 export interface Provider {
   id: string;
@@ -123,4 +158,19 @@ export interface ActiveClientRegistryItem {
   days_until_renewal: number;
   price_total: string;
   renewal_status: "overdue" | "due_soon" | "active";
+}
+
+export interface PaymentDocument {
+  id: string;
+  client_id: string;
+  file_id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  payment_date: string | null;
+  amount: string | null;
+  comment: string | null;
+  created_at: string;
+  uploaded_by: string | null;
+  download_url: string;
 }

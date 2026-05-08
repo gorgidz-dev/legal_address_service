@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from app.models.application import Application
 from app.models.client import Client
 from app.models.generated_document import GeneratedDocument
 from app.models.provider import Provider
+from app.models.stored_file import StoredFile
 from app.schemas.application import (
     ApplicationCreateAddressChange,
     ApplicationCreateInitial,
@@ -40,7 +41,7 @@ from app.services.document_generation import (
     render_contract_docx,
     render_guarantee_docx,
 )
-from app.services.storage import resolve_storage_file
+from app.services.storage import local_stored_file_path, read_stored_file, resolve_storage_file
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -437,7 +438,7 @@ async def list_application_documents(
 async def download_latest_package(
     application_id: UUID,
     db: AsyncSession = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     result = await db.execute(
         select(GeneratedDocument)
         .where(
@@ -452,13 +453,43 @@ async def download_latest_package(
     if document is None or not document.zip_url:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ZIP-комплект по заявке не найден")
 
+    if document.zip_url:
+        try:
+            path = resolve_storage_file(document.zip_url)
+            return FileResponse(
+                path,
+                filename=path.name,
+                media_type="application/zip",
+            )
+        except (FileNotFoundError, ValueError):
+            pass
+
+    stored_result = await db.execute(
+        select(StoredFile)
+        .where(
+            StoredFile.application_id == application_id,
+            StoredFile.kind == "package_zip",
+        )
+        .order_by(StoredFile.created_at.desc())
+        .limit(1)
+    )
+    file_record = stored_result.scalar_one_or_none()
+    if file_record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ZIP-комплект по заявке не найден в хранилище")
+
     try:
-        path = resolve_storage_file(document.zip_url)
+        local_path = local_stored_file_path(file_record)
+        if local_path is not None:
+            return FileResponse(
+                local_path,
+                filename=file_record.original_filename,
+                media_type=file_record.content_type,
+            )
+
+        return Response(
+            content=read_stored_file(file_record),
+            media_type=file_record.content_type,
+            headers={"Content-Disposition": f'attachment; filename="{file_record.original_filename}"'},
+        )
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-
-    return FileResponse(
-        path,
-        filename=path.name,
-        media_type="application/zip",
-    )

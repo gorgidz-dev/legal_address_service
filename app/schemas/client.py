@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Pydantic-схемы для клиента (ЮЛ, заполняется через DaData)."""
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
@@ -92,3 +93,18 @@ class ClientRead(BaseModel):
 
     created_at: datetime
     updated_at: datetime
+
+
+class PaymentDocumentRead(BaseModel):
+    id: UUID
+    client_id: UUID
+    file_id: UUID
+    original_filename: str
+    content_type: str
+    size_bytes: int
+    payment_date: Optional[date]
+    amount: Optional[Decimal]
+    comment: Optional[str]
+    created_at: datetime
+    uploaded_by: Optional[UUID]
+    download_url: str

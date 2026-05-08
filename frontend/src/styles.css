@@ -57,6 +57,28 @@ a {
   min-height: 100dvh;
 }
 
+.auth-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-panel {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.94);
+  box-shadow: 0 20px 60px rgba(31, 36, 40, 0.12);
+}
+
+.auth-brand {
+  margin-bottom: 4px;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -336,7 +358,7 @@ h1 {
 .registry-header,
 .registry-row {
   display: grid;
-  grid-template-columns: 1.25fr 1.1fr 0.9fr 1fr 0.85fr 1.8fr 74px;
+  grid-template-columns: 1.25fr 1.1fr 0.9fr 1fr 0.85fr 1.6fr 170px;
   gap: 14px;
   align-items: center;
   padding: 14px 16px;
@@ -513,6 +535,7 @@ h1 {
   place-items: center;
   padding: 20px;
   background: rgba(31, 36, 40, 0.36);
+  z-index: 5;
 }
 
 .modal-panel {
@@ -524,6 +547,10 @@ h1 {
   border-radius: 8px;
   background: #fdfdfb;
   box-shadow: 0 24px 70px rgba(31, 36, 40, 0.22);
+}
+
+.payment-panel {
+  width: min(920px, 100%);
 }
 
 .modal-panel header {
@@ -585,7 +612,7 @@ h1 {
 
 .segmented {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 6px;
   padding: 5px;
   border: 1px solid #dfe3dc;
@@ -740,6 +767,90 @@ select:focus {
   grid-template-columns: 1.6fr 0.7fr 1fr 1fr auto;
 }
 
+.access-form {
+  grid-template-columns: 1fr 1fr 180px auto;
+}
+
+.invite-result {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid #b9d6c0;
+  border-radius: 8px;
+  background: #eef8ef;
+}
+
+.invite-result div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.invite-result strong,
+.invite-result span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.invite-result span {
+  color: #315544;
+  font-family: "SFMono-Regular", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.payment-upload {
+  display: grid;
+  grid-template-columns: 1.6fr 0.8fr 0.8fr 1.2fr auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.payment-list {
+  display: grid;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.payment-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border-top: 1px solid #e5e8e1;
+  background: #ffffff;
+}
+
+.payment-item:first-child {
+  border-top: 0;
+}
+
+.payment-item div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.payment-item strong,
+.payment-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-item span {
+  color: #687167;
+  font-size: 13px;
+}
+
 .simple-list {
   display: grid;
   gap: 8px;
@@ -801,7 +912,7 @@ select:focus {
   }
 
   .nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
   }
 
   .nav-item {
@@ -849,6 +960,8 @@ select:focus {
 
   .compact-form,
   .upload-form,
+  .access-form,
+  .payment-upload,
   .form-grid,
   .form-grid.three,
   .lookup,

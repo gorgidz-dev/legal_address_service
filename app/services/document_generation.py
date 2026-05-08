@@ -27,7 +27,11 @@ from app.services.document_context import (
 )
 from app.services.document_package import create_package_zip
 from app.services.document_renderer import render_docx
-from app.services.storage import application_storage_dir, relative_storage_url
+from app.services.storage import (
+    application_storage_dir,
+    create_stored_file_record,
+    relative_storage_url,
+)
 
 DEFAULT_TEMPLATE_PATHS = {
     TemplateKind.CONTRACT: Path("templates/template_contract.docx"),
@@ -180,6 +184,15 @@ async def render_guarantee_docx(
         contract_date=contract.contract_date if contract else None,
     )
     render_docx(template_path=template_path, output_path=output_path, context=context)
+    await create_stored_file_record(
+        db=db,
+        content=output_path.read_bytes(),
+        kind="guarantee_docx",
+        original_filename=output_path.name,
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        client_id=client.id if client else application.client_id,
+        application_id=application.id,
+    )
     document = GeneratedDocument(
         application_id=application.id,
         kind=GeneratedDocumentKind.GUARANTEE.value,
@@ -217,6 +230,15 @@ async def render_contract_docx(
         price_total=Decimal(contract.price_total),
     )
     render_docx(template_path=template_path, output_path=output_path, context=context)
+    await create_stored_file_record(
+        db=db,
+        content=output_path.read_bytes(),
+        kind="contract_docx",
+        original_filename=output_path.name,
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        client_id=client.id,
+        application_id=application.id,
+    )
     document = GeneratedDocument(
         application_id=application.id,
         kind=GeneratedDocumentKind.CONTRACT.value,
@@ -251,6 +273,15 @@ async def create_package_record(
         entries.append((Path(egrn_extract.signature_file_url), "03_выписка_егрн.sig"))
 
     create_package_zip(zip_path=package_path, entries=entries)
+    await create_stored_file_record(
+        db=db,
+        content=package_path.read_bytes(),
+        kind="package_zip",
+        original_filename=package_path.name,
+        content_type="application/zip",
+        client_id=application.client_id,
+        application_id=application.id,
+    )
     package = GeneratedDocument(
         application_id=application.id,
         kind=GeneratedDocumentKind.PACKAGE_ZIP.value,

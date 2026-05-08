@@ -1,6 +1,7 @@
 import {
   Building2,
   CheckCircle2,
+  Copy,
   Database,
   Download,
   FileClock,
@@ -9,28 +10,37 @@ import {
   FileText,
   FolderOpen,
   Home,
+  KeyRound,
   Loader2,
+  LogOut,
   Plus,
   RefreshCw,
+  ReceiptText,
   Search,
   Settings,
-  Upload
+  ShieldCheck,
+  Upload,
+  UserPlus
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api, packageDownloadUrl } from "./api";
+import { ApiError, api, packageDownloadUrl, paymentDocumentDownloadUrl } from "./api";
 import type {
   ActiveClientRegistryItem,
   Address,
   Application,
   ApplicationType,
+  CurrentUser,
   DadataLookup,
+  Invitation,
+  InvitationCreateResult,
   NoticePeriod,
+  PaymentDocument,
   Provider
 } from "./types";
 
-type View = "applications" | "registry" | "new" | "providers" | "addresses" | "templates";
+type View = "applications" | "registry" | "new" | "providers" | "addresses" | "templates" | "access";
 
-const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
+const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "applications", label: "Заявки", icon: FolderOpen },
   { id: "registry", label: "Действующие клиенты", icon: FileClock },
   { id: "new", label: "Новая заявка", icon: Plus },
@@ -38,6 +48,12 @@ const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "addresses", label: "Помещения", icon: Home },
   { id: "templates", label: "Шаблоны", icon: Settings }
 ];
+
+const adminNavItem: { id: View; label: string; icon: typeof Home } = {
+  id: "access",
+  label: "Доступ",
+  icon: ShieldCheck
+};
 
 const statusLabels: Record<string, string> = {
   draft: "Черновик",
@@ -122,8 +138,212 @@ function LoadingRows() {
   );
 }
 
+function AuthView({
+  canBootstrap,
+  onAuthenticated
+}: {
+  canBootstrap: boolean;
+  onAuthenticated: (user: CurrentUser) => void;
+}) {
+  const inviteFromPath = window.location.pathname.startsWith("/invite/")
+    ? decodeURIComponent(window.location.pathname.replace("/invite/", ""))
+    : "";
+  const [mode, setMode] = useState<"login" | "bootstrap" | "invite">(canBootstrap ? "bootstrap" : inviteFromPath ? "invite" : "login");
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [inviteToken, setInviteToken] = useState(inviteFromPath);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const response =
+        mode === "bootstrap"
+          ? await api.bootstrapAdmin({ email, full_name: fullName, password })
+          : mode === "invite"
+            ? await api.acceptInvitation(inviteToken.trim(), { full_name: fullName, password })
+            : await api.login({ email, password });
+      onAuthenticated(response.user);
+      window.history.replaceState(null, "", "/");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-shell">
+      <form className="auth-panel" onSubmit={submit}>
+        <div className="brand auth-brand">
+          <div className="brand-mark">ЮА</div>
+          <div>
+            <strong>Юридический адрес</strong>
+            <span>онлайн-доступ к сервису</span>
+          </div>
+        </div>
+
+        <div className="segmented">
+          <button className={mode === "login" ? "selected" : ""} onClick={() => setMode("login")} type="button">
+            Вход
+          </button>
+          <button className={mode === "invite" ? "selected" : ""} onClick={() => setMode("invite")} type="button">
+            Приглашение
+          </button>
+          {canBootstrap ? (
+            <button
+              className={mode === "bootstrap" ? "selected" : ""}
+              onClick={() => setMode("bootstrap")}
+              type="button"
+            >
+              Первый вход
+            </button>
+          ) : null}
+        </div>
+
+        {mode !== "invite" ? (
+          <Field label="E-mail">
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          </Field>
+        ) : (
+          <Field label="Токен или ссылка приглашения">
+            <input
+              value={inviteToken}
+              onChange={(event) => setInviteToken(event.target.value.replace(/^.*\/invite\//, ""))}
+              required
+            />
+          </Field>
+        )}
+
+        {mode !== "login" ? (
+          <Field label="ФИО пользователя">
+            <input value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+          </Field>
+        ) : null}
+
+        <Field label="Пароль">
+          <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
+        </Field>
+
+        <InlineError message={error} />
+
+        <Button disabled={busy} type="submit">
+          {busy ? <Loader2 className="spin" size={16} /> : <KeyRound size={16} />}
+          {mode === "login" ? "Войти" : mode === "invite" ? "Принять приглашение" : "Создать администратора"}
+        </Button>
+      </form>
+    </main>
+  );
+}
+
+function AccessView() {
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [form, setForm] = useState({ email: "", full_name: "", role: "manager" });
+  const [created, setCreated] = useState<InvitationCreateResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    api
+      .invitations()
+      .then(setInvitations)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    setCreated(null);
+    try {
+      const result = await api.createInvitation({
+        email: form.email,
+        full_name: form.full_name || null,
+        role: form.role
+      });
+      setCreated(result);
+      setForm({ email: "", full_name: "", role: "manager" });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inviteUrl = created ? `${window.location.origin}${created.invitation_path}` : "";
+
+  return (
+    <section className="stack">
+      <form className="compact-form access-form" onSubmit={submit}>
+        <Field label="E-mail">
+          <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" required />
+        </Field>
+        <Field label="ФИО">
+          <input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} />
+        </Field>
+        <Field label="Роль">
+          <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+            <option value="manager">Менеджер</option>
+            <option value="lawyer">Юрист</option>
+            <option value="admin">Администратор</option>
+          </select>
+        </Field>
+        <Button disabled={busy} type="submit">
+          {busy ? <Loader2 className="spin" size={16} /> : <UserPlus size={16} />}
+          Пригласить
+        </Button>
+      </form>
+
+      {created ? (
+        <div className="invite-result">
+          <div>
+            <strong>Ссылка приглашения</strong>
+            <span>{inviteUrl}</span>
+          </div>
+          <button className="text-action" onClick={() => navigator.clipboard?.writeText(inviteUrl)} type="button">
+            <Copy size={15} /> Копировать
+          </button>
+        </div>
+      ) : null}
+
+      <InlineError message={error} />
+
+      {loading ? (
+        <LoadingRows />
+      ) : (
+        <SimpleList
+          items={invitations}
+          render={(invitation) => (
+            <>
+              <strong>{invitation.email}</strong>
+              <span>
+                {invitation.full_name || "без ФИО"} · {invitation.role} · до {formatDate(invitation.expires_at)}
+                {invitation.accepted_at ? ` · принято ${formatDate(invitation.accepted_at)}` : ""}
+              </span>
+            </>
+          )}
+        />
+      )}
+    </section>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>("applications");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [canBootstrap, setCanBootstrap] = useState(false);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -132,6 +352,34 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    let alive = true;
+    api
+      .me()
+      .then((user) => {
+        if (!alive) return;
+        setCurrentUser(user);
+      })
+      .catch(async () => {
+        if (!alive) return;
+        setCurrentUser(null);
+        try {
+          const state = await api.bootstrapState();
+          if (alive) setCanBootstrap(state.can_bootstrap);
+        } catch {
+          if (alive) setCanBootstrap(false);
+        }
+      })
+      .finally(() => alive && setAuthChecked(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
     let alive = true;
     setLoading(true);
     setError(null);
@@ -142,14 +390,42 @@ export default function App() {
         setAddresses(addressesResult);
         setApplications(applicationsResult);
       })
-      .catch((err: Error) => alive && setError(err.message))
+      .catch((err: Error) => {
+        if (!alive) return;
+        if (err instanceof ApiError && err.status === 401) {
+          setCurrentUser(null);
+          return;
+        }
+        setError(err.message);
+      })
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [refreshKey]);
+  }, [currentUser, refreshKey]);
 
+  const navItems = currentUser?.role === "admin" ? [...baseNavItems, adminNavItem] : baseNavItems;
   const selectedTitle = navItems.find((item) => item.id === view)?.label || "Сервис";
+
+  async function handleLogout() {
+    await api.logout().catch(() => undefined);
+    setCurrentUser(null);
+    setProviders([]);
+    setAddresses([]);
+    setApplications([]);
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="auth-shell">
+        <LoadingRows />
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <AuthView canBootstrap={canBootstrap} onAuthenticated={(user) => setCurrentUser(user)} />;
+  }
 
   return (
     <div className="app-shell">
@@ -179,8 +455,11 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <span>API</span>
-          <strong>127.0.0.1:8000</strong>
+          <span>{currentUser.role === "admin" ? "Администратор" : "Пользователь"}</span>
+          <strong>{currentUser.email}</strong>
+          <button className="text-action" onClick={handleLogout} type="button">
+            <LogOut size={15} /> Выйти
+          </button>
         </div>
       </aside>
 
@@ -231,6 +510,7 @@ export default function App() {
               />
             )}
             {view === "templates" && <TemplatesView />}
+            {view === "access" && currentUser.role === "admin" && <AccessView />}
           </>
         )}
       </main>
@@ -684,6 +964,7 @@ function NewApplicationView({
 function RegistryView() {
   const [items, setItems] = useState<ActiveClientRegistryItem[]>([]);
   const [dueOnly, setDueOnly] = useState(false);
+  const [paymentClient, setPaymentClient] = useState<ActiveClientRegistryItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -779,16 +1060,134 @@ function RegistryView() {
                 <b>{item.provider_name}</b>
                 <small>{item.address_full}</small>
               </span>
-              <a className="download-link" href={packageDownloadUrl(item.application_id)}>
-                <Download size={16} /> ZIP
-              </a>
+              <div className="row-actions">
+                <button className="text-action" onClick={() => setPaymentClient(item)} type="button">
+                  <ReceiptText size={15} /> Оплата
+                </button>
+                <a className="download-link" href={packageDownloadUrl(item.application_id)}>
+                  <Download size={16} /> ZIP
+                </a>
+              </div>
             </div>
           ))}
         </div>
       ) : (
         <EmptyState title="Действующих договоров нет" text="Реестр появится после формирования договоров по смене адреса." />
       )}
+      {paymentClient ? <PaymentDocumentsPanel client={paymentClient} onClose={() => setPaymentClient(null)} /> : null}
     </section>
+  );
+}
+
+function PaymentDocumentsPanel({
+  client,
+  onClose
+}: {
+  client: ActiveClientRegistryItem;
+  onClose: () => void;
+}) {
+  const [documents, setDocuments] = useState<PaymentDocument[]>([]);
+  const [file, setFile] = useState<File | null>(null);
+  const [amount, setAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [comment, setComment] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    api
+      .paymentDocuments(client.client_id)
+      .then(setDocuments)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [client.client_id]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    if (paymentDate) formData.append("payment_date", paymentDate);
+    if (amount) formData.append("amount", amount);
+    if (comment) formData.append("comment", comment);
+    try {
+      await api.uploadPaymentDocument(client.client_id, formData);
+      setFile(null);
+      setAmount("");
+      setComment("");
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <section className="modal-panel payment-panel">
+        <header>
+          <div>
+            <span className="eyebrow">Карточка клиента</span>
+            <h2>{client.company_name}</h2>
+          </div>
+          <button className="text-action" onClick={onClose} type="button">
+            Закрыть
+          </button>
+        </header>
+
+        <form className="payment-upload" onSubmit={submit}>
+          <Field label="Документ">
+            <input onChange={(event) => setFile(event.target.files?.[0] || null)} type="file" />
+          </Field>
+          <Field label="Дата оплаты">
+            <input value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} type="date" />
+          </Field>
+          <Field label="Сумма">
+            <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" />
+          </Field>
+          <Field label="Комментарий">
+            <input value={comment} onChange={(event) => setComment(event.target.value)} />
+          </Field>
+          <Button disabled={!file || busy} type="submit">
+            {busy ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
+            Добавить
+          </Button>
+        </form>
+
+        <InlineError message={error} />
+
+        {loading ? (
+          <LoadingRows />
+        ) : documents.length ? (
+          <div className="payment-list">
+            {documents.map((document) => (
+              <div className="payment-item" key={document.id}>
+                <div>
+                  <strong>{document.original_filename}</strong>
+                  <span>
+                    {formatDate(document.payment_date)} · {document.amount ? `${document.amount} руб.` : "сумма не указана"}
+                    {document.comment ? ` · ${document.comment}` : ""}
+                  </span>
+                </div>
+                <a className="download-link" href={paymentDocumentDownloadUrl(document.download_url)}>
+                  <Download size={16} /> Скачать
+                </a>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="Документов об оплате нет" text="Добавьте чек, платёжное поручение или счёт при необходимости." />
+        )}
+      </section>
+    </div>
   );
 }
 

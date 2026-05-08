@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models.address import Address
 from app.models.egrn_extract import EgrnExtract
 from app.schemas.egrn import EgrnExtractRead
-from app.services.storage import egrn_storage_dir, relative_storage_url
+from app.services.storage import create_stored_file_record, egrn_storage_dir, relative_storage_url
 
 router = APIRouter(tags=["egrn"])
 
@@ -68,6 +68,13 @@ async def upload_extract(
     target_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = target_dir / f"{pdf_sha256}.pdf"
     pdf_path.write_bytes(pdf_bytes)
+    await create_stored_file_record(
+        db=db,
+        content=pdf_bytes,
+        kind="egrn_pdf",
+        original_filename=pdf_file.filename or f"{pdf_sha256}.pdf",
+        content_type=pdf_file.content_type or "application/pdf",
+    )
 
     signature_url = None
     if signature_file is not None:
@@ -79,6 +86,13 @@ async def upload_extract(
             signature_path = target_dir / f"{pdf_sha256}{suffix}"
             signature_path.write_bytes(signature_bytes)
             signature_url = relative_storage_url(signature_path)
+            await create_stored_file_record(
+                db=db,
+                content=signature_bytes,
+                kind="egrn_signature",
+                original_filename=signature_file.filename or f"{pdf_sha256}{suffix}",
+                content_type=signature_file.content_type or "application/octet-stream",
+            )
 
     current_result = await db.execute(
         select(EgrnExtract).where(

@@ -3,14 +3,21 @@ from __future__ import annotations
 """FastAPI-точка входа."""
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 
+from app.auth import utcnow
+from app.config import settings
+from app.database import AsyncSessionLocal
+from app.models.user import User
+from app.models.user_session import UserSession
 from app.routers import (
     addresses,
     applications,
+    auth,
     clients,
     egrn,
     providers,
@@ -29,6 +36,65 @@ app = FastAPI(
     ),
 )
 
+def _is_public_path(path: str, method: str) -> bool:
+    if method == "OPTIONS":
+        return True
+    public_exact = {
+        "/",
+        "/health",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/favicon.ico",
+        "/auth/login",
+        "/auth/bootstrap-admin",
+        "/auth/bootstrap-state",
+    }
+    if path in public_exact:
+        return True
+    if path.startswith("/assets/"):
+        return True
+    if path.startswith("/invite/"):
+        return True
+    return path.startswith("/auth/invitations/") and path.endswith("/accept")
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if _is_public_path(request.url.path, request.method):
+        return await call_next(request)
+
+    token = request.cookies.get(settings.session_cookie_name)
+    if not token:
+        return JSONResponse({"detail": "Требуется вход"}, status_code=401)
+
+    from app.services.auth_security import hash_token
+
+    now = utcnow()
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(UserSession, User)
+            .join(User, User.id == UserSession.user_id)
+            .where(
+                UserSession.token_hash == hash_token(token),
+                UserSession.revoked_at.is_(None),
+                UserSession.expires_at > now,
+                User.is_active.is_(True),
+            )
+        )
+        row = result.first()
+        if row is None:
+            return JSONResponse({"detail": "Сессия истекла. Войдите заново"}, status_code=401)
+
+        session, user = row
+        request.state.user_id = user.id
+        request.state.user_role = user.role
+        request.state.user_email = user.email
+        request.state.session_id = session.id
+
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -42,6 +108,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+app.include_router(auth.router)
 app.include_router(providers.router)
 app.include_router(addresses.router)
 app.include_router(egrn.router)
@@ -65,6 +133,14 @@ if (FRONTEND_DIST / "assets").exists():
 
 @app.get("/", include_in_schema=False)
 async def frontend_index() -> FileResponse:
+    index_path = FRONTEND_DIST / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return FileResponse(PROJECT_ROOT / "README.md", media_type="text/plain")
+
+
+@app.get("/invite/{token}", include_in_schema=False)
+async def frontend_invite(token: str) -> FileResponse:
     index_path = FRONTEND_DIST / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
