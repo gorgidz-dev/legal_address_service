@@ -28,3 +28,13 @@ def relative_storage_url(path: Path) -> str:
         return str(path.relative_to(PROJECT_ROOT))
     except ValueError:
         return str(path)
+
+
+def resolve_storage_file(path_value: str, *, project_root: Path = PROJECT_ROOT) -> Path:
+    candidate = (project_root / path_value).resolve()
+    storage_root = (project_root / "storage").resolve()
+    if storage_root not in candidate.parents and candidate != storage_root:
+        raise ValueError("Можно скачивать только файлы из storage")
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Файл не найден: {path_value}")
+    return candidate

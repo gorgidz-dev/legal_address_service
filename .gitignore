@@ -7,3 +7,5 @@ __pycache__/
 *.pyc
 .DS_Store
 storage/
+frontend/node_modules/
+frontend/dist/

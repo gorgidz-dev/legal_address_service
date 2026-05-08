@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +40,7 @@ from app.services.document_generation import (
     render_contract_docx,
     render_guarantee_docx,
 )
+from app.services.storage import resolve_storage_file
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -413,3 +415,38 @@ async def list_application_documents(
         .order_by(GeneratedDocument.generated_at.desc())
     )
     return list(result.scalars().all())
+
+
+@router.get(
+    "/{application_id}/download-package",
+    response_class=FileResponse,
+    summary="Скачать последний ZIP-комплект по заявке",
+)
+async def download_latest_package(
+    application_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> FileResponse:
+    result = await db.execute(
+        select(GeneratedDocument)
+        .where(
+            GeneratedDocument.application_id == application_id,
+            GeneratedDocument.kind == "package_zip",
+            GeneratedDocument.zip_url.is_not(None),
+        )
+        .order_by(GeneratedDocument.generated_at.desc())
+        .limit(1)
+    )
+    document = result.scalar_one_or_none()
+    if document is None or not document.zip_url:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ZIP-комплект по заявке не найден")
+
+    try:
+        path = resolve_storage_file(document.zip_url)
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+
+    return FileResponse(
+        path,
+        filename=path.name,
+        media_type="application/zip",
+    )
