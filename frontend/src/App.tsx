@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Database,
   Download,
+  FileClock,
   FileArchive,
   FileCheck2,
   FileText,
@@ -17,12 +18,21 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, packageDownloadUrl } from "./api";
-import type { Address, Application, ApplicationType, DadataLookup, NoticePeriod, Provider } from "./types";
+import type {
+  ActiveClientRegistryItem,
+  Address,
+  Application,
+  ApplicationType,
+  DadataLookup,
+  NoticePeriod,
+  Provider
+} from "./types";
 
-type View = "applications" | "new" | "providers" | "addresses" | "templates";
+type View = "applications" | "registry" | "new" | "providers" | "addresses" | "templates";
 
 const navItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "applications", label: "Заявки", icon: FolderOpen },
+  { id: "registry", label: "Действующие клиенты", icon: FileClock },
   { id: "new", label: "Новая заявка", icon: Plus },
   { id: "providers", label: "Собственники", icon: Building2 },
   { id: "addresses", label: "Помещения", icon: Home },
@@ -199,6 +209,7 @@ export default function App() {
                 onChanged={() => setRefreshKey((value) => value + 1)}
               />
             )}
+            {view === "registry" && <RegistryView />}
             {view === "new" && (
               <NewApplicationView
                 providers={providers}
@@ -667,6 +678,117 @@ function NewApplicationView({
         </span>
       </aside>
     </form>
+  );
+}
+
+function RegistryView() {
+  const [items, setItems] = useState<ActiveClientRegistryItem[]>([]);
+  const [dueOnly, setDueOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .activeClients(dueOnly ? 30 : undefined)
+      .then((result) => {
+        if (alive) setItems(result);
+      })
+      .catch((err: Error) => alive && setError(err.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [dueOnly]);
+
+  const totals = useMemo(() => {
+    const overdue = items.filter((item) => item.renewal_status === "overdue").length;
+    const dueSoon = items.filter((item) => item.renewal_status === "due_soon").length;
+    return { all: items.length, overdue, dueSoon };
+  }, [items]);
+
+  return (
+    <section className="registry-view">
+      <div className="registry-toolbar">
+        <div className="metric-line">
+          <div>
+            <span>Всего</span>
+            <strong>{totals.all}</strong>
+          </div>
+          <div>
+            <span>На пролонгацию</span>
+            <strong>{totals.dueSoon}</strong>
+          </div>
+          <div>
+            <span>Просрочены</span>
+            <strong>{totals.overdue}</strong>
+          </div>
+        </div>
+        <label className="toggle-field compact registry-filter">
+          <input checked={dueOnly} onChange={(event) => setDueOnly(event.target.checked)} type="checkbox" />
+          <span>Только ближайшие 30 дней</span>
+        </label>
+      </div>
+
+      <InlineError message={error} />
+
+      {loading ? (
+        <LoadingRows />
+      ) : items.length ? (
+        <div className="registry-table">
+          <div className="registry-header">
+            <span>Компания</span>
+            <span>Контакты</span>
+            <span>Договор</span>
+            <span>Срок</span>
+            <span>Пролонгация</span>
+            <span>Адрес</span>
+            <span />
+          </div>
+          {items.map((item) => (
+            <div className="registry-row" key={item.contract_id}>
+              <span>
+                <b>{item.company_name}</b>
+                <small>ИНН {item.client_inn}</small>
+              </span>
+              <span className="contact-cell">
+                <b>{item.contact_name || "—"}</b>
+                <small>{[item.contact_phone, item.contact_email].filter(Boolean).join(" · ") || "нет контактов"}</small>
+              </span>
+              <span>
+                <b>{item.contract_number}</b>
+                <small>{formatDate(item.contract_date)}</small>
+              </span>
+              <span>
+                <b>{item.term_months} мес.</b>
+                <small>
+                  {formatDate(item.start_date)} — {formatDate(item.end_date)}
+                </small>
+              </span>
+              <span>
+                <b className={`renewal ${item.renewal_status}`}>
+                  {item.days_until_renewal < 0
+                    ? `${Math.abs(item.days_until_renewal)} дн. проср.`
+                    : `${item.days_until_renewal} дн.`}
+                </b>
+                <small>{formatDate(item.renewal_date)}</small>
+              </span>
+              <span>
+                <b>{item.provider_name}</b>
+                <small>{item.address_full}</small>
+              </span>
+              <a className="download-link" href={packageDownloadUrl(item.application_id)}>
+                <Download size={16} /> ZIP
+              </a>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="Действующих договоров нет" text="Реестр появится после формирования договоров по смене адреса." />
+      )}
+    </section>
   );
 }
 

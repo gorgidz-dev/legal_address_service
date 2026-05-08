@@ -263,7 +263,8 @@ h1 {
 .table-panel,
 .split-form,
 .stack,
-.templates-panel {
+.templates-panel,
+.registry-view {
   max-width: 1280px;
   margin: 0 auto;
 }
@@ -274,6 +275,130 @@ h1 {
   border-radius: 8px;
   background: rgba(255, 255, 253, 0.86);
   overflow: hidden;
+}
+
+.registry-view {
+  display: grid;
+  gap: 14px;
+}
+
+.registry-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.metric-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.metric-line div {
+  min-width: 132px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.88);
+}
+
+.metric-line span {
+  color: #697066;
+  font-size: 12px;
+}
+
+.metric-line strong {
+  color: #1f2428;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.registry-filter {
+  min-width: max-content;
+  margin-top: 0;
+  padding: 10px 12px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.88);
+}
+
+.registry-table {
+  display: grid;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.88);
+  overflow: hidden;
+}
+
+.registry-header,
+.registry-row {
+  display: grid;
+  grid-template-columns: 1.25fr 1.1fr 0.9fr 1fr 0.85fr 1.8fr 74px;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.registry-header {
+  background: #eef2ea;
+  color: #667066;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.registry-row {
+  border-top: 1px solid #e5e8e1;
+}
+
+.registry-row span {
+  min-width: 0;
+}
+
+.registry-row b,
+.registry-row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registry-row b {
+  color: #242a25;
+  font-size: 13px;
+}
+
+.registry-row small {
+  margin-top: 3px;
+  color: #6f786e;
+  font-size: 12px;
+}
+
+.renewal {
+  display: inline-flex !important;
+  width: max-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid #b9d6c0;
+  background: #eef8ef;
+  color: #24533b !important;
+}
+
+.renewal.due_soon {
+  border-color: #ddc987;
+  background: #fff9df;
+  color: #755d10 !important;
+}
+
+.renewal.overdue {
+  border-color: #e5b0a8;
+  background: #fff2ef;
+  color: #8d2f21 !important;
 }
 
 .table-header,
@@ -702,6 +827,20 @@ select:focus {
   .table-row {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .registry-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .registry-header {
+    display: none;
+  }
+
+  .registry-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .table-row span {

@@ -14,6 +14,7 @@ from app.routers import (
     clients,
     egrn,
     providers,
+    registry,
     templates,
 )
 
@@ -46,6 +47,7 @@ app.include_router(addresses.router)
 app.include_router(egrn.router)
 app.include_router(clients.router)
 app.include_router(applications.router)
+app.include_router(registry.router)
 app.include_router(templates.router)
 
 

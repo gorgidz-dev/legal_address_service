@@ -102,3 +102,25 @@ export interface PackageResult {
   zip_url: string;
   documents: GeneratedDocument[];
 }
+
+export interface ActiveClientRegistryItem {
+  application_id: string;
+  contract_id: string;
+  client_id: string;
+  company_name: string;
+  client_inn: string;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  provider_name: string;
+  address_full: string;
+  contract_number: string;
+  contract_date: string;
+  start_date: string;
+  end_date: string;
+  renewal_date: string;
+  term_months: number;
+  days_until_renewal: number;
+  price_total: string;
+  renewal_status: "overdue" | "due_soon" | "active";
+}

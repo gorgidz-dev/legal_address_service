@@ -1,5 +1,6 @@
 import type {
   Address,
+  ActiveClientRegistryItem,
   Application,
   DadataLookup,
   PackageResult,
@@ -59,7 +60,12 @@ export const api = {
     request<DadataLookup>(`/clients/lookup-by-inn?inn=${encodeURIComponent(inn)}`),
 
   uploadEgrn: (addressId: string, form: FormData) =>
-    request(`/addresses/${addressId}/egrn-extracts`, { method: "POST", body: form })
+    request(`/addresses/${addressId}/egrn-extracts`, { method: "POST", body: form }),
+
+  activeClients: (dueWithinDays?: number) => {
+    const query = typeof dueWithinDays === "number" ? `?due_within_days=${dueWithinDays}` : "";
+    return request<ActiveClientRegistryItem[]>(`/registry/active-clients${query}`);
+  }
 };
 
 export function packageDownloadUrl(applicationId: string): string {
