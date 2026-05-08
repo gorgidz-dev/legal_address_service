@@ -1,0 +1,18 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic[email]==2.10.3
+pydantic-settings==2.6.1
+python-multipart==0.0.20
+httpx==0.28.1
+eval_type_backport==0.2.0; python_version < "3.10"
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+greenlet==3.1.1
+docxtpl==0.19.0
+pytils==0.4.3
+petrovich==2.0.1
+pymorphy3==2.0.2
+pymorphy3-dicts-ru==2.4.417150.4580142
+pytest==8.3.4
+pytest-asyncio==0.24.0
