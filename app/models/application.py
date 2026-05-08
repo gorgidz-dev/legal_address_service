@@ -59,6 +59,10 @@ class Application(UUIDPKMixin, TimestampMixin, Base):
         PgUUID(as_uuid=True), ForeignKey("clients.id"),
     )
     planned_client_name: Mapped[Optional[str]] = mapped_column(Text)
+    company_name: Mapped[Optional[str]] = mapped_column(Text)
+    contact_name: Mapped[Optional[str]] = mapped_column(Text)
+    contact_phone: Mapped[Optional[str]] = mapped_column(Text)
+    contact_email: Mapped[Optional[str]] = mapped_column(Text)
 
     term_months: Mapped[Optional[int]] = mapped_column(SmallInteger)
     has_correspondence_service: Mapped[bool] = mapped_column(

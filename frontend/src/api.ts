@@ -49,6 +49,11 @@ export const api = {
     request<Application>("/applications", { method: "POST", body: JSON.stringify(payload) }),
   generatePackage: (applicationId: string) =>
     request<PackageResult>(`/applications/${applicationId}/generate-package`, { method: "POST" }),
+  promoteToContract: (applicationId: string, payload: unknown) =>
+    request<Application>(`/applications/${applicationId}/promote-to-contract`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
 
   lookupInn: (inn: string) =>
     request<DadataLookup>(`/clients/lookup-by-inn?inn=${encodeURIComponent(inn)}`),

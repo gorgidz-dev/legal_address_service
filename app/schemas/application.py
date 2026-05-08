@@ -24,6 +24,9 @@ from app.validators import INNLegal
 class _ApplicationCreateBase(BaseModel):
     provider_id: UUID
     address_id: UUID
+    contact_name: Optional[str] = Field(default=None, max_length=200)
+    contact_phone: Optional[str] = Field(default=None, max_length=80)
+    contact_email: Optional[str] = Field(default=None, max_length=200)
     contract_city: Optional[str] = Field(
         default=None,
         description="Город заключения договора. Если не указан — берётся из адреса собственника.",
@@ -80,6 +83,10 @@ class ApplicationRead(BaseModel):
 
     client_id: Optional[UUID] = None
     planned_client_name: Optional[str] = None
+    company_name: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
 
     term_months: Optional[int] = None
     notice_period: Optional[NoticePeriod] = None
@@ -112,3 +119,6 @@ class PromoteToContractRequest(BaseModel):
     notice_period: NoticePeriod
     has_correspondence_service: bool = False
     contract_city: Optional[str] = None
+    contact_name: Optional[str] = Field(default=None, max_length=200)
+    contact_phone: Optional[str] = Field(default=None, max_length=80)
+    contact_email: Optional[str] = Field(default=None, max_length=200)

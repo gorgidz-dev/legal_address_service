@@ -53,6 +53,10 @@ export interface Application {
   address_id: string;
   client_id: string | null;
   planned_client_name: string | null;
+  company_name: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
   term_months: number | null;
   notice_period: NoticePeriod | null;
   has_correspondence_service: boolean;

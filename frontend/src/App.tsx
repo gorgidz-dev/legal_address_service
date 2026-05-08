@@ -192,7 +192,12 @@ export default function App() {
         ) : (
           <>
             {view === "applications" && (
-              <ApplicationsView applications={applications} providers={providers} addresses={addresses} />
+              <ApplicationsView
+                applications={applications}
+                providers={providers}
+                addresses={addresses}
+                onChanged={() => setRefreshKey((value) => value + 1)}
+              />
             )}
             {view === "new" && (
               <NewApplicationView
@@ -225,12 +230,16 @@ export default function App() {
 function ApplicationsView({
   applications,
   providers,
-  addresses
+  addresses,
+  onChanged
 }: {
   applications: Application[];
   providers: Provider[];
   addresses: Address[];
+  onChanged: () => void;
 }) {
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+
   if (!applications.length) {
     return <EmptyState title="Заявок пока нет" text="Создайте первичную регистрацию или смену адреса." />;
   }
@@ -242,6 +251,8 @@ function ApplicationsView({
     <section className="table-panel">
       <div className="table-header">
         <span>Тип</span>
+        <span>Компания</span>
+        <span>Контакты</span>
         <span>Статус</span>
         <span>Собственник</span>
         <span>Адрес</span>
@@ -251,16 +262,153 @@ function ApplicationsView({
       {applications.map((application) => (
         <div className="table-row" key={application.id}>
           <span>{typeLabels[application.type]}</span>
+          <span>{application.company_name || application.planned_client_name || "—"}</span>
+          <span className="contact-cell">
+            <b>{application.contact_name || "—"}</b>
+            <small>{[application.contact_phone, application.contact_email].filter(Boolean).join(" · ") || "нет контактов"}</small>
+          </span>
           <span className={`status ${application.status}`}>{statusLabels[application.status] || application.status}</span>
           <span>{providerById.get(application.provider_id)?.short_name || "—"}</span>
           <span>{addressById.get(application.address_id)?.full_address || "—"}</span>
           <span>{formatDate(application.created_at)}</span>
-          <a className="download-link" href={packageDownloadUrl(application.id)}>
-            <Download size={16} /> ZIP
-          </a>
+          <div className="row-actions">
+            {application.type === "initial_registration" ? (
+              <button className="text-action" onClick={() => setPromotingId(application.id)} type="button">
+                <FileCheck2 size={15} /> Договор
+              </button>
+            ) : null}
+            <a className="download-link" href={packageDownloadUrl(application.id)}>
+              <Download size={16} /> ZIP
+            </a>
+          </div>
         </div>
       ))}
+      {promotingId ? (
+        <PromoteContractPanel
+          application={applications.find((item) => item.id === promotingId) || null}
+          onClose={() => setPromotingId(null)}
+          onDone={onChanged}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function PromoteContractPanel({
+  application,
+  onClose,
+  onDone
+}: {
+  application: Application | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [inn, setInn] = useState("");
+  const [termMonths, setTermMonths] = useState<6 | 11>(11);
+  const [noticePeriod, setNoticePeriod] = useState<NoticePeriod>("1m");
+  const [hasCorrespondence, setHasCorrespondence] = useState(false);
+  const [contactName, setContactName] = useState(application?.contact_name || "");
+  const [contactPhone, setContactPhone] = useState(application?.contact_phone || "");
+  const [contactEmail, setContactEmail] = useState(application?.contact_email || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+
+  if (!application) return null;
+  const currentApplication = application;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    setDownloadUrl(null);
+    try {
+      const child = await api.promoteToContract(currentApplication.id, {
+        client_inn: inn,
+        term_months: termMonths,
+        notice_period: noticePeriod,
+        has_correspondence_service: hasCorrespondence,
+        contact_name: contactName || null,
+        contact_phone: contactPhone || null,
+        contact_email: contactEmail || null
+      });
+      await api.generatePackage(child.id);
+      setDownloadUrl(packageDownloadUrl(child.id));
+      onDone();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <form className="modal-panel" onSubmit={submit}>
+        <header>
+          <div>
+            <span className="eyebrow">После регистрации</span>
+            <h2>Создать договор аренды</h2>
+          </div>
+          <button className="text-action" onClick={onClose} type="button">
+            Закрыть
+          </button>
+        </header>
+        <p>
+          Для первичной заявки «{application.company_name || application.planned_client_name}» будет создана дочерняя
+          договорная заявка по ИНН, а затем сформирован ZIP-комплект.
+        </p>
+        <div className="form-grid">
+          <Field label="ИНН зарегистрированной компании">
+            <input value={inn} onChange={(event) => setInn(event.target.value)} inputMode="numeric" required />
+          </Field>
+          <Field label="Срок">
+            <select value={termMonths} onChange={(event) => setTermMonths(Number(event.target.value) as 6 | 11)}>
+              <option value={11}>11 месяцев</option>
+              <option value={6}>6 месяцев</option>
+            </select>
+          </Field>
+          <Field label="Уведомление">
+            <select value={noticePeriod} onChange={(event) => setNoticePeriod(event.target.value as NoticePeriod)}>
+              <option value="1m">1 месяц</option>
+              <option value="7d">7 дней</option>
+              <option value="1d">1 день</option>
+            </select>
+          </Field>
+          <label className="toggle-field compact">
+            <input
+              checked={hasCorrespondence}
+              onChange={(event) => setHasCorrespondence(event.target.checked)}
+              type="checkbox"
+            />
+            <span>Корреспонденция</span>
+          </label>
+        </div>
+        <div className="form-grid three">
+          <Field label="Контактное лицо">
+            <input value={contactName} onChange={(event) => setContactName(event.target.value)} />
+          </Field>
+          <Field label="Телефон">
+            <input value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} />
+          </Field>
+          <Field label="E-mail">
+            <input value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} type="email" />
+          </Field>
+        </div>
+        <InlineError message={error} />
+        <div className="actions">
+          <Button disabled={busy || inn.length !== 10} type="submit">
+            {busy ? <Loader2 className="spin" size={16} /> : <FileArchive size={16} />}
+            Создать договор
+          </Button>
+          {downloadUrl ? (
+            <a className="btn secondary" href={downloadUrl}>
+              <Download size={16} /> Скачать ZIP
+            </a>
+          ) : null}
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -277,6 +425,9 @@ function NewApplicationView({
   const [providerId, setProviderId] = useState(providers[0]?.id || "");
   const [addressId, setAddressId] = useState("");
   const [plannedClientName, setPlannedClientName] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [inn, setInn] = useState("");
   const [lookup, setLookup] = useState<DadataLookup | null>(null);
   const [termMonths, setTermMonths] = useState<6 | 11>(11);
@@ -321,7 +472,10 @@ function NewApplicationView({
               type,
               provider_id: providerId,
               address_id: addressId,
-              planned_client_name: plannedClientName
+              planned_client_name: plannedClientName,
+              contact_name: contactName || null,
+              contact_phone: contactPhone || null,
+              contact_email: contactEmail || null
             }
           : {
               type,
@@ -330,7 +484,10 @@ function NewApplicationView({
               client_inn: inn,
               term_months: termMonths,
               notice_period: noticePeriod,
-              has_correspondence_service: hasCorrespondence
+              has_correspondence_service: hasCorrespondence,
+              contact_name: contactName || null,
+              contact_phone: contactPhone || null,
+              contact_email: contactEmail || null
             };
       const application = await api.createApplication(payload);
       await api.generatePackage(application.id);
@@ -459,6 +616,31 @@ function NewApplicationView({
             </div>
           </>
         )}
+
+        <div className="form-grid three">
+          <Field label="Контактное лицо">
+            <input
+              value={contactName}
+              onChange={(event) => setContactName(event.target.value)}
+              placeholder="Менеджер клиента"
+            />
+          </Field>
+          <Field label="Телефон">
+            <input
+              value={contactPhone}
+              onChange={(event) => setContactPhone(event.target.value)}
+              placeholder="+7 900 000-00-00"
+            />
+          </Field>
+          <Field label="E-mail">
+            <input
+              value={contactEmail}
+              onChange={(event) => setContactEmail(event.target.value)}
+              placeholder="mail@example.ru"
+              type="email"
+            />
+          </Field>
+        </div>
 
         <InlineError message={error} />
 
