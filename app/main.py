@@ -22,6 +22,7 @@ from app.routers import (
     clients,
     egrn,
     marketplace,
+    mobile_auth,
     providers,
     registry,
     templates,
@@ -38,6 +39,21 @@ app = FastAPI(
     ),
 )
 
+
+def _session_token_from_request(request: Request) -> str | None:
+    cookie_token = request.cookies.get(settings.session_cookie_name)
+    if cookie_token:
+        return cookie_token
+
+    authorization = request.headers.get("authorization")
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
+
+
 def _is_public_path(path: str, method: str) -> bool:
     if method == "OPTIONS":
         return True
@@ -51,6 +67,7 @@ def _is_public_path(path: str, method: str) -> bool:
         "/auth/login",
         "/auth/bootstrap-admin",
         "/auth/bootstrap-state",
+        "/mobile/auth/login",
     }
     if path in public_exact:
         return True
@@ -72,7 +89,7 @@ async def auth_middleware(request: Request, call_next):
     if _is_public_path(request.url.path, request.method):
         return await call_next(request)
 
-    token = request.cookies.get(settings.session_cookie_name)
+    token = _session_token_from_request(request)
     if not token:
         return JSONResponse({"detail": "Требуется вход"}, status_code=401)
 
@@ -118,6 +135,7 @@ app.add_middleware(
 
 
 app.include_router(auth.router)
+app.include_router(mobile_auth.router)
 app.include_router(marketplace.router)
 app.include_router(client_dashboard.router)
 app.include_router(providers.router)

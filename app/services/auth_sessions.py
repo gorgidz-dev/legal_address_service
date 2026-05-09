@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import secrets
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,12 @@ from app.config import settings
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.services.auth_security import hash_token
+
+
+@dataclass(frozen=True)
+class SessionCredentials:
+    token: str
+    expires_at: datetime
 
 
 def set_session_cookie(response: Response, token: str, expires_at) -> None:
@@ -30,8 +37,9 @@ async def create_session(
     *,
     db: AsyncSession,
     user: User,
-    response: Response,
-) -> None:
+    response: Response | None = None,
+    set_cookie: bool = True,
+) -> SessionCredentials:
     token = secrets.token_urlsafe(32)
     expires_at = utcnow() + timedelta(hours=settings.session_ttl_hours)
     session = UserSession(
@@ -42,4 +50,6 @@ async def create_session(
     )
     db.add(session)
     await db.flush()
-    set_session_cookie(response, token, expires_at)
+    if response is not None and set_cookie:
+        set_session_cookie(response, token, expires_at)
+    return SessionCredentials(token=token, expires_at=expires_at)

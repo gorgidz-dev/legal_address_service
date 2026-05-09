@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -44,6 +44,16 @@ class CurrentUserRead(BaseModel):
 
 class AuthResponse(BaseModel):
     user: CurrentUserRead
+
+
+class SessionTokenRead(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_at: datetime
+
+
+class MobileAuthResponse(AuthResponse):
+    session: SessionTokenRead
 
 
 class BootstrapState(BaseModel):
