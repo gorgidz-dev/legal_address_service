@@ -269,3 +269,55 @@ export interface PublicClientApplicationResult {
   user: CurrentUser;
   application: Application;
 }
+
+export interface ClientApplicationEvent {
+  id: string;
+  application_id: string;
+  kind:
+    | "created"
+    | "status_changed"
+    | "comment_added"
+    | "document_uploaded"
+    | "document_approved"
+    | "correction_requested"
+    | "dispute_opened"
+    | "cancelled";
+  audience: "client" | "owner" | "admin";
+  title: string;
+  message: string;
+  payload: Record<string, unknown>;
+  is_read: boolean;
+  created_by: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface ClientApplication {
+  id: string;
+  type: ApplicationType;
+  status: ApplicationStatus;
+  provider_id: string;
+  address_id: string;
+  provider_name: string;
+  full_address: string;
+  room_number: string | null;
+  client_id: string | null;
+  planned_client_name: string | null;
+  company_name: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  term_months: number | null;
+  notice_period: NoticePeriod | null;
+  has_correspondence_service: boolean;
+  contract_city: string | null;
+  fns_number: number | null;
+  fns_city: string | null;
+  expires_at: string | null;
+  parent_application_id: string | null;
+  selected_price: string;
+  correspondence_price: string | null;
+  events: ClientApplicationEvent[];
+  created_at: string;
+  updated_at: string;
+}

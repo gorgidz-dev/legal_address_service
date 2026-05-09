@@ -457,6 +457,242 @@ a {
   line-height: 1.55;
 }
 
+.client-shell {
+  min-height: 100dvh;
+  padding: 22px;
+}
+
+.client-topbar,
+.client-heading,
+.client-dashboard {
+  max-width: 1280px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.client-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.client-heading {
+  margin-bottom: 20px;
+}
+
+.client-heading h1 {
+  max-width: 760px;
+}
+
+.client-dashboard {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.client-list {
+  display: grid;
+  gap: 10px;
+}
+
+.client-application {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  width: 100%;
+  min-height: 148px;
+  padding: 14px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.88);
+  color: #28302a;
+  text-align: left;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.client-application:hover {
+  border-color: #c1cec0;
+  background: #ffffff;
+}
+
+.client-application:active {
+  transform: translateY(1px);
+}
+
+.client-application.active {
+  border-color: #9db89d;
+  background: #f1f8ef;
+}
+
+.client-application strong,
+.client-application small {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-application strong {
+  font-size: 16px;
+}
+
+.client-application small {
+  color: #687167;
+  font-size: 13px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.client-application b {
+  margin-top: auto;
+  color: #204f41;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.client-detail {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.92);
+}
+
+.client-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.client-detail-header h2 {
+  margin: 0;
+  color: #1f2428;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.04;
+  letter-spacing: 0;
+}
+
+.client-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.client-metrics div,
+.client-info-grid div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #e1e6dd;
+  border-radius: 8px;
+  background: #f8faf6;
+}
+
+.client-metrics svg {
+  color: #204f41;
+}
+
+.client-metrics span,
+.client-info-grid span {
+  color: #6b7469;
+  font-size: 12px;
+}
+
+.client-metrics strong,
+.client-info-grid strong,
+.client-info-grid small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-metrics strong {
+  color: #1f2428;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.client-info-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 10px;
+}
+
+.client-info-grid small {
+  color: #687167;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.timeline-panel {
+  display: grid;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.timeline-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #204f41;
+}
+
+.timeline-title strong {
+  color: #1f2428;
+}
+
+.timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-item {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 12px 12px 12px 28px;
+  border: 1px solid #e1e6dd;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 18px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #204f41;
+}
+
+.timeline-item span {
+  color: #6b7469;
+  font-size: 12px;
+}
+
+.timeline-item strong {
+  color: #1f2428;
+}
+
+.timeline-item p {
+  margin: 0;
+  color: #596259;
+  line-height: 1.45;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -1347,6 +1583,22 @@ textarea {
 
   .split-form {
     grid-template-columns: 1fr;
+  }
+
+  .client-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .client-dashboard,
+  .client-metrics,
+  .client-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .client-detail-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .table-header {

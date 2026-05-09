@@ -36,5 +36,11 @@ async def require_staff(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_client(user: User = Depends(get_current_user)) -> User:
+    if user.role != UserRole.CLIENT.value:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нужна роль клиента")
+    return user
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)

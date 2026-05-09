@@ -30,6 +30,7 @@ import type {
   Address,
   Application,
   ApplicationType,
+  ClientApplication,
   CurrentUser,
   DadataLookup,
   Invitation,
@@ -63,7 +64,24 @@ const statusLabels: Record<string, string> = {
   contract_signed: "Договор подписан",
   active: "Активна",
   expired: "Истекла",
-  terminated: "Расторгнута"
+  terminated: "Расторгнута",
+  awaiting_payment: "Ожидает оплату",
+  paid: "Оплачена",
+  admin_review: "Проверка администратора",
+  needs_client_fix: "Нужны уточнения",
+  assigned_to_owner: "Передана собственнику",
+  accepted_by_owner: "Принята собственником",
+  rejected_by_owner: "Отклонена собственником",
+  documents_preparing: "Готовятся документы",
+  documents_uploaded: "Документы загружены",
+  documents_review: "Проверка документов",
+  documents_revision: "Доработка документов",
+  ready_for_client: "Готова к выдаче",
+  completed: "Завершена",
+  cancelled: "Отменена",
+  dispute: "Спор",
+  refund_pending: "Возврат готовится",
+  refunded: "Возврат выполнен"
 };
 
 const typeLabels: Record<ApplicationType, string> = {
@@ -74,6 +92,15 @@ const typeLabels: Record<ApplicationType, string> = {
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("ru-RU").format(new Date(value));
+}
+
+function formatMoney(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: "RUB",
+    maximumFractionDigits: 0
+  }).format(Number(value));
 }
 
 function Field({
@@ -463,7 +490,7 @@ export default function App() {
   }
 
   if (currentUser.role === "client") {
-    return <ClientPendingView user={currentUser} onLogout={handleLogout} />;
+    return <ClientDashboardView user={currentUser} onLogout={handleLogout} />;
   }
 
   return (
@@ -557,10 +584,44 @@ export default function App() {
   );
 }
 
-function ClientPendingView({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) {
+function ClientDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) {
+  const [applications, setApplications] = useState<ClientApplication[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .clientApplications()
+      .then((result) => {
+        if (!alive) return;
+        setApplications(result);
+        setSelectedId((current) => {
+          if (current && result.some((application) => application.id === current)) return current;
+          return result[0]?.id || null;
+        });
+      })
+      .catch((err: Error) => {
+        if (alive) setError(err.message);
+      })
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [refreshKey]);
+
+  const selectedApplication = useMemo(
+    () => applications.find((application) => application.id === selectedId) || applications[0] || null,
+    [applications, selectedId]
+  );
+
   return (
-    <main className="role-shell">
-      <section className="role-panel">
+    <main className="client-shell">
+      <header className="client-topbar">
         <div className="brand">
           <div className="brand-mark">ЮА</div>
           <div>
@@ -568,18 +629,122 @@ function ClientPendingView({ user, onLogout }: { user: CurrentUser; onLogout: ()
             <span>{user.email}</span>
           </div>
         </div>
-        <div>
-          <span className="eyebrow">Заявка создана</span>
-          <h1>Кабинет клиента будет следующим модулем</h1>
+        <div className="actions">
+          <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
+            <RefreshCw size={16} /> Обновить
+          </Button>
+          <Button variant="secondary" onClick={onLogout}>
+            <LogOut size={16} /> Выйти
+          </Button>
         </div>
-        <p>
-          Аккаунт уже создан, заявка передана администратору на ручную проверку. На следующем этапе здесь появятся
-          статус заявки, документы и загрузки клиента.
-        </p>
-        <Button variant="secondary" onClick={onLogout}>
-          <LogOut size={16} /> Выйти
-        </Button>
+      </header>
+
+      <section className="client-heading">
+        <span className="eyebrow">Мои заявки</span>
+        <h1>Статус и адрес по заявке на юридический адрес</h1>
       </section>
+
+      <InlineError message={error} />
+
+      {loading ? (
+        <LoadingRows />
+      ) : applications.length === 0 ? (
+        <EmptyState title="Заявок пока нет" text="После отправки заявки она появится в этом кабинете." />
+      ) : (
+        <section className="client-dashboard">
+          <div className="client-list">
+            {applications.map((application) => (
+              <button
+                className={application.id === selectedApplication?.id ? "client-application active" : "client-application"}
+                key={application.id}
+                onClick={() => setSelectedId(application.id)}
+                type="button"
+              >
+                <span className={`status ${application.status}`}>
+                  {statusLabels[application.status] || application.status}
+                </span>
+                <strong>{application.company_name || application.planned_client_name || "Компания"}</strong>
+                <small>{application.full_address}</small>
+                <b>{formatMoney(application.selected_price)}</b>
+              </button>
+            ))}
+          </div>
+
+          {selectedApplication ? (
+            <div className="client-detail">
+              <div className="client-detail-header">
+                <div>
+                  <span className="eyebrow">{typeLabels[selectedApplication.type]}</span>
+                  <h2>{selectedApplication.company_name || selectedApplication.planned_client_name || "Заявка"}</h2>
+                </div>
+                <span className={`status ${selectedApplication.status}`}>
+                  {statusLabels[selectedApplication.status] || selectedApplication.status}
+                </span>
+              </div>
+
+              <div className="client-metrics">
+                <div>
+                  <ReceiptText size={18} />
+                  <span>Стоимость</span>
+                  <strong>{formatMoney(selectedApplication.selected_price)}</strong>
+                </div>
+                <div>
+                  <FileClock size={18} />
+                  <span>Срок</span>
+                  <strong>{selectedApplication.term_months ? `${selectedApplication.term_months} мес.` : "—"}</strong>
+                </div>
+                <div>
+                  <Home size={18} />
+                  <span>ИФНС</span>
+                  <strong>{selectedApplication.fns_number ? `№ ${selectedApplication.fns_number}` : "—"}</strong>
+                </div>
+              </div>
+
+              <div className="client-info-grid">
+                <div>
+                  <span>Адрес</span>
+                  <strong>{selectedApplication.full_address}</strong>
+                  {selectedApplication.room_number ? <small>{selectedApplication.room_number}</small> : null}
+                </div>
+                <div>
+                  <span>Собственник</span>
+                  <strong>{selectedApplication.provider_name}</strong>
+                </div>
+                <div>
+                  <span>Контакт</span>
+                  <strong>{selectedApplication.contact_name || "—"}</strong>
+                  <small>{[selectedApplication.contact_phone, selectedApplication.contact_email].filter(Boolean).join(" · ")}</small>
+                </div>
+                <div>
+                  <span>Корреспонденция</span>
+                  <strong>{selectedApplication.has_correspondence_service ? "Подключена" : "Не подключена"}</strong>
+                  {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
+                </div>
+              </div>
+
+              <div className="timeline-panel">
+                <div className="timeline-title">
+                  <FileText size={18} />
+                  <strong>Лента заявки</strong>
+                </div>
+                {selectedApplication.events.length ? (
+                  <div className="timeline">
+                    {selectedApplication.events.map((event) => (
+                      <div className="timeline-item" key={event.id}>
+                        <span>{formatDate(event.created_at)}</span>
+                        <strong>{event.title}</strong>
+                        <p>{event.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState title="Событий пока нет" text="Обновления по заявке появятся после проверки." />
+                )}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      )}
     </main>
   );
 }

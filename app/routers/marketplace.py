@@ -12,7 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.enums import AddressPublicationStatus, ApplicationStatus, ApplicationType, OwnerConnectionRequestStatus, UserRole
+from app.enums import (
+    AddressPublicationStatus,
+    ApplicationEventKind,
+    ApplicationStatus,
+    ApplicationType,
+    NotificationAudience,
+    OwnerConnectionRequestStatus,
+    UserRole,
+)
 from app.models.address import Address
 from app.models.application import Application
 from app.models.provider import Provider
@@ -32,6 +40,7 @@ from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUserRead
 from app.services.auth_security import hash_password
 from app.services.auth_sessions import create_session
+from app.services.notification_events import create_application_event
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
@@ -203,6 +212,16 @@ async def create_public_client_application(
     db.add(application)
     try:
         await db.flush()
+        await create_application_event(
+            db=db,
+            application_id=application.id,
+            kind=ApplicationEventKind.CREATED,
+            audience=NotificationAudience.CLIENT,
+            title="Заявка создана",
+            message="Заявка отправлена администратору на ручную проверку.",
+            payload={"status": ApplicationStatus.ADMIN_REVIEW.value},
+            created_by=user.id,
+        )
         await db.commit()
     except IntegrityError as e:
         await db.rollback()

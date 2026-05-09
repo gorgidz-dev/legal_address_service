@@ -3,6 +3,7 @@ import type {
   ActiveClientRegistryItem,
   Application,
   BootstrapState,
+  ClientApplication,
   CurrentUser,
   DadataLookup,
   Invitation,
@@ -95,6 +96,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  clientApplications: () => request<ClientApplication[]>("/client/applications"),
 
   providers: () => request<Provider[]>("/providers"),
   createProvider: (payload: unknown) =>

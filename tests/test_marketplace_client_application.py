@@ -11,6 +11,7 @@ from app.database import get_db
 from app.enums import ApplicationStatus, UserRole
 from app.main import _is_public_path, app
 from app.models.application import Application
+from app.models.application_event import ApplicationEvent
 from app.models.user import User
 from app.schemas.marketplace import PublicClientApplicationCreateInitial
 
@@ -128,8 +129,12 @@ def test_public_initial_application_creates_client_user_application_and_session(
 
     created_user = next(item for item in fake_db.added if isinstance(item, User))
     created_application = next(item for item in fake_db.added if isinstance(item, Application))
+    created_event = next(item for item in fake_db.added if isinstance(item, ApplicationEvent))
     assert created_user.email == "client@example.com"
     assert created_application.created_by == created_user.id
     assert created_application.address_id == address_id
     assert created_application.provider_id == provider_id
     assert created_application.company_name == "Альфа"
+    assert created_event.application_id == created_application.id
+    assert created_event.audience == "client"
+    assert created_event.payload["status"] == ApplicationStatus.ADMIN_REVIEW.value
