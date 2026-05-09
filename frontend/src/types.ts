@@ -26,6 +26,16 @@ export type ApplicationStatus =
   | "refunded";
 export type NoticePeriod = "1d" | "7d" | "1m";
 export type UserRole = "manager" | "lawyer" | "admin" | "client" | "owner";
+export type DocumentFileKind =
+  | "client_requisites"
+  | "company_details"
+  | "ownership_proof"
+  | "guarantee_letter"
+  | "contract"
+  | "act"
+  | "owner_consent"
+  | "postal_service"
+  | "admin_review_file";
 
 export interface CurrentUser {
   id: string;
@@ -274,6 +284,24 @@ export interface ApplicationActionResult {
   application_id: string;
   status: ApplicationStatus;
   available_actions: string[];
+}
+
+export interface ApplicationDocument {
+  id: string;
+  application_id: string;
+  kind: DocumentFileKind;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+  uploaded_by: string | null;
+  download_url: string;
+}
+
+export interface ApplicationDocumentUploadResult {
+  application_id: string;
+  application_status: ApplicationStatus;
+  document: ApplicationDocument;
 }
 
 export interface ClientApplicationEvent {

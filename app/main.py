@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.user_session import UserSession
 from app.routers import (
     addresses,
+    application_documents,
     applications,
     auth,
     client_dashboard,
@@ -142,6 +143,7 @@ app.include_router(marketplace.router)
 app.include_router(client_dashboard.router)
 app.include_router(owner_dashboard.router)
 app.include_router(workflow.router)
+app.include_router(application_documents.router)
 app.include_router(providers.router)
 app.include_router(addresses.router)
 app.include_router(egrn.router)

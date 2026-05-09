@@ -3,6 +3,8 @@ import type {
   ActiveClientRegistryItem,
   Application,
   ApplicationActionResult,
+  ApplicationDocument,
+  ApplicationDocumentUploadResult,
   BootstrapState,
   ClientApplication,
   CurrentUser,
@@ -105,6 +107,13 @@ export const api = {
       `/workflow/applications/${applicationId}/actions/${encodeURIComponent(action)}`,
       { method: "POST" }
     ),
+  applicationDocuments: (applicationId: string) =>
+    request<ApplicationDocument[]>(`/workflow/applications/${applicationId}/documents`),
+  uploadApplicationDocument: (applicationId: string, form: FormData) =>
+    request<ApplicationDocumentUploadResult>(`/workflow/applications/${applicationId}/documents`, {
+      method: "POST",
+      body: form
+    }),
 
   providers: () => request<Provider[]>("/providers"),
   createProvider: (payload: unknown) =>

@@ -30,10 +30,12 @@ import type {
   ActiveClientRegistryItem,
   Address,
   Application,
+  ApplicationDocument,
   ApplicationType,
   ClientApplication,
   CurrentUser,
   DadataLookup,
+  DocumentFileKind,
   Invitation,
   InvitationCreateResult,
   NoticePeriod,
@@ -99,6 +101,27 @@ const ownerActionLabels: Record<string, string> = {
   upload_documents: "Загрузить документы"
 };
 
+const ownerDocumentKinds: DocumentFileKind[] = [
+  "owner_consent",
+  "contract",
+  "act",
+  "postal_service",
+  "ownership_proof",
+  "guarantee_letter"
+];
+
+const documentKindLabels: Record<DocumentFileKind, string> = {
+  client_requisites: "Реквизиты клиента",
+  company_details: "Карточка компании",
+  ownership_proof: "Подтверждение собственности",
+  guarantee_letter: "Гарантийное письмо",
+  contract: "Договор",
+  act: "Акт",
+  owner_consent: "Согласие собственника",
+  postal_service: "Почтовое обслуживание",
+  admin_review_file: "Файл проверки"
+};
+
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("ru-RU").format(new Date(value));
@@ -111,6 +134,27 @@ function formatMoney(value: string | number | null | undefined): string {
     currency: "RUB",
     maximumFractionDigits: 0
   }).format(Number(value));
+}
+
+function formatFileSize(value: number): string {
+  if (value < 1024) return `${value} Б`;
+  if (value < 1024 * 1024) return `${Math.round(value / 102.4) / 10} КБ`;
+  return `${Math.round(value / 1024 / 102.4) / 10} МБ`;
+}
+
+function ownerCanUploadDocuments(application: OwnerApplication | null): boolean {
+  return application?.status === "documents_preparing" || application?.status === "documents_revision";
+}
+
+function ownerNextStepLabel(application: OwnerApplication): string {
+  if (application.available_actions.length) {
+    return application.available_actions.map((action) => ownerActionLabels[action] || action).join(", ");
+  }
+  if (ownerCanUploadDocuments(application)) return "Загрузить комплект документов";
+  if (application.status === "documents_review") return "Проверка площадки";
+  if (application.status === "ready_for_client") return "Документы готовы клиенту";
+  if (application.status === "completed") return "Заявка завершена";
+  return "Ожидает другой роли";
 }
 
 function Field({
@@ -776,6 +820,15 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentKind, setDocumentKind] = useState<DocumentFileKind>("owner_consent");
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentInputKey, setDocumentInputKey] = useState(0);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -809,7 +862,33 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
   );
   const publishedCount = addresses.filter((address) => address.publication_status === "published").length;
   const availableCount = addresses.filter((address) => address.is_available).length;
-  const actionableCount = applications.filter((application) => application.available_actions.length > 0).length;
+  const actionableCount = applications.filter(
+    (application) => application.available_actions.length > 0 || ownerCanUploadDocuments(application)
+  ).length;
+
+  useEffect(() => {
+    if (!selectedApplication) {
+      setDocuments([]);
+      setDocumentsError(null);
+      setDocumentsLoading(false);
+      return;
+    }
+    let alive = true;
+    setDocumentsLoading(true);
+    setDocumentsError(null);
+    api
+      .applicationDocuments(selectedApplication.id)
+      .then((result) => {
+        if (alive) setDocuments(result);
+      })
+      .catch((err: Error) => {
+        if (alive) setDocumentsError(err.message);
+      })
+      .finally(() => alive && setDocumentsLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [selectedApplication?.id, documentsRefreshKey]);
 
   async function runOwnerAction(action: string) {
     if (!selectedApplication) return;
@@ -822,6 +901,28 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
       setActionError((err as Error).message);
     } finally {
       setActionBusy(null);
+    }
+  }
+
+  async function uploadOwnerDocument(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedApplication || !documentFile) return;
+    setUploadBusy(true);
+    setUploadError(null);
+    const form = new FormData();
+    form.append("kind", documentKind);
+    form.append("file", documentFile);
+    try {
+      const result = await api.uploadApplicationDocument(selectedApplication.id, form);
+      setDocuments((current) => [result.document, ...current.filter((item) => item.id !== result.document.id)]);
+      setDocumentFile(null);
+      setDocumentInputKey((value) => value + 1);
+      setDocumentsRefreshKey((value) => value + 1);
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      setUploadError((err as Error).message);
+    } finally {
+      setUploadBusy(false);
     }
   }
 
@@ -971,11 +1072,7 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
                   </div>
                   <div>
                     <span>Следующий шаг</span>
-                    <strong>
-                      {selectedApplication.available_actions.length
-                        ? selectedApplication.available_actions.map((action) => ownerActionLabels[action] || action).join(", ")
-                        : "Ожидает другой роли"}
-                    </strong>
+                    <strong>{ownerNextStepLabel(selectedApplication)}</strong>
                   </div>
                   <div>
                     <span>Корреспонденция</span>
@@ -1010,6 +1107,63 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
                   </div>
                 ) : null}
                 <InlineError message={actionError} />
+
+                <div className="owner-documents-panel">
+                  <div className="timeline-title">
+                    <FileArchive size={18} />
+                    <strong>Документы заявки</strong>
+                  </div>
+
+                  {ownerCanUploadDocuments(selectedApplication) ? (
+                    <form className="owner-upload-form" onSubmit={uploadOwnerDocument}>
+                      <Field label="Тип документа">
+                        <select value={documentKind} onChange={(event) => setDocumentKind(event.target.value as DocumentFileKind)}>
+                          {ownerDocumentKinds.map((kind) => (
+                            <option key={kind} value={kind}>
+                              {documentKindLabels[kind]}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Файл">
+                        <input
+                          accept=".pdf,.doc,.docx,.zip,.jpg,.jpeg,.png"
+                          key={documentInputKey}
+                          onChange={(event) => setDocumentFile(event.target.files?.[0] || null)}
+                          type="file"
+                        />
+                      </Field>
+                      <Button disabled={uploadBusy || !documentFile} type="submit">
+                        {uploadBusy ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
+                        Отправить на проверку
+                      </Button>
+                    </form>
+                  ) : null}
+
+                  <InlineError message={uploadError || documentsError} />
+
+                  {documentsLoading ? (
+                    <LoadingRows />
+                  ) : documents.length ? (
+                    <div className="owner-document-list">
+                      {documents.map((document) => (
+                        <a className="owner-document-item" href={document.download_url} key={document.id}>
+                          <FileText size={17} />
+                          <span>
+                            <strong>{document.original_filename}</strong>
+                            <small>
+                              {documentKindLabels[document.kind]} · {formatFileSize(document.size_bytes)} ·{" "}
+                              {formatDate(document.created_at)}
+                            </small>
+                          </span>
+                          <Download size={16} />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState title="Документы пока не загружены" text="После загрузки файлы появятся здесь." />
+                  )}
+                </div>
 
                 <div className="timeline-panel">
                   <div className="timeline-title">

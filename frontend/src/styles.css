@@ -897,6 +897,75 @@ a {
   gap: 8px;
 }
 
+.owner-documents-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: #fbfcf8;
+}
+
+.owner-upload-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(220px, 1.2fr) max-content;
+  gap: 10px;
+  align-items: end;
+}
+
+.owner-document-list {
+  display: grid;
+  gap: 8px;
+}
+
+.owner-document-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 24px;
+  gap: 10px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid #e1e6dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #26312b;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.owner-document-item:hover {
+  border-color: #c1cec0;
+  background: #f8faf6;
+}
+
+.owner-document-item:active {
+  transform: translateY(1px);
+}
+
+.owner-document-item svg {
+  color: #204f41;
+}
+
+.owner-document-item span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.owner-document-item strong,
+.owner-document-item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-document-item small {
+  color: #687167;
+  font-size: 12px;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -1802,6 +1871,7 @@ textarea {
   .client-dashboard,
   .owner-layout,
   .owner-application-list,
+  .owner-upload-form,
   .owner-metrics,
   .client-metrics,
   .client-info-grid {
