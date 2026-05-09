@@ -10,3 +10,4 @@ __pycache__/
 storage/
 frontend/node_modules/
 frontend/dist/
+.superpowers/
