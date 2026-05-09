@@ -891,6 +891,12 @@ a {
   line-height: 1;
 }
 
+.owner-action-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;

@@ -2,6 +2,7 @@ import type {
   Address,
   ActiveClientRegistryItem,
   Application,
+  ApplicationActionResult,
   BootstrapState,
   ClientApplication,
   CurrentUser,
@@ -99,6 +100,11 @@ export const api = {
     }),
   clientApplications: () => request<ClientApplication[]>("/client/applications"),
   ownerDashboard: () => request<OwnerDashboard>("/owner/dashboard"),
+  runApplicationAction: (applicationId: string, action: string) =>
+    request<ApplicationActionResult>(
+      `/workflow/applications/${applicationId}/actions/${encodeURIComponent(action)}`,
+      { method: "POST" }
+    ),
 
   providers: () => request<Provider[]>("/providers"),
   createProvider: (payload: unknown) =>

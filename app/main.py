@@ -27,6 +27,7 @@ from app.routers import (
     providers,
     registry,
     templates,
+    workflow,
 )
 
 app = FastAPI(
@@ -140,6 +141,7 @@ app.include_router(mobile_auth.router)
 app.include_router(marketplace.router)
 app.include_router(client_dashboard.router)
 app.include_router(owner_dashboard.router)
+app.include_router(workflow.router)
 app.include_router(providers.router)
 app.include_router(addresses.router)
 app.include_router(egrn.router)

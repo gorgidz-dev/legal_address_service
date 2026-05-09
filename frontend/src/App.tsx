@@ -20,7 +20,8 @@ import {
   Settings,
   ShieldCheck,
   Upload,
-  UserPlus
+  UserPlus,
+  XCircle
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ApiError, api, packageDownloadUrl, paymentDocumentDownloadUrl } from "./api";
@@ -773,6 +774,8 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -807,6 +810,20 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
   const publishedCount = addresses.filter((address) => address.publication_status === "published").length;
   const availableCount = addresses.filter((address) => address.is_available).length;
   const actionableCount = applications.filter((application) => application.available_actions.length > 0).length;
+
+  async function runOwnerAction(action: string) {
+    if (!selectedApplication) return;
+    setActionBusy(action);
+    setActionError(null);
+    try {
+      await api.runApplicationAction(selectedApplication.id, action);
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  }
 
   return (
     <main className="owner-shell">
@@ -953,7 +970,7 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
                     <small>{[selectedApplication.contact_phone, selectedApplication.contact_email].filter(Boolean).join(" · ")}</small>
                   </div>
                   <div>
-                    <span>Доступные действия</span>
+                    <span>Следующий шаг</span>
                     <strong>
                       {selectedApplication.available_actions.length
                         ? selectedApplication.available_actions.map((action) => ownerActionLabels[action] || action).join(", ")
@@ -966,6 +983,33 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
                     {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
                   </div>
                 </div>
+
+                {selectedApplication.available_actions.length ? (
+                  <div className="owner-action-strip">
+                    {selectedApplication.available_actions.map((action) => {
+                      const Icon =
+                        action === "accept"
+                          ? CheckCircle2
+                          : action === "reject"
+                            ? XCircle
+                            : action === "start_documents"
+                              ? FileText
+                              : Upload;
+                      return (
+                        <Button
+                          disabled={actionBusy !== null}
+                          key={action}
+                          onClick={() => runOwnerAction(action)}
+                          variant={action === "reject" ? "secondary" : "primary"}
+                        >
+                          {actionBusy === action ? <Loader2 className="spin" size={16} /> : <Icon size={16} />}
+                          {ownerActionLabels[action] || action}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                <InlineError message={actionError} />
 
                 <div className="timeline-panel">
                   <div className="timeline-title">

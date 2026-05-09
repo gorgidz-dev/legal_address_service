@@ -270,6 +270,12 @@ export interface PublicClientApplicationResult {
   application: Application;
 }
 
+export interface ApplicationActionResult {
+  application_id: string;
+  status: ApplicationStatus;
+  available_actions: string[];
+}
+
 export interface ClientApplicationEvent {
   id: string;
   application_id: string;

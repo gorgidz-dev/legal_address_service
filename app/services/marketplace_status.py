@@ -53,11 +53,10 @@ _ROLE_ACTIONS: dict[tuple[UserRole, ApplicationStatus], list[str]] = {
         "approve_documents",
         "request_document_revision",
     ],
+    (UserRole.ADMIN, ApplicationStatus.REJECTED_BY_OWNER): ["assign_owner", "cancel"],
     (UserRole.ADMIN, ApplicationStatus.DISPUTE): ["resolve_dispute", "cancel", "complete"],
     (UserRole.OWNER, ApplicationStatus.ASSIGNED_TO_OWNER): ["accept", "reject"],
     (UserRole.OWNER, ApplicationStatus.ACCEPTED_BY_OWNER): ["start_documents"],
-    (UserRole.OWNER, ApplicationStatus.DOCUMENTS_PREPARING): ["upload_documents"],
-    (UserRole.OWNER, ApplicationStatus.DOCUMENTS_REVISION): ["upload_documents"],
     (UserRole.CLIENT, ApplicationStatus.NEEDS_CLIENT_FIX): ["submit_corrections"],
     (UserRole.CLIENT, ApplicationStatus.READY_FOR_CLIENT): ["download_documents", "confirm_received", "open_dispute"],
 }
