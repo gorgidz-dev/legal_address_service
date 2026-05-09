@@ -31,7 +31,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -77,6 +78,314 @@ a {
 
 .auth-brand {
   margin-bottom: 4px;
+}
+
+.auth-back {
+  width: max-content;
+}
+
+.public-shell {
+  min-height: 100dvh;
+  padding: 20px;
+}
+
+.public-topbar {
+  max-width: 1440px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.catalog-layout {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  align-items: start;
+}
+
+.catalog-main,
+.public-side {
+  display: grid;
+  gap: 16px;
+}
+
+.catalog-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.catalog-heading h1 {
+  max-width: 900px;
+  font-size: clamp(34px, 4.4vw, 64px);
+  line-height: 0.96;
+}
+
+.catalog-counter {
+  min-width: 132px;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 3px 8px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #cdd8cd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #204f41;
+}
+
+.catalog-counter strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.catalog-counter span {
+  grid-column: 2;
+  color: #647065;
+  font-size: 12px;
+}
+
+.catalog-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(100px, 0.5fr) minmax(180px, 0.8fr) max-content;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.92);
+}
+
+.input-with-icon {
+  position: relative;
+}
+
+.input-with-icon svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #7a8479;
+  pointer-events: none;
+}
+
+.input-with-icon input {
+  padding-left: 36px;
+}
+
+.public-segmented {
+  min-height: 39px;
+}
+
+.catalog-toggle {
+  min-width: 170px;
+  padding: 9px 11px;
+  border: 1px solid #cfd7cc;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.address-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.address-card {
+  display: grid;
+  gap: 14px;
+  min-height: 320px;
+  padding: 16px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.94);
+  box-shadow: 0 14px 34px rgba(31, 36, 40, 0.07);
+}
+
+.address-card header {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.address-card header div {
+  min-width: 0;
+}
+
+.address-card header strong,
+.address-card header span {
+  display: block;
+}
+
+.address-card header strong {
+  color: #202721;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.address-card header span {
+  margin-top: 5px;
+  color: #6a7369;
+  font-size: 13px;
+}
+
+.address-card-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #c8d3c7;
+  border-radius: 8px;
+  background: #edf4eb;
+  color: #204f41;
+}
+
+.address-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.address-meta span,
+.address-options span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: max-content;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d8ded5;
+  border-radius: 999px;
+  background: #f7f8f4;
+  color: #59645b;
+  font-size: 12px;
+}
+
+.address-price-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.address-price-row div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #e0e4da;
+  border-radius: 8px;
+  background: #f9faf7;
+}
+
+.address-price-row small,
+.address-price-row span {
+  color: #687167;
+  font-size: 12px;
+}
+
+.address-price-row b {
+  color: #204f41;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.address-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.address-options span:first-child {
+  border-color: #d8cfa8;
+  background: #fff9e7;
+  color: #69571b;
+}
+
+.address-card-loading {
+  min-height: 320px;
+  background: linear-gradient(90deg, #ecefea, #f7f8f5, #ecefea);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.public-side {
+  position: sticky;
+  top: 20px;
+}
+
+.public-login-panel,
+.owner-request-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.94);
+}
+
+.public-login-panel {
+  border-color: #c8d3c7;
+  background: #f8fbf5;
+}
+
+.public-login-panel strong,
+.owner-request-panel strong {
+  display: block;
+  color: #1f2428;
+  font-size: 17px;
+}
+
+.public-login-panel span,
+.owner-request-panel span {
+  color: #687167;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.panel-title {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.panel-title svg,
+.public-login-panel > svg {
+  color: #204f41;
+}
+
+.owner-request-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(92px, 0.7fr);
+  gap: 10px;
+}
+
+.compact-error {
+  margin: 0;
+}
+
+.success-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #b9d6c0;
+  border-radius: 8px;
+  background: #eef8ef;
+  color: #24533b;
+  font-weight: 650;
+}
+
+.public-empty {
+  max-width: none;
+  margin: 0;
 }
 
 .sidebar {
@@ -668,7 +977,8 @@ h1 {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 39px;
   padding: 9px 11px;
@@ -680,9 +990,14 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: #609372;
   box-shadow: 0 0 0 3px rgba(72, 124, 89, 0.16);
+}
+
+textarea {
+  resize: vertical;
 }
 
 .toggle-field {
@@ -895,6 +1210,40 @@ select:focus {
 @media (max-width: 1040px) {
   .app-shell {
     grid-template-columns: 1fr;
+  }
+
+  .public-shell {
+    padding: 14px;
+  }
+
+  .public-topbar {
+    align-items: stretch;
+  }
+
+  .catalog-layout,
+  .address-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .catalog-heading h1 {
+    font-size: clamp(32px, 10vw, 48px);
+  }
+
+  .catalog-counter {
+    width: max-content;
+  }
+
+  .catalog-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .public-side {
+    position: static;
   }
 
   .sidebar {

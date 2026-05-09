@@ -20,6 +20,7 @@ from app.routers import (
     auth,
     clients,
     egrn,
+    marketplace,
     providers,
     registry,
     templates,
@@ -55,6 +56,10 @@ def _is_public_path(path: str, method: str) -> bool:
     if path.startswith("/assets/"):
         return True
     if path.startswith("/invite/"):
+        return True
+    if path == "/marketplace/addresses" and method == "GET":
+        return True
+    if path == "/marketplace/provider-requests" and method == "POST":
         return True
     return path.startswith("/auth/invitations/") and path.endswith("/accept")
 
@@ -110,6 +115,7 @@ app.add_middleware(
 
 
 app.include_router(auth.router)
+app.include_router(marketplace.router)
 app.include_router(providers.router)
 app.include_router(addresses.router)
 app.include_router(egrn.router)

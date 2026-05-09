@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ApiError, api, packageDownloadUrl, paymentDocumentDownloadUrl } from "./api";
+import PublicCatalog from "./publicCatalog";
 import type {
   ActiveClientRegistryItem,
   Address,
@@ -140,10 +141,12 @@ function LoadingRows() {
 
 function AuthView({
   canBootstrap,
-  onAuthenticated
+  onAuthenticated,
+  onBack
 }: {
   canBootstrap: boolean;
   onAuthenticated: (user: CurrentUser) => void;
+  onBack?: () => void;
 }) {
   const inviteFromPath = window.location.pathname.startsWith("/invite/")
     ? decodeURIComponent(window.location.pathname.replace("/invite/", ""))
@@ -186,6 +189,12 @@ function AuthView({
             <span>онлайн-доступ к сервису</span>
           </div>
         </div>
+
+        {onBack ? (
+          <button className="text-action auth-back" onClick={onBack} type="button">
+            Вернуться в каталог
+          </button>
+        ) : null}
 
         <div className="segmented">
           <button className={mode === "login" ? "selected" : ""} onClick={() => setMode("login")} type="button">
@@ -350,6 +359,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -358,6 +368,7 @@ export default function App() {
       .then((user) => {
         if (!alive) return;
         setCurrentUser(user);
+        setShowAuth(false);
       })
       .catch(async () => {
         if (!alive) return;
@@ -410,6 +421,7 @@ export default function App() {
   async function handleLogout() {
     await api.logout().catch(() => undefined);
     setCurrentUser(null);
+    setShowAuth(false);
     setProviders([]);
     setAddresses([]);
     setApplications([]);
@@ -424,7 +436,20 @@ export default function App() {
   }
 
   if (!currentUser) {
-    return <AuthView canBootstrap={canBootstrap} onAuthenticated={(user) => setCurrentUser(user)} />;
+    if (showAuth) {
+      return (
+        <AuthView
+          canBootstrap={canBootstrap}
+          onAuthenticated={(user) => {
+            setCurrentUser(user);
+            setShowAuth(false);
+          }}
+          onBack={() => setShowAuth(false)}
+        />
+      );
+    }
+
+    return <PublicCatalog canBootstrap={canBootstrap} onLoginClick={() => setShowAuth(true)} />;
   }
 
   return (

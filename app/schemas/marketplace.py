@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
@@ -67,3 +68,23 @@ class ApplicationEventRead(BaseModel):
     created_by: Optional[UUID]
     created_at: datetime
     read_at: Optional[datetime]
+
+
+class PublicAddressRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    provider_id: UUID
+    provider_name: str
+    full_address: str
+    room_number: Optional[str]
+    price_6m: Decimal
+    price_11m: Decimal
+    selected_price: Decimal
+    correspondence_price: Optional[Decimal]
+    fns_number: Optional[int]
+    fns_city: Optional[str]
+    is_available: bool
+    publication_status: str
+    created_at: datetime
+    updated_at: datetime

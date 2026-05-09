@@ -9,7 +9,10 @@ import type {
   InvitationCreateResult,
   PackageResult,
   PaymentDocument,
-  Provider
+  Provider,
+  ProviderConnectionRequest,
+  ProviderConnectionRequestCreate,
+  PublicAddress
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
@@ -62,6 +65,26 @@ export const api = {
     request<InvitationCreateResult>("/auth/invitations", { method: "POST", body: JSON.stringify(payload) }),
   acceptInvitation: (token: string, payload: unknown) =>
     request<{ user: CurrentUser }>(`/auth/invitations/${encodeURIComponent(token)}/accept`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
+  publicAddresses: (filters?: {
+    city?: string;
+    fns_number?: number | "";
+    term_months?: 6 | 11;
+    correspondence?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.city) params.set("city", filters.city);
+    if (filters?.fns_number) params.set("fns_number", String(filters.fns_number));
+    if (filters?.term_months) params.set("term_months", String(filters.term_months));
+    if (filters?.correspondence) params.set("correspondence", "true");
+    const query = params.toString();
+    return request<PublicAddress[]>(`/marketplace/addresses${query ? `?${query}` : ""}`);
+  },
+  createProviderConnectionRequest: (payload: ProviderConnectionRequestCreate) =>
+    request<ProviderConnectionRequest>("/marketplace/provider-requests", {
       method: "POST",
       body: JSON.stringify(payload)
     }),

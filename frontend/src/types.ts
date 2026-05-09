@@ -33,6 +33,7 @@ export interface CurrentUser {
   full_name: string;
   role: UserRole;
   is_active: boolean;
+  provider_id: string | null;
 }
 
 export interface BootstrapState {
@@ -190,4 +191,49 @@ export interface PaymentDocument {
   created_at: string;
   uploaded_by: string | null;
   download_url: string;
+}
+
+export interface PublicAddress {
+  id: string;
+  provider_id: string;
+  provider_name: string;
+  full_address: string;
+  room_number: string | null;
+  price_6m: string;
+  price_11m: string;
+  selected_price: string;
+  correspondence_price: string | null;
+  fns_number: number | null;
+  fns_city: string | null;
+  is_available: boolean;
+  publication_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderConnectionRequestCreate {
+  company_name: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone?: string | null;
+  city?: string | null;
+  address_count?: number | null;
+  comment?: string | null;
+}
+
+export interface ProviderConnectionRequest {
+  id: string;
+  company_name: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string | null;
+  city: string | null;
+  address_count: number | null;
+  comment: string | null;
+  status: "new" | "reviewing" | "invited" | "rejected";
+  admin_comment: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }

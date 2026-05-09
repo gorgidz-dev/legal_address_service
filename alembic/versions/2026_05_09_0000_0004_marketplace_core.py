@@ -46,7 +46,7 @@ APPLICATION_STATUSES = (
 
 
 def upgrade() -> None:
-    op.drop_constraint("ck_users_role_valid", "users", type_="check")
+    op.drop_constraint(op.f("ck_users_role_valid"), "users", type_="check")
     op.add_column("users", sa.Column("provider_id", postgresql.UUID(as_uuid=True)))
     op.create_foreign_key(
         op.f("fk_users_provider_id_providers"),
@@ -63,7 +63,7 @@ def upgrade() -> None:
         "role IN ('manager', 'lawyer', 'admin', 'client', 'owner')",
     )
 
-    op.drop_constraint("ck_invitations_role_valid", "invitations", type_="check")
+    op.drop_constraint(op.f("ck_invitations_role_valid"), "invitations", type_="check")
     op.create_check_constraint(
         op.f("ck_invitations_role_valid"),
         "invitations",
@@ -91,7 +91,7 @@ def upgrade() -> None:
         "publication_status IN ('draft', 'moderation', 'published', 'rejected', 'archived')",
     )
 
-    op.drop_constraint("ck_applications_status_valid", "applications", type_="check")
+    op.drop_constraint(op.f("ck_applications_status_valid"), "applications", type_="check")
     op.create_check_constraint(
         op.f("ck_applications_status_valid"),
         "applications",
@@ -191,7 +191,7 @@ def downgrade() -> None:
     op.drop_index("ix_provider_connection_requests_status_created", table_name="provider_connection_requests")
     op.drop_table("provider_connection_requests")
 
-    op.drop_constraint("ck_applications_status_valid", "applications", type_="check")
+    op.drop_constraint(op.f("ck_applications_status_valid"), "applications", type_="check")
     op.create_check_constraint(
         op.f("ck_applications_status_valid"),
         "applications",
@@ -199,7 +199,7 @@ def downgrade() -> None:
         "'contract_signed', 'active', 'expired', 'terminated')",
     )
 
-    op.drop_constraint("ck_addresses_publication_status_valid", "addresses", type_="check")
+    op.drop_constraint(op.f("ck_addresses_publication_status_valid"), "addresses", type_="check")
     op.drop_constraint(op.f("fk_addresses_moderated_by_users"), "addresses", type_="foreignkey")
     op.drop_column("addresses", "moderated_at")
     op.drop_column("addresses", "moderated_by")
@@ -207,14 +207,14 @@ def downgrade() -> None:
     op.drop_column("addresses", "published_at")
     op.drop_column("addresses", "publication_status")
 
-    op.drop_constraint("ck_invitations_role_valid", "invitations", type_="check")
+    op.drop_constraint(op.f("ck_invitations_role_valid"), "invitations", type_="check")
     op.create_check_constraint(
         op.f("ck_invitations_role_valid"),
         "invitations",
         "role IN ('manager', 'lawyer', 'admin')",
     )
 
-    op.drop_constraint("ck_users_role_valid", "users", type_="check")
+    op.drop_constraint(op.f("ck_users_role_valid"), "users", type_="check")
     op.drop_index("ix_users_provider_id", table_name="users")
     op.drop_constraint(op.f("fk_users_provider_id_providers"), "users", type_="foreignkey")
     op.drop_column("users", "provider_id")

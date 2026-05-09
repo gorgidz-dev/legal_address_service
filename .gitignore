@@ -9,6 +9,7 @@ __pycache__/
 .DS_Store
 storage/
 frontend/node_modules/
+frontend/node_modules
 frontend/dist/
 .superpowers/
 .worktrees/
