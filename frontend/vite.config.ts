@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       "/auth": "http://127.0.0.1:8000",
       "/client": "http://127.0.0.1:8000",
+      "/owner": "http://127.0.0.1:8000",
       "/marketplace": "http://127.0.0.1:8000",
       "/providers": "http://127.0.0.1:8000",
       "/addresses": "http://127.0.0.1:8000",

@@ -36,6 +36,8 @@ import type {
   Invitation,
   InvitationCreateResult,
   NoticePeriod,
+  OwnerApplication,
+  OwnerDashboard,
   PaymentDocument,
   Provider
 } from "./types";
@@ -87,6 +89,13 @@ const statusLabels: Record<string, string> = {
 const typeLabels: Record<ApplicationType, string> = {
   initial_registration: "Первичная регистрация",
   address_change: "Смена адреса"
+};
+
+const ownerActionLabels: Record<string, string> = {
+  accept: "Принять",
+  reject: "Отклонить",
+  start_documents: "Начать документы",
+  upload_documents: "Загрузить документы"
 };
 
 function formatDate(value: string | null): string {
@@ -243,7 +252,13 @@ function AuthView({
 
         {mode !== "invite" ? (
           <Field label="E-mail">
-            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+            <input
+              autoComplete="email"
+              inputMode="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
           </Field>
         ) : (
           <Field label="Токен или ссылка приглашения">
@@ -491,6 +506,10 @@ export default function App() {
 
   if (currentUser.role === "client") {
     return <ClientDashboardView user={currentUser} onLogout={handleLogout} />;
+  }
+
+  if (currentUser.role === "owner") {
+    return <OwnerDashboardView user={currentUser} onLogout={handleLogout} />;
   }
 
   return (
@@ -743,6 +762,233 @@ function ClientDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: 
               </div>
             </div>
           ) : null}
+        </section>
+      )}
+    </main>
+  );
+}
+
+function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) {
+  const [dashboard, setDashboard] = useState<OwnerDashboard | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .ownerDashboard()
+      .then((result) => {
+        if (!alive) return;
+        setDashboard(result);
+        setSelectedId((current) => {
+          if (current && result.applications.some((application) => application.id === current)) return current;
+          return result.applications[0]?.id || null;
+        });
+      })
+      .catch((err: Error) => {
+        if (alive) setError(err.message);
+      })
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [refreshKey]);
+
+  const applications = dashboard?.applications || [];
+  const addresses = dashboard?.addresses || [];
+  const selectedApplication = useMemo<OwnerApplication | null>(
+    () => applications.find((application) => application.id === selectedId) || applications[0] || null,
+    [applications, selectedId]
+  );
+  const publishedCount = addresses.filter((address) => address.publication_status === "published").length;
+  const availableCount = addresses.filter((address) => address.is_available).length;
+  const actionableCount = applications.filter((application) => application.available_actions.length > 0).length;
+
+  return (
+    <main className="owner-shell">
+      <header className="owner-topbar">
+        <div className="brand">
+          <div className="brand-mark">ЮА</div>
+          <div>
+            <strong>Кабинет исполнителя</strong>
+            <span>{user.email}</span>
+          </div>
+        </div>
+        <div className="actions">
+          <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
+            <RefreshCw size={16} /> Обновить
+          </Button>
+          <Button variant="secondary" onClick={onLogout}>
+            <LogOut size={16} /> Выйти
+          </Button>
+        </div>
+      </header>
+
+      <section className="owner-heading">
+        <span className="eyebrow">Собственник адреса</span>
+        <h1>Заявки и адреса, назначенные вашей организации</h1>
+      </section>
+
+      <InlineError message={error} />
+
+      {loading ? (
+        <LoadingRows />
+      ) : !dashboard ? (
+        <EmptyState title="Кабинет недоступен" text="Проверьте привязку пользователя к организации исполнителя." />
+      ) : (
+        <section className="owner-layout">
+          <aside className="owner-side">
+            <div className="owner-provider-card">
+              <Building2 size={22} />
+              <span>Организация</span>
+              <strong>{dashboard.provider.short_name}</strong>
+              <small>{dashboard.provider.phone || dashboard.provider.full_name}</small>
+            </div>
+
+            <div className="owner-metrics">
+              <div>
+                <Home size={17} />
+                <span>Адресов</span>
+                <strong>{addresses.length}</strong>
+              </div>
+              <div>
+                <CheckCircle2 size={17} />
+                <span>Опубликовано</span>
+                <strong>{publishedCount}</strong>
+              </div>
+              <div>
+                <FileClock size={17} />
+                <span>Требуют внимания</span>
+                <strong>{actionableCount}</strong>
+              </div>
+            </div>
+
+            <div className="owner-addresses">
+              <div className="timeline-title">
+                <Database size={18} />
+                <strong>Мои адреса</strong>
+              </div>
+              {addresses.length ? (
+                addresses.map((address) => (
+                  <div className="owner-address-item" key={address.id}>
+                    <strong>{address.full_address}</strong>
+                    <span>
+                      {address.fns_number ? `ИФНС ${address.fns_number}` : "ИФНС не указана"} ·{" "}
+                      {address.is_available ? "доступен" : "недоступен"}
+                    </span>
+                    <small>{formatMoney(address.price_11m)} за 11 мес.</small>
+                  </div>
+                ))
+              ) : (
+                <EmptyState title="Адресов нет" text="Администратор еще не привязал адреса к организации." />
+              )}
+            </div>
+          </aside>
+
+          <div className="owner-main">
+            {applications.length ? (
+              <div className="owner-application-list">
+                {applications.map((application) => (
+                  <button
+                    className={application.id === selectedApplication?.id ? "owner-application active" : "owner-application"}
+                    key={application.id}
+                    onClick={() => setSelectedId(application.id)}
+                    type="button"
+                  >
+                    <span className={`status ${application.status}`}>
+                      {statusLabels[application.status] || application.status}
+                    </span>
+                    <strong>{application.company_name || application.planned_client_name || "Компания"}</strong>
+                    <small>{application.full_address}</small>
+                    <b>{formatMoney(application.selected_price)}</b>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="Заявок пока нет" text="Когда администратор назначит заявку на ваш адрес, она появится здесь." />
+            )}
+
+            {selectedApplication ? (
+              <div className="owner-detail">
+                <div className="client-detail-header">
+                  <div>
+                    <span className="eyebrow">{typeLabels[selectedApplication.type]}</span>
+                    <h2>{selectedApplication.company_name || selectedApplication.planned_client_name || "Заявка"}</h2>
+                  </div>
+                  <span className={`status ${selectedApplication.status}`}>
+                    {statusLabels[selectedApplication.status] || selectedApplication.status}
+                  </span>
+                </div>
+
+                <div className="client-metrics">
+                  <div>
+                    <ReceiptText size={18} />
+                    <span>Сумма адреса</span>
+                    <strong>{formatMoney(selectedApplication.selected_price)}</strong>
+                  </div>
+                  <div>
+                    <FileClock size={18} />
+                    <span>Срок</span>
+                    <strong>{selectedApplication.term_months ? `${selectedApplication.term_months} мес.` : "—"}</strong>
+                  </div>
+                  <div>
+                    <Home size={18} />
+                    <span>ИФНС</span>
+                    <strong>{selectedApplication.fns_number ? `№ ${selectedApplication.fns_number}` : "—"}</strong>
+                  </div>
+                </div>
+
+                <div className="client-info-grid">
+                  <div>
+                    <span>Адрес</span>
+                    <strong>{selectedApplication.full_address}</strong>
+                  </div>
+                  <div>
+                    <span>Контакт клиента</span>
+                    <strong>{selectedApplication.contact_name || "—"}</strong>
+                    <small>{[selectedApplication.contact_phone, selectedApplication.contact_email].filter(Boolean).join(" · ")}</small>
+                  </div>
+                  <div>
+                    <span>Доступные действия</span>
+                    <strong>
+                      {selectedApplication.available_actions.length
+                        ? selectedApplication.available_actions.map((action) => ownerActionLabels[action] || action).join(", ")
+                        : "Ожидает другой роли"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Корреспонденция</span>
+                    <strong>{selectedApplication.has_correspondence_service ? "Подключена" : "Не подключена"}</strong>
+                    {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
+                  </div>
+                </div>
+
+                <div className="timeline-panel">
+                  <div className="timeline-title">
+                    <FileText size={18} />
+                    <strong>Лента исполнителя</strong>
+                  </div>
+                  {selectedApplication.events.length ? (
+                    <div className="timeline">
+                      {selectedApplication.events.map((event) => (
+                        <div className="timeline-item" key={event.id}>
+                          <span>{formatDate(event.created_at)}</span>
+                          <strong>{event.title}</strong>
+                          <p>{event.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState title="Событий пока нет" text="События для исполнителя появятся после назначения заявки." />
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </section>
       )}
     </main>

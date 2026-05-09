@@ -42,5 +42,11 @@ async def require_client(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_owner(user: User = Depends(get_current_user)) -> User:
+    if user.role != UserRole.OWNER.value:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нужна роль собственника адреса")
+    return user
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)

@@ -321,3 +321,56 @@ export interface ClientApplication {
   created_at: string;
   updated_at: string;
 }
+
+export interface OwnerAddress {
+  id: string;
+  provider_id: string;
+  full_address: string;
+  room_number: string | null;
+  cadastral_number: string;
+  price_6m: string;
+  price_11m: string;
+  correspondence_price: string | null;
+  fns_number: number | null;
+  fns_city: string | null;
+  is_available: boolean;
+  publication_status: "draft" | "moderation" | "published" | "rejected" | "archived";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OwnerApplication {
+  id: string;
+  type: ApplicationType;
+  status: ApplicationStatus;
+  provider_id: string;
+  address_id: string;
+  full_address: string;
+  room_number: string | null;
+  client_id: string | null;
+  planned_client_name: string | null;
+  company_name: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  term_months: number | null;
+  notice_period: NoticePeriod | null;
+  has_correspondence_service: boolean;
+  contract_city: string | null;
+  fns_number: number | null;
+  fns_city: string | null;
+  expires_at: string | null;
+  parent_application_id: string | null;
+  selected_price: string;
+  correspondence_price: string | null;
+  available_actions: string[];
+  events: ClientApplicationEvent[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OwnerDashboard {
+  provider: Provider;
+  addresses: OwnerAddress[];
+  applications: OwnerApplication[];
+}

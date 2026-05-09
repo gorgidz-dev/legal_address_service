@@ -23,6 +23,7 @@ from app.routers import (
     egrn,
     marketplace,
     mobile_auth,
+    owner_dashboard,
     providers,
     registry,
     templates,
@@ -138,6 +139,7 @@ app.include_router(auth.router)
 app.include_router(mobile_auth.router)
 app.include_router(marketplace.router)
 app.include_router(client_dashboard.router)
+app.include_router(owner_dashboard.router)
 app.include_router(providers.router)
 app.include_router(addresses.router)
 app.include_router(egrn.router)

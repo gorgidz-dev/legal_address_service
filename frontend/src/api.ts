@@ -8,6 +8,7 @@ import type {
   DadataLookup,
   Invitation,
   InvitationCreateResult,
+  OwnerDashboard,
   PackageResult,
   PaymentDocument,
   Provider,
@@ -97,6 +98,7 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   clientApplications: () => request<ClientApplication[]>("/client/applications"),
+  ownerDashboard: () => request<OwnerDashboard>("/owner/dashboard"),
 
   providers: () => request<Provider[]>("/providers"),
   createProvider: (payload: unknown) =>
