@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_staff
 from app.config import settings
 from app.database import get_db
 from app.models.address import Address
@@ -15,7 +16,7 @@ from app.models.egrn_extract import EgrnExtract
 from app.schemas.egrn import EgrnExtractRead
 from app.services.storage import create_stored_file_record, egrn_storage_dir, relative_storage_url
 
-router = APIRouter(tags=["egrn"])
+router = APIRouter(tags=["egrn"], dependencies=[Depends(require_staff)])
 
 
 @router.get(

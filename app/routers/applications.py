@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_staff
 from app.config import settings
 from app.database import get_db
 from app.enums import ApplicationStatus, ApplicationType, GuaranteeVariant
@@ -43,7 +44,7 @@ from app.services.document_generation import (
 )
 from app.services.storage import local_stored_file_path, read_stored_file, resolve_storage_file
 
-router = APIRouter(prefix="/applications", tags=["applications"])
+router = APIRouter(prefix="/applications", tags=["applications"], dependencies=[Depends(require_staff)])
 
 
 async def _get_provider_and_address(

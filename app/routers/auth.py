@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import secrets
-from datetime import timedelta
-
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user, require_admin, utcnow
-from app.config import settings
 from app.database import get_db
 from app.enums import UserRole
 from app.models.invitation import Invitation
@@ -26,40 +22,9 @@ from app.schemas.auth import (
     LoginRequest,
 )
 from app.services.auth_security import hash_password, hash_token, verify_password
+from app.services.auth_sessions import create_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _set_session_cookie(response: Response, token: str, expires_at) -> None:
-    max_age = max(0, int((expires_at - utcnow()).total_seconds()))
-    response.set_cookie(
-        settings.session_cookie_name,
-        token,
-        max_age=max_age,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        path="/",
-    )
-
-
-async def _create_session(
-    *,
-    db: AsyncSession,
-    user: User,
-    response: Response,
-) -> None:
-    token = secrets.token_urlsafe(32)
-    expires_at = utcnow() + timedelta(hours=settings.session_ttl_hours)
-    session = UserSession(
-        user_id=user.id,
-        token_hash=hash_token(token),
-        expires_at=expires_at,
-        created_at=utcnow(),
-    )
-    db.add(session)
-    await db.flush()
-    _set_session_cookie(response, token, expires_at)
 
 
 @router.get("/bootstrap-state", response_model=BootstrapState)
@@ -91,7 +56,7 @@ async def bootstrap_admin(
     )
     db.add(user)
     await db.flush()
-    await _create_session(db=db, user=user, response=response)
+    await create_session(db=db, user=user, response=response)
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=CurrentUserRead.model_validate(user))
@@ -108,7 +73,7 @@ async def login(
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный e-mail или пароль")
 
-    await _create_session(db=db, user=user, response=response)
+    await create_session(db=db, user=user, response=response)
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=CurrentUserRead.model_validate(user))
@@ -214,7 +179,7 @@ async def accept_invitation(
     invitation.accepted_at = utcnow()
     db.add(user)
     await db.flush()
-    await _create_session(db=db, user=user, response=response)
+    await create_session(db=db, user=user, response=response)
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=CurrentUserRead.model_validate(user))

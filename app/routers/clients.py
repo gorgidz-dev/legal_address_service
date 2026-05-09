@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user, utcnow
+from app.auth import get_current_user, require_staff, utcnow
 from app.database import get_db
 from app.models.client import Client
 from app.models.payment_document import PaymentDocument
@@ -33,7 +33,7 @@ from app.services.storage import (
 )
 from app.validators import INNLegal
 
-router = APIRouter(prefix="/clients", tags=["clients"])
+router = APIRouter(prefix="/clients", tags=["clients"], dependencies=[Depends(require_staff)])
 
 
 @router.get(

@@ -3,20 +3,35 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from datetime import date, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
-from app.enums import AddressPublicationStatus, OwnerConnectionRequestStatus
+from app.enums import AddressPublicationStatus, ApplicationStatus, ApplicationType, OwnerConnectionRequestStatus, UserRole
 from app.models.address import Address
+from app.models.application import Application
 from app.models.provider import Provider
 from app.models.provider_connection_request import ProviderConnectionRequest
+from app.models.user import User
 from app.schemas.marketplace import (
     ProviderConnectionRequestCreate,
     ProviderConnectionRequestRead,
+    PublicClientApplicationCreate,
+    PublicClientApplicationCreateAddressChange,
+    PublicClientApplicationCreateInitial,
+    PublicClientApplicationResult,
     PublicAddressRead,
 )
+from app.routers.applications import _upsert_client_from_dadata
+from app.schemas.application import ApplicationRead
+from app.schemas.auth import CurrentUserRead
+from app.services.auth_security import hash_password
+from app.services.auth_sessions import create_session
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
@@ -99,3 +114,102 @@ async def create_provider_request(
     await db.commit()
     await db.refresh(request)
     return request
+
+
+async def _published_address_bundle(db: AsyncSession, address_id) -> tuple[Address, Provider]:
+    address = await db.get(Address, address_id)
+    if address is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес не найден")
+    provider = await db.get(Provider, address.provider_id)
+    if provider is None or not provider.is_active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Собственник адреса не найден или отключён")
+    if not address.is_available or address.publication_status != AddressPublicationStatus.PUBLISHED.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Адрес сейчас недоступен для заявки")
+    return address, provider
+
+
+@router.post(
+    "/applications",
+    response_model=PublicClientApplicationResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_public_client_application(
+    payload: PublicClientApplicationCreate,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> PublicClientApplicationResult:
+    address, provider = await _published_address_bundle(db, payload.address_id)
+    if payload.has_correspondence_service and address.correspondence_price is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Для адреса не подключена корреспонденция")
+
+    email = str(payload.contact_email).lower()
+    existing = await db.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким e-mail уже существует")
+
+    user = User(
+        email=email,
+        full_name=payload.contact_name,
+        password_hash=hash_password(payload.password),
+        role=UserRole.CLIENT.value,
+        is_active=True,
+    )
+    db.add(user)
+    await db.flush()
+    await create_session(db=db, user=user, response=response)
+
+    if isinstance(payload, PublicClientApplicationCreateInitial):
+        application = Application(
+            type=ApplicationType.INITIAL_REGISTRATION.value,
+            provider_id=provider.id,
+            address_id=address.id,
+            planned_client_name=payload.planned_client_name,
+            company_name=payload.planned_client_name,
+            contact_name=payload.contact_name,
+            contact_phone=payload.contact_phone,
+            contact_email=email,
+            term_months=payload.term_months,
+            has_correspondence_service=payload.has_correspondence_service,
+            contract_city=payload.contract_city,
+            fns_number=address.fns_number,
+            fns_city=address.fns_city,
+            status=ApplicationStatus.ADMIN_REVIEW.value,
+            expires_at=date.today() + timedelta(days=settings.initial_application_validity_days),
+            created_by=user.id,
+        )
+    elif isinstance(payload, PublicClientApplicationCreateAddressChange):
+        client = await _upsert_client_from_dadata(db, payload.client_inn)
+        application = Application(
+            type=ApplicationType.ADDRESS_CHANGE.value,
+            provider_id=provider.id,
+            address_id=address.id,
+            client_id=client.id,
+            company_name=client.short_name,
+            contact_name=payload.contact_name,
+            contact_phone=payload.contact_phone,
+            contact_email=email,
+            term_months=payload.term_months,
+            notice_period=payload.notice_period.value,
+            has_correspondence_service=payload.has_correspondence_service,
+            contract_city=payload.contract_city,
+            fns_number=address.fns_number,
+            fns_city=address.fns_city,
+            status=ApplicationStatus.ADMIN_REVIEW.value,
+            created_by=user.id,
+        )
+    else:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Неизвестный тип заявки")
+
+    db.add(application)
+    try:
+        await db.flush()
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Нарушено ограничение БД: {e.orig}") from e
+    await db.refresh(user)
+    await db.refresh(application)
+    return PublicClientApplicationResult(
+        user=CurrentUserRead.model_validate(user),
+        application=ApplicationRead.model_validate(application),
+    )

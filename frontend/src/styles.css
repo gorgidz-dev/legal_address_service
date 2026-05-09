@@ -388,6 +388,75 @@ a {
   margin: 0;
 }
 
+.public-application-modal {
+  width: min(780px, 100%);
+}
+
+.selected-address-strip {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: #f8faf6;
+}
+
+.selected-address-strip svg {
+  color: #204f41;
+}
+
+.selected-address-strip div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.selected-address-strip strong,
+.selected-address-strip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selected-address-strip span {
+  color: #657066;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.client-application-grid,
+.client-application-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.role-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.role-panel {
+  width: min(680px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid #dfe3dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 253, 0.94);
+  box-shadow: 0 20px 60px rgba(31, 36, 40, 0.1);
+}
+
+.role-panel p {
+  margin: 0;
+  color: #596259;
+  line-height: 1.55;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -1311,6 +1380,8 @@ textarea {
   .upload-form,
   .access-form,
   .payment-upload,
+  .client-application-grid,
+  .client-application-options,
   .form-grid,
   .form-grid.three,
   .lookup,

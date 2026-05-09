@@ -9,14 +9,16 @@ import {
   Search,
   Send,
   ShieldCheck,
-  SlidersHorizontal
+  SlidersHorizontal,
+  X
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
-import type { ProviderConnectionRequestCreate, PublicAddress } from "./types";
+import type { CurrentUser, ProviderConnectionRequestCreate, PublicAddress, PublicClientApplicationCreate } from "./types";
 
 type PublicCatalogProps = {
   canBootstrap: boolean;
+  onAuthenticated: (user: CurrentUser) => void;
   onLoginClick: () => void;
 };
 
@@ -37,6 +39,18 @@ type OwnerRequestForm = {
   comment: string;
 };
 
+type ClientApplicationForm = {
+  type: "initial_registration" | "address_change";
+  planned_client_name: string;
+  client_inn: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  password: string;
+  term_months: 6 | 11;
+  has_correspondence_service: boolean;
+};
+
 const initialOwnerRequestForm: OwnerRequestForm = {
   company_name: "",
   contact_name: "",
@@ -45,6 +59,18 @@ const initialOwnerRequestForm: OwnerRequestForm = {
   city: "",
   address_count: "",
   comment: ""
+};
+
+const initialClientApplicationForm: ClientApplicationForm = {
+  type: "initial_registration",
+  planned_client_name: "",
+  client_inn: "",
+  contact_name: "",
+  contact_email: "",
+  contact_phone: "",
+  password: "",
+  term_months: 11,
+  has_correspondence_service: false
 };
 
 function formatMoney(value: string): string {
@@ -62,7 +88,7 @@ function normalizeOptional(value: string): string | null {
   return trimmed ? trimmed : null;
 }
 
-export default function PublicCatalog({ canBootstrap, onLoginClick }: PublicCatalogProps) {
+export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginClick }: PublicCatalogProps) {
   const [filters, setFilters] = useState<CatalogFilters>({
     city: "",
     fnsNumber: "",
@@ -76,6 +102,10 @@ export default function PublicCatalog({ canBootstrap, onLoginClick }: PublicCata
   const [ownerBusy, setOwnerBusy] = useState(false);
   const [ownerError, setOwnerError] = useState<string | null>(null);
   const [ownerSuccess, setOwnerSuccess] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState<PublicAddress | null>(null);
+  const [applicationForm, setApplicationForm] = useState<ClientApplicationForm>(initialClientApplicationForm);
+  const [applicationBusy, setApplicationBusy] = useState(false);
+  const [applicationError, setApplicationError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -135,6 +165,56 @@ export default function PublicCatalog({ canBootstrap, onLoginClick }: PublicCata
       setOwnerError((err as Error).message);
     } finally {
       setOwnerBusy(false);
+    }
+  }
+
+  function openApplicationForm(address: PublicAddress) {
+    setSelectedAddress(address);
+    setApplicationError(null);
+    setApplicationForm({
+      ...initialClientApplicationForm,
+      term_months: filters.termMonths,
+      has_correspondence_service: filters.correspondence && Boolean(address.correspondence_price)
+    });
+  }
+
+  async function submitClientApplication(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedAddress) return;
+    setApplicationBusy(true);
+    setApplicationError(null);
+    const basePayload = {
+      address_id: selectedAddress.id,
+      contact_name: applicationForm.contact_name.trim(),
+      contact_email: applicationForm.contact_email.trim(),
+      contact_phone: normalizeOptional(applicationForm.contact_phone),
+      password: applicationForm.password,
+      term_months: applicationForm.term_months,
+      has_correspondence_service: applicationForm.has_correspondence_service,
+      contract_city: null
+    };
+    const payload: PublicClientApplicationCreate =
+      applicationForm.type === "initial_registration"
+        ? {
+            ...basePayload,
+            type: "initial_registration",
+            planned_client_name: applicationForm.planned_client_name.trim()
+          }
+        : {
+            ...basePayload,
+            type: "address_change",
+            client_inn: applicationForm.client_inn.trim(),
+            notice_period: "1m"
+          };
+    try {
+      const result = await api.createPublicApplication(payload);
+      setSelectedAddress(null);
+      setApplicationForm(initialClientApplicationForm);
+      onAuthenticated(result.user);
+    } catch (err) {
+      setApplicationError((err as Error).message);
+    } finally {
+      setApplicationBusy(false);
     }
   }
 
@@ -273,7 +353,7 @@ export default function PublicCatalog({ canBootstrap, onLoginClick }: PublicCata
                       <ShieldCheck size={14} /> Опубликован
                     </span>
                   </div>
-                  <button className="btn primary" onClick={onLoginClick} type="button">
+                  <button className="btn primary" onClick={() => openApplicationForm(address)} type="button">
                     <FileText size={16} />
                     Подать заявку
                   </button>
@@ -382,6 +462,151 @@ export default function PublicCatalog({ canBootstrap, onLoginClick }: PublicCata
           </form>
         </aside>
       </section>
+
+      {selectedAddress ? (
+        <div className="modal-backdrop">
+          <form className="modal-panel public-application-modal" onSubmit={submitClientApplication}>
+            <header>
+              <div>
+                <span className="eyebrow">Заявка клиента</span>
+                <h2>Подать заявку на адрес</h2>
+              </div>
+              <button className="text-action" onClick={() => setSelectedAddress(null)} type="button">
+                <X size={16} /> Закрыть
+              </button>
+            </header>
+
+            <div className="selected-address-strip">
+              <MapPin size={18} />
+              <div>
+                <strong>{selectedAddress.full_address}</strong>
+                <span>
+                  {selectedAddress.provider_name} · ИФНС {selectedAddress.fns_number || "не указана"} ·{" "}
+                  {formatMoney(applicationForm.term_months === 6 ? selectedAddress.price_6m : selectedAddress.price_11m)}
+                </span>
+              </div>
+            </div>
+
+            <div className="segmented">
+              <button
+                className={applicationForm.type === "initial_registration" ? "selected" : ""}
+                onClick={() => setApplicationForm({ ...applicationForm, type: "initial_registration" })}
+                type="button"
+              >
+                Первичная регистрация
+              </button>
+              <button
+                className={applicationForm.type === "address_change" ? "selected" : ""}
+                onClick={() => setApplicationForm({ ...applicationForm, type: "address_change" })}
+                type="button"
+              >
+                Смена адреса
+              </button>
+            </div>
+
+            {applicationForm.type === "initial_registration" ? (
+              <label className="field">
+                <span>Название будущей компании</span>
+                <input
+                  value={applicationForm.planned_client_name}
+                  onChange={(event) => setApplicationForm({ ...applicationForm, planned_client_name: event.target.value })}
+                  required
+                />
+              </label>
+            ) : (
+              <label className="field">
+                <span>ИНН компании</span>
+                <input
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={applicationForm.client_inn}
+                  onChange={(event) => setApplicationForm({ ...applicationForm, client_inn: event.target.value })}
+                  required
+                />
+              </label>
+            )}
+
+            <div className="client-application-grid">
+              <label className="field">
+                <span>Контактное лицо</span>
+                <input
+                  value={applicationForm.contact_name}
+                  onChange={(event) => setApplicationForm({ ...applicationForm, contact_name: event.target.value })}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>E-mail для аккаунта</span>
+                <input
+                  inputMode="email"
+                  value={applicationForm.contact_email}
+                  onChange={(event) => setApplicationForm({ ...applicationForm, contact_email: event.target.value })}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Телефон</span>
+                <input
+                  value={applicationForm.contact_phone}
+                  onChange={(event) => setApplicationForm({ ...applicationForm, contact_phone: event.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Пароль</span>
+                <input
+                  minLength={8}
+                  value={applicationForm.password}
+                  onChange={(event) => setApplicationForm({ ...applicationForm, password: event.target.value })}
+                  required
+                  type="password"
+                />
+              </label>
+            </div>
+
+            <div className="client-application-options">
+              <label className="field">
+                <span>Срок</span>
+                <div className="segmented public-segmented">
+                  <button
+                    className={applicationForm.term_months === 6 ? "selected" : ""}
+                    onClick={() => setApplicationForm({ ...applicationForm, term_months: 6 })}
+                    type="button"
+                  >
+                    6 мес.
+                  </button>
+                  <button
+                    className={applicationForm.term_months === 11 ? "selected" : ""}
+                    onClick={() => setApplicationForm({ ...applicationForm, term_months: 11 })}
+                    type="button"
+                  >
+                    11 мес.
+                  </button>
+                </div>
+              </label>
+              <label className="toggle-field compact catalog-toggle">
+                <input
+                  checked={applicationForm.has_correspondence_service}
+                  disabled={!selectedAddress.correspondence_price}
+                  onChange={(event) =>
+                    setApplicationForm({ ...applicationForm, has_correspondence_service: event.target.checked })
+                  }
+                  type="checkbox"
+                />
+                <span>Корреспонденция</span>
+              </label>
+            </div>
+
+            {applicationError ? <div className="inline-error compact-error">{applicationError}</div> : null}
+
+            <div className="actions">
+              <button className="btn primary" disabled={applicationBusy} type="submit">
+                {applicationBusy ? <Loader2 className="spin" size={16} /> : <FileText size={16} />}
+                Создать заявку и аккаунт
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </main>
   );
 }

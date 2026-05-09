@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_staff
 from app.database import get_db
 from app.models.address import Address
 from app.models.application import Application
@@ -14,7 +15,7 @@ from app.models.contract import Contract
 from app.models.provider import Provider
 from app.schemas.registry import ActiveClientRegistryItem, renewal_state
 
-router = APIRouter(prefix="/registry", tags=["registry"])
+router = APIRouter(prefix="/registry", tags=["registry"], dependencies=[Depends(require_staff)])
 
 
 @router.get(

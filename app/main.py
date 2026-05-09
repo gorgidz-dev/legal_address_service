@@ -61,6 +61,8 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path == "/marketplace/provider-requests" and method == "POST":
         return True
+    if path == "/marketplace/applications" and method == "POST":
+        return True
     return path.startswith("/auth/invitations/") and path.endswith("/accept")
 
 

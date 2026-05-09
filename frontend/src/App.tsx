@@ -391,6 +391,10 @@ export default function App() {
       setLoading(false);
       return;
     }
+    if (currentUser.role === "client" || currentUser.role === "owner") {
+      setLoading(false);
+      return;
+    }
     let alive = true;
     setLoading(true);
     setError(null);
@@ -449,7 +453,17 @@ export default function App() {
       );
     }
 
-    return <PublicCatalog canBootstrap={canBootstrap} onLoginClick={() => setShowAuth(true)} />;
+    return (
+      <PublicCatalog
+        canBootstrap={canBootstrap}
+        onAuthenticated={(user) => setCurrentUser(user)}
+        onLoginClick={() => setShowAuth(true)}
+      />
+    );
+  }
+
+  if (currentUser.role === "client") {
+    return <ClientPendingView user={currentUser} onLogout={handleLogout} />;
   }
 
   return (
@@ -540,6 +554,33 @@ export default function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function ClientPendingView({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) {
+  return (
+    <main className="role-shell">
+      <section className="role-panel">
+        <div className="brand">
+          <div className="brand-mark">ЮА</div>
+          <div>
+            <strong>Личный кабинет клиента</strong>
+            <span>{user.email}</span>
+          </div>
+        </div>
+        <div>
+          <span className="eyebrow">Заявка создана</span>
+          <h1>Кабинет клиента будет следующим модулем</h1>
+        </div>
+        <p>
+          Аккаунт уже создан, заявка передана администратору на ручную проверку. На следующем этапе здесь появятся
+          статус заявки, документы и загрузки клиента.
+        </p>
+        <Button variant="secondary" onClick={onLogout}>
+          <LogOut size={16} /> Выйти
+        </Button>
+      </section>
+    </main>
   );
 }
 

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_staff
 from app.database import get_db
 from app.enums import TemplateKind
 from app.models.document_template import DocumentTemplate
@@ -16,7 +17,7 @@ from app.schemas.document import (
 )
 from app.services.storage import relative_storage_url, template_storage_dir
 
-router = APIRouter(prefix="/document-templates", tags=["templates"])
+router = APIRouter(prefix="/document-templates", tags=["templates"], dependencies=[Depends(require_staff)])
 
 
 @router.get(

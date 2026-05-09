@@ -10,6 +10,8 @@ import type {
   PackageResult,
   PaymentDocument,
   Provider,
+  PublicClientApplicationCreate,
+  PublicClientApplicationResult,
   ProviderConnectionRequest,
   ProviderConnectionRequestCreate,
   PublicAddress
@@ -85,6 +87,11 @@ export const api = {
   },
   createProviderConnectionRequest: (payload: ProviderConnectionRequestCreate) =>
     request<ProviderConnectionRequest>("/marketplace/provider-requests", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  createPublicApplication: (payload: PublicClientApplicationCreate) =>
+    request<PublicClientApplicationResult>("/marketplace/applications", {
       method: "POST",
       body: JSON.stringify(payload)
     }),

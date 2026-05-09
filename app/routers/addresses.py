@@ -8,12 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_staff
 from app.database import get_db
 from app.models.address import Address
 from app.models.provider import Provider
 from app.schemas.address import AddressCreate, AddressRead
 
-router = APIRouter(prefix="/addresses", tags=["addresses"])
+router = APIRouter(prefix="/addresses", tags=["addresses"], dependencies=[Depends(require_staff)])
 
 
 @router.get(

@@ -30,5 +30,11 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_staff(user: User = Depends(get_current_user)) -> User:
+    if user.role not in {UserRole.MANAGER.value, UserRole.LAWYER.value, UserRole.ADMIN.value}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нужна роль менеджера, юриста или администратора")
+    return user
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)

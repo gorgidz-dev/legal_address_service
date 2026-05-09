@@ -237,3 +237,35 @@ export interface ProviderConnectionRequest {
   created_at: string;
   updated_at: string;
 }
+
+export type PublicClientApplicationCreate =
+  | {
+      type: "initial_registration";
+      address_id: string;
+      planned_client_name: string;
+      contact_name: string;
+      contact_email: string;
+      contact_phone?: string | null;
+      password: string;
+      term_months: 6 | 11;
+      has_correspondence_service: boolean;
+      contract_city?: string | null;
+    }
+  | {
+      type: "address_change";
+      address_id: string;
+      client_inn: string;
+      contact_name: string;
+      contact_email: string;
+      contact_phone?: string | null;
+      password: string;
+      term_months: 6 | 11;
+      notice_period: NoticePeriod;
+      has_correspondence_service: boolean;
+      contract_city?: string | null;
+    };
+
+export interface PublicClientApplicationResult {
+  user: CurrentUser;
+  application: Application;
+}

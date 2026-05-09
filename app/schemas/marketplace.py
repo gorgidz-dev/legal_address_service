@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Annotated, Any, Literal, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.enums import ApplicationEventKind, NotificationAudience, OwnerConnectionRequestStatus
+from app.enums import ApplicationEventKind, ApplicationType, NoticePeriod, NotificationAudience, OwnerConnectionRequestStatus
+from app.schemas.application import ApplicationRead
+from app.schemas.auth import CurrentUserRead
+from app.validators import INNLegal
 
 
 class ProviderConnectionRequestCreate(BaseModel):
@@ -43,6 +46,45 @@ class ProviderConnectionRequestRead(BaseModel):
     reviewed_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
+
+
+class _PublicClientApplicationCreateBase(BaseModel):
+    address_id: UUID
+    contact_name: str = Field(min_length=2, max_length=200)
+    contact_email: EmailStr
+    contact_phone: Optional[str] = Field(default=None, max_length=80)
+    password: str = Field(min_length=8, max_length=200)
+    term_months: Literal[6, 11] = 11
+    has_correspondence_service: bool = False
+    contract_city: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("contact_email")
+    @classmethod
+    def normalize_contact_email(cls, value: str) -> str:
+        local, _, domain = value.partition("@")
+        return f"{local}@{domain.lower()}"
+
+
+class PublicClientApplicationCreateInitial(_PublicClientApplicationCreateBase):
+    type: Literal[ApplicationType.INITIAL_REGISTRATION] = ApplicationType.INITIAL_REGISTRATION
+    planned_client_name: str = Field(min_length=1, max_length=200)
+
+
+class PublicClientApplicationCreateAddressChange(_PublicClientApplicationCreateBase):
+    type: Literal[ApplicationType.ADDRESS_CHANGE] = ApplicationType.ADDRESS_CHANGE
+    client_inn: INNLegal
+    notice_period: NoticePeriod = NoticePeriod.ONE_MONTH
+
+
+PublicClientApplicationCreate = Annotated[
+    Union[PublicClientApplicationCreateInitial, PublicClientApplicationCreateAddressChange],
+    Field(discriminator="type"),
+]
+
+
+class PublicClientApplicationResult(BaseModel):
+    user: CurrentUserRead
+    application: ApplicationRead
 
 
 class ApplicationEventCreate(BaseModel):
