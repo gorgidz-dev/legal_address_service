@@ -20,8 +20,14 @@ class Application(UUIDPKMixin, TimestampMixin, Base):
             name="type_valid",
         ),
         CheckConstraint(
-            "status IN ('draft', 'guarantee_issued', 'awaiting_contract', "
-            "'contract_signed', 'active', 'expired', 'terminated')",
+            "status IN ("
+            "'draft', 'guarantee_issued', 'awaiting_contract', 'contract_signed', "
+            "'active', 'expired', 'terminated', 'awaiting_payment', 'paid', "
+            "'admin_review', 'needs_client_fix', 'assigned_to_owner', "
+            "'accepted_by_owner', 'rejected_by_owner', 'documents_preparing', "
+            "'documents_uploaded', 'documents_review', 'documents_revision', "
+            "'ready_for_client', 'completed', 'cancelled', 'dispute', "
+            "'refund_pending', 'refunded')",
             name="status_valid",
         ),
         CheckConstraint(

@@ -39,6 +39,7 @@ class CurrentUserRead(BaseModel):
     full_name: str
     role: UserRole
     is_active: bool
+    provider_id: Optional[UUID] = None
 
 
 class AuthResponse(BaseModel):

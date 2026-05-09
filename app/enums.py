@@ -16,6 +16,23 @@ class ApplicationStatus(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     TERMINATED = "terminated"
+    AWAITING_PAYMENT = "awaiting_payment"
+    PAID = "paid"
+    ADMIN_REVIEW = "admin_review"
+    NEEDS_CLIENT_FIX = "needs_client_fix"
+    ASSIGNED_TO_OWNER = "assigned_to_owner"
+    ACCEPTED_BY_OWNER = "accepted_by_owner"
+    REJECTED_BY_OWNER = "rejected_by_owner"
+    DOCUMENTS_PREPARING = "documents_preparing"
+    DOCUMENTS_UPLOADED = "documents_uploaded"
+    DOCUMENTS_REVIEW = "documents_review"
+    DOCUMENTS_REVISION = "documents_revision"
+    READY_FOR_CLIENT = "ready_for_client"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    DISPUTE = "dispute"
+    REFUND_PENDING = "refund_pending"
+    REFUNDED = "refunded"
 
 
 class NoticePeriod(str, Enum):
@@ -44,6 +61,52 @@ class GeneratedDocumentKind(str, Enum):
 class UserRole(str, Enum):
     MANAGER = "manager"
     LAWYER = "lawyer"
+    ADMIN = "admin"
+    CLIENT = "client"
+    OWNER = "owner"
+
+
+class AddressPublicationStatus(str, Enum):
+    DRAFT = "draft"
+    MODERATION = "moderation"
+    PUBLISHED = "published"
+    REJECTED = "rejected"
+    ARCHIVED = "archived"
+
+
+class OwnerConnectionRequestStatus(str, Enum):
+    NEW = "new"
+    REVIEWING = "reviewing"
+    INVITED = "invited"
+    REJECTED = "rejected"
+
+
+class DocumentFileKind(str, Enum):
+    CLIENT_REQUISITES = "client_requisites"
+    COMPANY_DETAILS = "company_details"
+    OWNERSHIP_PROOF = "ownership_proof"
+    GUARANTEE_LETTER = "guarantee_letter"
+    CONTRACT = "contract"
+    ACT = "act"
+    OWNER_CONSENT = "owner_consent"
+    POSTAL_SERVICE = "postal_service"
+    ADMIN_REVIEW_FILE = "admin_review_file"
+
+
+class ApplicationEventKind(str, Enum):
+    CREATED = "created"
+    STATUS_CHANGED = "status_changed"
+    COMMENT_ADDED = "comment_added"
+    DOCUMENT_UPLOADED = "document_uploaded"
+    DOCUMENT_APPROVED = "document_approved"
+    CORRECTION_REQUESTED = "correction_requested"
+    DISPUTE_OPENED = "dispute_opened"
+    CANCELLED = "cancelled"
+
+
+class NotificationAudience(str, Enum):
+    CLIENT = "client"
+    OWNER = "owner"
     ADMIN = "admin"
 
 

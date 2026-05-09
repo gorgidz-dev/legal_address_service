@@ -6,9 +6,26 @@ export type ApplicationStatus =
   | "contract_signed"
   | "active"
   | "expired"
-  | "terminated";
+  | "terminated"
+  | "awaiting_payment"
+  | "paid"
+  | "admin_review"
+  | "needs_client_fix"
+  | "assigned_to_owner"
+  | "accepted_by_owner"
+  | "rejected_by_owner"
+  | "documents_preparing"
+  | "documents_uploaded"
+  | "documents_review"
+  | "documents_revision"
+  | "ready_for_client"
+  | "completed"
+  | "cancelled"
+  | "dispute"
+  | "refund_pending"
+  | "refunded";
 export type NoticePeriod = "1d" | "7d" | "1m";
-export type UserRole = "manager" | "lawyer" | "admin";
+export type UserRole = "manager" | "lawyer" | "admin" | "client" | "owner";
 
 export interface CurrentUser {
   id: string;

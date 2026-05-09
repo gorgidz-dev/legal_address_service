@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Numeric, SmallInteger, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Numeric, SmallInteger, Text
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +21,10 @@ class Address(UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("price_6m > 0 AND price_11m > 0", name="prices_positive"),
         CheckConstraint("ownership_doc_pages > 0", name="pages_positive"),
+        CheckConstraint(
+            "publication_status IN ('draft', 'moderation', 'published', 'rejected', 'archived')",
+            name="publication_status_valid",
+        ),
         Index("ix_addresses_provider_id", "provider_id", "is_available"),
     )
 
@@ -46,6 +51,18 @@ class Address(UUIDPKMixin, TimestampMixin, Base):
 
     is_available: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    publication_status: Mapped[str] = mapped_column(
+        Text,
+        server_default="'draft'",
+        nullable=False,
+    )
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text)
+    moderated_by: Mapped[Optional[UUID]] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("users.id"),
+    )
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     provider: Mapped["Provider"] = relationship(back_populates="addresses")
     egrn_extracts: Mapped[list["EgrnExtract"]] = relationship(back_populates="address")
