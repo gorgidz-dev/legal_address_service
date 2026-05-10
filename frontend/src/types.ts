@@ -357,6 +357,16 @@ export interface ClientApplicationEvent {
   read_at: string | null;
 }
 
+export interface AppNotification extends ClientApplicationEvent {
+  application_status: ApplicationStatus;
+  application_title: string;
+}
+
+export interface NotificationInbox {
+  unread_count: number;
+  items: AppNotification[];
+}
+
 export interface ClientApplication {
   id: string;
   type: ApplicationType;

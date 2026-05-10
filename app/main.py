@@ -25,6 +25,7 @@ from app.routers import (
     egrn,
     marketplace,
     mobile_auth,
+    notifications,
     owner_dashboard,
     providers,
     registry,
@@ -141,6 +142,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(mobile_auth.router)
 app.include_router(marketplace.router)
+app.include_router(notifications.router)
 app.include_router(client_dashboard.router)
 app.include_router(owner_dashboard.router)
 app.include_router(workflow.router)

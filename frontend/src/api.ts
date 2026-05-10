@@ -13,6 +13,8 @@ import type {
   DemoSeedResult,
   Invitation,
   InvitationCreateResult,
+  NotificationInbox,
+  AppNotification,
   OwnerDashboard,
   PackageResult,
   PaymentDocument,
@@ -82,6 +84,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload || {})
     }),
+  notifications: (filters?: { limit?: number; unread_only?: boolean }) => {
+    const params = new URLSearchParams();
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    if (filters?.unread_only) params.set("unread_only", "true");
+    const query = params.toString();
+    return request<NotificationInbox>(`/notifications${query ? `?${query}` : ""}`);
+  },
+  markNotificationRead: (notificationId: string) =>
+    request<AppNotification>(`/notifications/${notificationId}/read`, { method: "POST" }),
 
   publicAddresses: (filters?: {
     city?: string;

@@ -1,4 +1,5 @@
 import {
+  Bell,
   Building2,
   CheckCircle2,
   Copy,
@@ -41,6 +42,8 @@ import type {
   Invitation,
   InvitationCreateResult,
   NoticePeriod,
+  AppNotification,
+  NotificationInbox,
   OwnerApplication,
   OwnerDashboard,
   PaymentDocument,
@@ -142,6 +145,16 @@ function formatDate(value: string | null): string {
   return new Intl.DateTimeFormat("ru-RU").format(new Date(value));
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 function formatMoney(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("ru-RU", {
@@ -231,6 +244,103 @@ function LoadingRows() {
       {Array.from({ length: 5 }).map((_, index) => (
         <div className="skeleton-row" key={index} />
       ))}
+    </div>
+  );
+}
+
+function NotificationCenter({ refreshKey = 0 }: { refreshKey?: number }) {
+  const [inbox, setInbox] = useState<NotificationInbox | null>(null);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const unreadCount = inbox?.unread_count || 0;
+  const items = inbox?.items || [];
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    api
+      .notifications({ limit: 20 })
+      .then(setInbox)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [refreshKey]);
+
+  async function markRead(notification: AppNotification) {
+    if (notification.is_read) return;
+    try {
+      const updated = await api.markNotificationRead(notification.id);
+      setInbox((current) => {
+        if (!current) return current;
+        return {
+          unread_count: Math.max(0, current.unread_count - 1),
+          items: current.items.map((item) => (item.id === updated.id ? updated : item))
+        };
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  return (
+    <div className="notification-center">
+      <button
+        aria-label="Уведомления"
+        className={open ? "notification-button active" : "notification-button"}
+        onClick={() => setOpen((value) => !value)}
+        type="button"
+      >
+        <Bell size={18} strokeWidth={1.8} />
+        {unreadCount > 0 ? <span className="notification-badge">{unreadCount > 9 ? "9+" : unreadCount}</span> : null}
+      </button>
+
+      {open ? (
+        <div className="notification-popover">
+          <header>
+            <div>
+              <strong>Уведомления</strong>
+              <span>{unreadCount ? `${unreadCount} непрочит.` : "Все прочитано"}</span>
+            </div>
+            <button className="text-action" onClick={load} type="button">
+              <RefreshCw size={14} /> Обновить
+            </button>
+          </header>
+
+          {error ? <div className="notification-error">{error}</div> : null}
+
+          {loading ? (
+            <div className="notification-skeleton">
+              <div />
+              <div />
+              <div />
+            </div>
+          ) : items.length ? (
+            <div className="notification-list">
+              {items.map((notification) => (
+                <button
+                  className={notification.is_read ? "notification-item" : "notification-item unread"}
+                  key={notification.id}
+                  onClick={() => markRead(notification)}
+                  type="button"
+                >
+                  <span className={`status ${notification.application_status}`}>
+                    {statusLabels[notification.application_status] || notification.application_status}
+                  </span>
+                  <strong>{notification.title}</strong>
+                  <small>
+                    {notification.application_title} · {formatDateTime(notification.created_at)}
+                  </small>
+                  <p>{notification.message}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="notification-empty">Новых уведомлений нет</div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -677,9 +787,12 @@ export default function App() {
             <span className="eyebrow">Рабочая область</span>
             <h1>{selectedTitle}</h1>
           </div>
-          <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-            <RefreshCw size={16} /> Обновить
-          </Button>
+          <div className="topbar-actions">
+            <NotificationCenter refreshKey={refreshKey} />
+            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
+              <RefreshCw size={16} /> Обновить
+            </Button>
+          </div>
         </header>
 
         <InlineError message={error} />
@@ -772,6 +885,7 @@ function ClientDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: 
           </div>
         </div>
         <div className="actions">
+          <NotificationCenter refreshKey={refreshKey} />
           <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
             <RefreshCw size={16} /> Обновить
           </Button>
@@ -1015,6 +1129,7 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
           </div>
         </div>
         <div className="actions">
+          <NotificationCenter refreshKey={refreshKey} />
           <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
             <RefreshCw size={16} /> Обновить
           </Button>
