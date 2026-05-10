@@ -10,6 +10,7 @@ import type {
   ClientApplication,
   CurrentUser,
   DadataLookup,
+  DemoSeedResult,
   Invitation,
   InvitationCreateResult,
   OwnerDashboard,
@@ -75,6 +76,11 @@ export const api = {
     request<{ user: CurrentUser }>(`/auth/invitations/${encodeURIComponent(token)}/accept`, {
       method: "POST",
       body: JSON.stringify(payload)
+    }),
+  seedDemoData: (payload?: { password?: string }) =>
+    request<DemoSeedResult>("/demo/seed", {
+      method: "POST",
+      body: JSON.stringify(payload || {})
     }),
 
   publicAddresses: (filters?: {

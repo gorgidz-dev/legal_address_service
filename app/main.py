@@ -21,6 +21,7 @@ from app.routers import (
     auth,
     client_dashboard,
     clients,
+    demo,
     egrn,
     marketplace,
     mobile_auth,
@@ -151,6 +152,7 @@ app.include_router(clients.router)
 app.include_router(applications.router)
 app.include_router(registry.router)
 app.include_router(templates.router)
+app.include_router(demo.router)
 
 
 @app.get("/health", tags=["meta"], summary="Liveness probe")

@@ -16,6 +16,7 @@ export default defineConfig({
       "/applications": "http://127.0.0.1:8000",
       "/clients": "http://127.0.0.1:8000",
       "/registry": "http://127.0.0.1:8000",
+      "/demo": "http://127.0.0.1:8000",
       "/document-templates": "http://127.0.0.1:8000",
       "/egrn-extracts": "http://127.0.0.1:8000"
     }

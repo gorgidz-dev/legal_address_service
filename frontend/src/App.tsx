@@ -36,6 +36,7 @@ import type {
   ClientApplication,
   CurrentUser,
   DadataLookup,
+  DemoSeedResult,
   DocumentFileKind,
   Invitation,
   InvitationCreateResult,
@@ -100,6 +101,14 @@ const ownerActionLabels: Record<string, string> = {
   reject: "Отклонить",
   start_documents: "Начать документы",
   upload_documents: "Загрузить документы"
+};
+
+const roleLabels: Record<string, string> = {
+  admin: "Администратор",
+  manager: "Менеджер",
+  lawyer: "Юрист",
+  client: "Клиент",
+  owner: "Собственник"
 };
 
 const adminDocumentActionLabels: Record<string, string> = {
@@ -346,8 +355,10 @@ function AccessView() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [form, setForm] = useState({ email: "", full_name: "", role: "manager" });
   const [created, setCreated] = useState<InvitationCreateResult | null>(null);
+  const [demoResult, setDemoResult] = useState<DemoSeedResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
@@ -383,10 +394,71 @@ function AccessView() {
     }
   }
 
+  async function seedDemoData() {
+    setDemoBusy(true);
+    setError(null);
+    try {
+      const result = await api.seedDemoData();
+      setDemoResult(result);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
   const inviteUrl = created ? `${window.location.origin}${created.invitation_path}` : "";
+  const createdTotal = demoResult
+    ? Object.values(demoResult.created).reduce((sum, value) => sum + value, 0)
+    : 0;
+  const updatedTotal = demoResult
+    ? Object.values(demoResult.updated).reduce((sum, value) => sum + value, 0)
+    : 0;
 
   return (
     <section className="stack">
+      <div className="demo-seed-panel">
+        <div className="panel-title">
+          <Database size={20} />
+          <div>
+            <strong>Тестовые данные</strong>
+            <span>Демо-аккаунты, адреса, заявки по статусам, документы и события.</span>
+          </div>
+        </div>
+        <Button disabled={demoBusy} onClick={seedDemoData} variant="secondary">
+          {demoBusy ? <Loader2 className="spin" size={16} /> : <Database size={16} />}
+          Создать демо-набор
+        </Button>
+        {demoResult ? (
+          <div className="demo-seed-result">
+            <div className="demo-stat-grid">
+              <div>
+                <span>Создано</span>
+                <strong>{createdTotal}</strong>
+              </div>
+              <div>
+                <span>Обновлено</span>
+                <strong>{updatedTotal}</strong>
+              </div>
+              <div>
+                <span>Аккаунтов</span>
+                <strong>{demoResult.credentials.length}</strong>
+              </div>
+            </div>
+            <div className="demo-credentials">
+              {demoResult.credentials.map((credential) => (
+                <div key={credential.email}>
+                  <strong>{credential.email}</strong>
+                  <span>
+                    {roleLabels[credential.role] || credential.role} · {credential.password}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       <form className="compact-form access-form" onSubmit={submit}>
         <Field label="E-mail">
           <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" required />

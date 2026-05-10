@@ -72,6 +72,29 @@ export interface InvitationCreateResult {
   invitation_path: string;
 }
 
+export interface DemoSeedCounts {
+  users: number;
+  providers: number;
+  clients: number;
+  addresses: number;
+  applications: number;
+  documents: number;
+  events: number;
+}
+
+export interface DemoCredential {
+  email: string;
+  full_name: string;
+  role: UserRole;
+  password: string;
+}
+
+export interface DemoSeedResult {
+  created: DemoSeedCounts;
+  updated: DemoSeedCounts;
+  credentials: DemoCredential[];
+}
+
 export interface Provider {
   id: string;
   code: string;
