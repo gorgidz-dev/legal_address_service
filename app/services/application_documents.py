@@ -16,7 +16,12 @@ from app.enums import (
 from app.models.application import Application
 from app.models.stored_file import StoredFile
 from app.models.user import User
-from app.schemas.application_document import ApplicationDocumentRead, ApplicationDocumentUploadResult
+from app.schemas.application_document import (
+    ApplicationDocumentModerationRead,
+    ApplicationDocumentRead,
+    ApplicationDocumentUploadResult,
+)
+from app.services.application_workflow import next_actions_for_status, workflow_role_for_user
 from app.services.notification_events import create_application_event
 from app.services.storage import create_stored_file_record
 
@@ -208,6 +213,36 @@ async def list_application_documents(
         .order_by(StoredFile.created_at.desc())
     )
     return [application_document_read(file_record) for file_record in result.scalars().all()]
+
+
+async def get_application_document_moderation(
+    *,
+    db: AsyncSession,
+    application_id: UUID,
+    user: User | object,
+) -> ApplicationDocumentModerationRead:
+    application = await load_application_for_documents(db, application_id)
+    role = workflow_role_for_user(user)
+    if role != UserRole.ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Модерация документов доступна только сотрудникам площадки")
+
+    result = await db.execute(
+        select(StoredFile)
+        .where(
+            StoredFile.application_id == application.id,
+            StoredFile.kind.in_([kind.value for kind in DocumentFileKind]),
+        )
+        .order_by(StoredFile.created_at.desc())
+    )
+    documents = [application_document_read(file_record) for file_record in result.scalars().all()]
+
+    return ApplicationDocumentModerationRead(
+        application_id=application.id,
+        status=ApplicationStatus(application.status),
+        requires_manual_review=application.status == ApplicationStatus.DOCUMENTS_REVIEW.value,
+        available_actions=next_actions_for_status(application.status, UserRole.ADMIN),
+        documents=documents,
+    )
 
 
 async def get_application_document(

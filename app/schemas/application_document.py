@@ -26,3 +26,11 @@ class ApplicationDocumentUploadResult(BaseModel):
     application_id: UUID
     application_status: ApplicationStatus
     document: ApplicationDocumentRead
+
+
+class ApplicationDocumentModerationRead(BaseModel):
+    application_id: UUID
+    status: ApplicationStatus
+    requires_manual_review: bool
+    available_actions: list[str]
+    documents: list[ApplicationDocumentRead]

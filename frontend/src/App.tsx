@@ -30,6 +30,7 @@ import type {
   ActiveClientRegistryItem,
   Address,
   Application,
+  ApplicationDocumentModeration,
   ApplicationDocument,
   ApplicationType,
   ClientApplication,
@@ -99,6 +100,11 @@ const ownerActionLabels: Record<string, string> = {
   reject: "Отклонить",
   start_documents: "Начать документы",
   upload_documents: "Загрузить документы"
+};
+
+const adminDocumentActionLabels: Record<string, string> = {
+  approve_documents: "Одобрить комплект",
+  request_document_revision: "На доработку"
 };
 
 const ownerDocumentKinds: DocumentFileKind[] = [
@@ -1205,6 +1211,7 @@ function ApplicationsView({
   onChanged: () => void;
 }) {
   const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [moderatingId, setModeratingId] = useState<string | null>(null);
 
   if (!applications.length) {
     return <EmptyState title="Заявок пока нет" text="Создайте первичную регистрацию или смену адреса." />;
@@ -1238,6 +1245,11 @@ function ApplicationsView({
           <span>{addressById.get(application.address_id)?.full_address || "—"}</span>
           <span>{formatDate(application.created_at)}</span>
           <div className="row-actions">
+            {application.status === "documents_review" || application.status === "documents_revision" ? (
+              <button className="text-action" onClick={() => setModeratingId(application.id)} type="button">
+                <ShieldCheck size={15} /> Проверка
+              </button>
+            ) : null}
             {application.type === "initial_registration" ? (
               <button className="text-action" onClick={() => setPromotingId(application.id)} type="button">
                 <FileCheck2 size={15} /> Договор
@@ -1256,7 +1268,161 @@ function ApplicationsView({
           onDone={onChanged}
         />
       ) : null}
+      {moderatingId ? (
+        <DocumentModerationPanel
+          application={applications.find((item) => item.id === moderatingId) || null}
+          onClose={() => setModeratingId(null)}
+          onDone={onChanged}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function DocumentModerationPanel({
+  application,
+  onClose,
+  onDone
+}: {
+  application: Application | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [moderation, setModeration] = useState<ApplicationDocumentModeration | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!application) return;
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .applicationModeration(application.id)
+      .then((result) => {
+        if (alive) setModeration(result);
+      })
+      .catch((err: Error) => {
+        if (alive) setError(err.message);
+      })
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [application?.id]);
+
+  if (!application) return null;
+
+  const documents = moderation?.documents || [];
+  const canApprove = Boolean(moderation?.available_actions.includes("approve_documents") && documents.length > 0);
+  const canRequestRevision = Boolean(moderation?.available_actions.includes("request_document_revision"));
+
+  async function runModerationAction(action: string) {
+    setActionBusy(action);
+    setError(null);
+    try {
+      await api.runApplicationAction(application!.id, action);
+      onDone();
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-panel moderation-panel" role="dialog" aria-modal="true">
+        <header>
+          <div>
+            <span className="eyebrow">Ручная модерация</span>
+            <h2>{application.company_name || application.planned_client_name || "Заявка"}</h2>
+          </div>
+          <button className="text-action" onClick={onClose} type="button">
+            Закрыть
+          </button>
+        </header>
+
+        <div className="moderation-summary">
+          <div>
+            <span>Статус</span>
+            <strong>{statusLabels[moderation?.status || application.status] || moderation?.status || application.status}</strong>
+          </div>
+          <div>
+            <span>Ручная проверка</span>
+            <strong>{moderation ? (moderation.requires_manual_review ? "Требуется" : "Не требуется") : "—"}</strong>
+          </div>
+          <div>
+            <span>Файлы</span>
+            <strong>{moderation ? documents.length : "—"}</strong>
+          </div>
+        </div>
+
+        <InlineError message={error} />
+
+        {loading ? (
+          <LoadingRows />
+        ) : moderation ? (
+          <div className="moderation-body">
+            <div className="owner-documents-panel">
+              <div className="timeline-title">
+                <FileArchive size={18} />
+                <strong>Документы исполнителя</strong>
+              </div>
+              {documents.length ? (
+                <div className="owner-document-list">
+                  {documents.map((document) => (
+                    <a className="owner-document-item" href={document.download_url} key={document.id}>
+                      <FileText size={17} />
+                      <span>
+                        <strong>{document.original_filename}</strong>
+                        <small>
+                          {documentKindLabels[document.kind]} · {formatFileSize(document.size_bytes)} ·{" "}
+                          {formatDate(document.created_at)}
+                        </small>
+                      </span>
+                      <Download size={16} />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="Файлы не загружены" text="Исполнитель еще не отправил документы по заявке." />
+              )}
+            </div>
+
+            <div className="moderation-actions">
+              {moderation?.available_actions.length ? (
+                <>
+                  <Button
+                    disabled={actionBusy !== null || !canApprove}
+                    onClick={() => runModerationAction("approve_documents")}
+                    variant="primary"
+                  >
+                    {actionBusy === "approve_documents" ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+                    {adminDocumentActionLabels.approve_documents}
+                  </Button>
+                  <Button
+                    disabled={actionBusy !== null || !canRequestRevision}
+                    onClick={() => runModerationAction("request_document_revision")}
+                    variant="secondary"
+                  >
+                    {actionBusy === "request_document_revision" ? <Loader2 className="spin" size={16} /> : <FileClock size={16} />}
+                    {adminDocumentActionLabels.request_document_revision}
+                  </Button>
+                </>
+              ) : (
+                <div className="success-note">
+                  <CheckCircle2 size={17} />
+                  <span>Решение по документам уже зафиксировано</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

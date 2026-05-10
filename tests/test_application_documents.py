@@ -19,7 +19,7 @@ from app.models.application import Application
 from app.models.application_event import ApplicationEvent
 from app.models.stored_file import StoredFile
 from app.schemas.application_document import ApplicationDocumentUploadResult
-from app.services.application_documents import upload_application_document
+from app.services.application_documents import get_application_document_moderation, upload_application_document
 
 
 def make_application(
@@ -49,9 +49,21 @@ def make_application(
     )
 
 
+class FakeStoredFileResult:
+    def __init__(self, files: list[StoredFile]):
+        self.files = files
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self.files
+
+
 class FakeDocumentSession:
-    def __init__(self, application: Application):
+    def __init__(self, application: Application, stored_files: list[StoredFile] | None = None):
         self.application = application
+        self.stored_files = stored_files or []
         self.added: list[object] = []
         self.flushed = False
 
@@ -62,6 +74,9 @@ class FakeDocumentSession:
 
     def add(self, item: object) -> None:
         self.added.append(item)
+
+    async def execute(self, statement):
+        return FakeStoredFileResult(self.stored_files)
 
     async def flush(self) -> None:
         self.flushed = True
@@ -101,6 +116,62 @@ async def fake_create_stored_file_record(
     )
     db.add(file_record)
     return file_record
+
+
+def make_stored_file(application_id: UUID, *, kind: DocumentFileKind = DocumentFileKind.OWNER_CONSENT) -> StoredFile:
+    return StoredFile(
+        id=uuid4(),
+        client_id=None,
+        application_id=application_id,
+        kind=kind.value,
+        original_filename="owner-consent.pdf",
+        content_type="application/pdf",
+        size_bytes=2048,
+        sha256="b" * 64,
+        storage_backend="local",
+        storage_key=f"applications/{application_id}/{kind.value}/owner-consent.pdf",
+        public_url=None,
+        created_at=datetime.now(timezone.utc),
+        uploaded_by=uuid4(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_staff_gets_document_moderation_snapshot_with_review_actions() -> None:
+    application = make_application(status=ApplicationStatus.DOCUMENTS_REVIEW)
+    stored_file = make_stored_file(application.id)
+    db = FakeDocumentSession(application, stored_files=[stored_file])
+    admin = SimpleNamespace(id=uuid4(), role=UserRole.MANAGER.value, provider_id=None)
+
+    result = await get_application_document_moderation(
+        db=db,
+        application_id=application.id,
+        user=admin,
+    )
+
+    assert result.application_id == application.id
+    assert result.status == ApplicationStatus.DOCUMENTS_REVIEW
+    assert result.requires_manual_review is True
+    assert result.available_actions == ["approve_documents", "request_document_revision"]
+    assert [document.id for document in result.documents] == [stored_file.id]
+    assert result.documents[0].download_url == f"/workflow/applications/{application.id}/documents/{stored_file.id}/download"
+
+
+@pytest.mark.asyncio
+async def test_document_moderation_snapshot_is_staff_only() -> None:
+    provider_id = uuid4()
+    application = make_application(status=ApplicationStatus.DOCUMENTS_REVIEW, provider_id=provider_id)
+    db = FakeDocumentSession(application, stored_files=[make_stored_file(application.id)])
+    owner = SimpleNamespace(id=uuid4(), role=UserRole.OWNER.value, provider_id=provider_id)
+
+    with pytest.raises(HTTPException) as exc:
+        await get_application_document_moderation(
+            db=db,
+            application_id=application.id,
+            user=owner,
+        )
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio

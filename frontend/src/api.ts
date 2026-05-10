@@ -4,6 +4,7 @@ import type {
   Application,
   ApplicationActionResult,
   ApplicationDocument,
+  ApplicationDocumentModeration,
   ApplicationDocumentUploadResult,
   BootstrapState,
   ClientApplication,
@@ -109,6 +110,8 @@ export const api = {
     ),
   applicationDocuments: (applicationId: string) =>
     request<ApplicationDocument[]>(`/workflow/applications/${applicationId}/documents`),
+  applicationModeration: (applicationId: string) =>
+    request<ApplicationDocumentModeration>(`/workflow/applications/${applicationId}/moderation`),
   uploadApplicationDocument: (applicationId: string, form: FormData) =>
     request<ApplicationDocumentUploadResult>(`/workflow/applications/${applicationId}/documents`, {
       method: "POST",

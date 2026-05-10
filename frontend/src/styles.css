@@ -1313,7 +1313,7 @@ h1 {
 .table-header,
 .table-row {
   display: grid;
-  grid-template-columns: 1fr 1.2fr 1.25fr 1fr 1.1fr 1.7fr 0.75fr 150px;
+  grid-template-columns: 1fr 1.2fr 1.25fr 1fr 1.1fr 1.7fr 0.75fr 210px;
   gap: 14px;
   align-items: center;
   padding: 14px 16px;
@@ -1458,6 +1458,52 @@ h1 {
   margin: 0;
   color: #596259;
   line-height: 1.5;
+}
+
+.moderation-panel {
+  width: min(860px, 100%);
+}
+
+.moderation-summary {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.6fr;
+  gap: 10px;
+}
+
+.moderation-summary div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e1e6dd;
+  border-radius: 8px;
+  background: #f8faf6;
+}
+
+.moderation-summary span {
+  color: #6b7469;
+  font-size: 12px;
+}
+
+.moderation-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #1f2428;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moderation-body {
+  display: grid;
+  gap: 12px;
+}
+
+.moderation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .split-form {
@@ -1914,6 +1960,7 @@ textarea {
   .upload-form,
   .access-form,
   .payment-upload,
+  .moderation-summary,
   .client-application-grid,
   .client-application-options,
   .form-grid,

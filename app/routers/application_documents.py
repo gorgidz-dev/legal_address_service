@@ -10,9 +10,14 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.enums import DocumentFileKind
 from app.models.user import User
-from app.schemas.application_document import ApplicationDocumentRead, ApplicationDocumentUploadResult
+from app.schemas.application_document import (
+    ApplicationDocumentModerationRead,
+    ApplicationDocumentRead,
+    ApplicationDocumentUploadResult,
+)
 from app.services.application_documents import (
     get_application_document,
+    get_application_document_moderation,
     list_application_documents,
     upload_application_document,
 )
@@ -28,6 +33,15 @@ async def list_documents(
     user: User = Depends(get_current_user),
 ) -> list[ApplicationDocumentRead]:
     return await list_application_documents(db=db, application_id=application_id, user=user)
+
+
+@router.get("/{application_id}/moderation", response_model=ApplicationDocumentModerationRead)
+async def document_moderation(
+    application_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ApplicationDocumentModerationRead:
+    return await get_application_document_moderation(db=db, application_id=application_id, user=user)
 
 
 @router.post(

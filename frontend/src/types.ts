@@ -304,6 +304,14 @@ export interface ApplicationDocumentUploadResult {
   document: ApplicationDocument;
 }
 
+export interface ApplicationDocumentModeration {
+  application_id: string;
+  status: ApplicationStatus;
+  requires_manual_review: boolean;
+  available_actions: string[];
+  documents: ApplicationDocument[];
+}
+
 export interface ClientApplicationEvent {
   id: string;
   application_id: string;
