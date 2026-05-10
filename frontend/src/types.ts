@@ -151,6 +151,7 @@ export interface Application {
   fns_city: string | null;
   expires_at: string | null;
   parent_application_id: string | null;
+  available_actions: string[];
   created_at: string;
   updated_at: string;
 }

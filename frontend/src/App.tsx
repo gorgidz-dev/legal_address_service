@@ -119,6 +119,17 @@ const adminDocumentActionLabels: Record<string, string> = {
   request_document_revision: "На доработку"
 };
 
+const adminWorkflowActionLabels: Record<string, string> = {
+  start_admin_review: "Взять в проверку",
+  assign_owner: "Передать собственнику",
+  request_client_fix: "Запросить уточнения",
+  cancel: "Отменить",
+  resolve_dispute: "Закрыть спор",
+  complete: "Завершить"
+};
+
+const documentModerationActions = new Set(["approve_documents", "request_document_revision"]);
+
 const ownerDocumentKinds: DocumentFileKind[] = [
   "owner_consent",
   "contract",
@@ -1399,6 +1410,8 @@ function ApplicationsView({
 }) {
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [moderatingId, setModeratingId] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   if (!applications.length) {
     return <EmptyState title="Заявок пока нет" text="Создайте первичную регистрацию или смену адреса." />;
@@ -1407,8 +1420,23 @@ function ApplicationsView({
   const providerById = new Map(providers.map((provider) => [provider.id, provider]));
   const addressById = new Map(addresses.map((address) => [address.id, address]));
 
+  async function runAdminAction(application: Application, action: string) {
+    const busyKey = `${application.id}:${action}`;
+    setActionBusy(busyKey);
+    setActionError(null);
+    try {
+      await api.runApplicationAction(application.id, action);
+      onChanged();
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
   return (
     <section className="table-panel">
+      {actionError ? <div className="table-action-error">{actionError}</div> : null}
       <div className="table-header">
         <span>Тип</span>
         <span>Компания</span>
@@ -1420,33 +1448,63 @@ function ApplicationsView({
         <span />
       </div>
       {applications.map((application) => (
-        <div className="table-row" key={application.id}>
-          <span>{typeLabels[application.type]}</span>
-          <span>{application.company_name || application.planned_client_name || "—"}</span>
-          <span className="contact-cell">
-            <b>{application.contact_name || "—"}</b>
-            <small>{[application.contact_phone, application.contact_email].filter(Boolean).join(" · ") || "нет контактов"}</small>
-          </span>
-          <span className={`status ${application.status}`}>{statusLabels[application.status] || application.status}</span>
-          <span>{providerById.get(application.provider_id)?.short_name || "—"}</span>
-          <span>{addressById.get(application.address_id)?.full_address || "—"}</span>
-          <span>{formatDate(application.created_at)}</span>
-          <div className="row-actions">
-            {application.status === "documents_review" || application.status === "documents_revision" ? (
-              <button className="text-action" onClick={() => setModeratingId(application.id)} type="button">
-                <ShieldCheck size={15} /> Проверка
-              </button>
-            ) : null}
-            {application.type === "initial_registration" ? (
-              <button className="text-action" onClick={() => setPromotingId(application.id)} type="button">
-                <FileCheck2 size={15} /> Договор
-              </button>
-            ) : null}
-            <a className="download-link" href={packageDownloadUrl(application.id)}>
-              <Download size={16} /> ZIP
-            </a>
-          </div>
-        </div>
+        (() => {
+          const inlineActions = (application.available_actions || []).filter(
+            (action) => !documentModerationActions.has(action)
+          );
+          return (
+            <div className="table-row" key={application.id}>
+              <span>{typeLabels[application.type]}</span>
+              <span>{application.company_name || application.planned_client_name || "—"}</span>
+              <span className="contact-cell">
+                <b>{application.contact_name || "—"}</b>
+                <small>{[application.contact_phone, application.contact_email].filter(Boolean).join(" · ") || "нет контактов"}</small>
+              </span>
+              <span className={`status ${application.status}`}>{statusLabels[application.status] || application.status}</span>
+              <span>{providerById.get(application.provider_id)?.short_name || "—"}</span>
+              <span>{addressById.get(application.address_id)?.full_address || "—"}</span>
+              <span>{formatDate(application.created_at)}</span>
+              <div className="row-actions admin-row-actions">
+                {inlineActions.map((action) => {
+                  const busyKey = `${application.id}:${action}`;
+                  const Icon =
+                    action === "cancel"
+                      ? XCircle
+                      : action === "request_client_fix"
+                        ? FileClock
+                        : action === "complete" || action === "resolve_dispute"
+                          ? CheckCircle2
+                          : ShieldCheck;
+                  return (
+                    <button
+                      className={action === "cancel" ? "workflow-action danger" : "workflow-action"}
+                      disabled={actionBusy !== null}
+                      key={action}
+                      onClick={() => runAdminAction(application, action)}
+                      type="button"
+                    >
+                      {actionBusy === busyKey ? <Loader2 className="spin" size={14} /> : <Icon size={14} />}
+                      {adminWorkflowActionLabels[action] || action}
+                    </button>
+                  );
+                })}
+                {application.status === "documents_review" || application.status === "documents_revision" ? (
+                  <button className="text-action" onClick={() => setModeratingId(application.id)} type="button">
+                    <ShieldCheck size={15} /> Проверка
+                  </button>
+                ) : null}
+                {application.type === "initial_registration" ? (
+                  <button className="text-action" onClick={() => setPromotingId(application.id)} type="button">
+                    <FileCheck2 size={15} /> Договор
+                  </button>
+                ) : null}
+                <a className="download-link" href={packageDownloadUrl(application.id)}>
+                  <Download size={16} /> ZIP
+                </a>
+              </div>
+            </div>
+          );
+        })()
       ))}
       {promotingId ? (
         <PromoteContractPanel

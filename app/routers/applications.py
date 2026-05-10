@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import require_staff
 from app.config import settings
 from app.database import get_db
-from app.enums import ApplicationStatus, ApplicationType, GuaranteeVariant
+from app.enums import ApplicationStatus, ApplicationType, GuaranteeVariant, UserRole
 from app.models.address import Address
 from app.models.application import Application
 from app.models.client import Client
@@ -42,9 +42,16 @@ from app.services.document_generation import (
     render_contract_docx,
     render_guarantee_docx,
 )
+from app.services.marketplace_status import role_actions_for_status
 from app.services.storage import local_stored_file_path, read_stored_file, resolve_storage_file
 
 router = APIRouter(prefix="/applications", tags=["applications"], dependencies=[Depends(require_staff)])
+
+
+def application_read(application: Application) -> ApplicationRead:
+    payload = ApplicationRead.model_validate(application)
+    payload.available_actions = role_actions_for_status(UserRole.ADMIN, application.status)
+    return payload
 
 
 async def _get_provider_and_address(
@@ -124,7 +131,7 @@ async def list_applications(
     status_: ApplicationStatus | None = None,
     provider_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
-) -> list[Application]:
+) -> list[ApplicationRead]:
     stmt = select(Application).order_by(Application.created_at.desc())
     if type_ is not None:
         stmt = stmt.where(Application.type == type_.value)
@@ -133,7 +140,7 @@ async def list_applications(
     if provider_id is not None:
         stmt = stmt.where(Application.provider_id == provider_id)
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    return [application_read(application) for application in result.scalars().all()]
 
 
 @router.post(
@@ -150,7 +157,7 @@ async def list_applications(
 async def create_application(
     payload: ApplicationCreate,
     db: AsyncSession = Depends(get_db),
-) -> Application:
+) -> ApplicationRead:
     _, address = await _get_provider_and_address(db, payload.provider_id, payload.address_id)
 
     if isinstance(payload, ApplicationCreateInitial):
@@ -198,18 +205,18 @@ async def create_application(
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, f"Нарушено ограничение БД: {e.orig}") from e
     await db.refresh(application)
-    return application
+    return application_read(application)
 
 
 @router.get("/{application_id}", response_model=ApplicationRead)
 async def get_application(
     application_id: UUID,
     db: AsyncSession = Depends(get_db),
-) -> Application:
+) -> ApplicationRead:
     application = await db.get(Application, application_id)
     if application is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Application {application_id} не найдена")
-    return application
+    return application_read(application)
 
 
 @router.post(
@@ -279,7 +286,7 @@ async def promote_to_contract(
     application_id: UUID,
     payload: PromoteToContractRequest,
     db: AsyncSession = Depends(get_db),
-) -> Application:
+) -> ApplicationRead:
     parent = await db.get(Application, application_id)
     if parent is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Application {application_id} не найдена")
@@ -309,7 +316,7 @@ async def promote_to_contract(
     db.add(child)
     await db.commit()
     await db.refresh(child)
-    return child
+    return application_read(child)
 
 
 @router.post(

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from app.enums import ApplicationStatus, ApplicationType, NoticePeriod
+from app.routers import applications
 from app.schemas.application import ApplicationRead, PromoteToContractRequest
 
 
@@ -54,3 +55,33 @@ def test_promote_to_contract_accepts_contact_updates() -> None:
     assert payload.contact_name == "Ирина Ковалёва"
     assert payload.contact_phone == "+7 925 747-11-03"
     assert payload.contact_email == "office@example.ru"
+
+
+def test_application_read_helper_exposes_admin_workflow_actions() -> None:
+    application = SimpleNamespace(
+        id=uuid4(),
+        type=ApplicationType.ADDRESS_CHANGE.value,
+        status=ApplicationStatus.ADMIN_REVIEW.value,
+        provider_id=uuid4(),
+        address_id=uuid4(),
+        client_id=uuid4(),
+        planned_client_name=None,
+        company_name="Дельта Кабинет",
+        contact_name="Антон Левин",
+        contact_phone="+7 495 200-14-91",
+        contact_email="office@example.ru",
+        term_months=11,
+        notice_period=NoticePeriod.ONE_MONTH.value,
+        has_correspondence_service=True,
+        contract_city="Москва",
+        fns_number=46,
+        fns_city="Москве",
+        expires_at=None,
+        parent_application_id=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    payload = applications.application_read(application)
+
+    assert payload.available_actions == ["assign_owner", "request_client_fix", "cancel"]
