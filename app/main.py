@@ -15,6 +15,7 @@ from app.database import AsyncSessionLocal
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.routers import (
+    address_photos,
     addresses,
     application_documents,
     applications,
@@ -86,6 +87,9 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path == "/marketplace/applications" and method == "POST":
         return True
+    # Сами фото отдаются роутером: approved -> публично, остальные -> auth-check внутри.
+    if path.startswith("/address-photos/") and path.endswith("/raw") and method == "GET":
+        return True
     return path.startswith("/auth/invitations/") and path.endswith("/accept")
 
 
@@ -147,6 +151,7 @@ app.include_router(client_dashboard.router)
 app.include_router(owner_dashboard.router)
 app.include_router(workflow.router)
 app.include_router(application_documents.router)
+app.include_router(address_photos.router)
 app.include_router(providers.router)
 app.include_router(addresses.router)
 app.include_router(egrn.router)
