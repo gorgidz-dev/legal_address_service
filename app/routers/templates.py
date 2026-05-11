@@ -15,6 +15,8 @@ from app.schemas.document import (
     DocumentTemplateRead,
     DocumentTemplateUploadResult,
 )
+from app.services.document_context import build_reference_render_context
+from app.services.document_renderer import render_docx_bytes
 from app.services.storage import relative_storage_url, template_storage_dir
 
 router = APIRouter(prefix="/document-templates", tags=["templates"], dependencies=[Depends(require_staff)])
@@ -62,6 +64,17 @@ async def upload_template(
     content = await file.read()
     if not content:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Файл шаблона пустой")
+
+    try:
+        render_docx_bytes(
+            template_bytes=content,
+            context=build_reference_render_context(kind),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Тестовый рендер шаблона упал: {type(exc).__name__}: {exc}",
+        ) from exc
 
     result = await db.execute(
         select(func.coalesce(func.max(DocumentTemplate.version), 0)).where(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -21,3 +22,11 @@ def render_docx(
     template.render(context)
     template.save(str(output_path))
     return output_path
+
+
+def render_docx_bytes(*, template_bytes: bytes, context: dict[str, Any]) -> bytes:
+    template = DocxTemplate(BytesIO(template_bytes))
+    template.render(context)
+    output = BytesIO()
+    template.save(output)
+    return output.getvalue()

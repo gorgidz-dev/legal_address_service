@@ -3,11 +3,12 @@ from __future__ import annotations
 import calendar
 from datetime import date, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 
 from pytils import numeral
 
-from app.enums import GuaranteeVariant
+from app.enums import GuaranteeVariant, TemplateKind
 
 MONTHS_GENITIVE = {
     1: "января",
@@ -170,3 +171,100 @@ def build_contract_context(
         "price_total_formatted": format_money(price_total),
         "price_total_in_words": money_in_words(price_total),
     }
+
+
+def _reference_provider() -> SimpleNamespace:
+    return SimpleNamespace(
+        full_name="ООО «Эталон Недвижимость»",
+        inn="7700000001",
+        kpp="770001001",
+        ogrn="1027700000001",
+        legal_address="г. Москва, ул. Образцовая, д. 1",
+        signatory_initials="И.И. Иванов",
+        phone="+7 (495) 000-00-00",
+    )
+
+
+def _reference_address() -> SimpleNamespace:
+    return SimpleNamespace(
+        full_address="г. Москва, ул. Тверская, д. 7, офис 41",
+        cadastral_number="77:01:0001001:0001",
+        ownership_doc_short="Свидетельство 77-АН №000000",
+        ownership_doc_pages="2",
+        fns_number=46,
+        fns_city="Москве",
+        correspondence_price=Decimal("3500"),
+    )
+
+
+def _reference_client() -> SimpleNamespace:
+    return SimpleNamespace(
+        full_name="Общество с ограниченной ответственностью «Альфа»",
+        short_name="ООО «Альфа»",
+        inn="7700000002",
+        kpp="770001002",
+        ogrn="1027700000002",
+        legal_address="г. Москва, ул. Примерная, д. 2",
+        signatory_position="Генеральный директор",
+        signatory_name="Петров Пётр Петрович",
+        signatory_name_genitive="Генерального директора Петрова Петра Петровича",
+        signatory_initials="П.П. Петров",
+    )
+
+
+def _reference_application(*, with_client: bool) -> SimpleNamespace:
+    return SimpleNamespace(
+        term_months=11,
+        contract_city="Москва",
+        notice_period="один месяц",
+        has_correspondence_service=True,
+        fns_number=46,
+        fns_city="Москве",
+        planned_client_name="ООО «Альфа»" if not with_client else None,
+    )
+
+
+def build_reference_render_context(kind: TemplateKind) -> dict[str, Any]:
+    """Полностью заполненный контекст для тестового рендера шаблона при загрузке.
+
+    Идея: после upload админ должен моментально узнать, что шаблон бьётся
+    с пайплайном генерации. Если переменная отсутствует или Jinja-выражение
+    битое — рендер упадёт здесь, а не на боевой заявке.
+    """
+    today = date(2026, 1, 15)
+    if kind == TemplateKind.CONTRACT:
+        return build_contract_context(
+            application=_reference_application(with_client=True),
+            provider=_reference_provider(),
+            address=_reference_address(),
+            client=_reference_client(),
+            contract_number="ДА-2026-0001",
+            contract_date=today,
+            start_date=today,
+            price_total=Decimal("33500"),
+        )
+    if kind == TemplateKind.GUARANTEE_INITIAL:
+        return build_guarantee_context(
+            application=_reference_application(with_client=False),
+            provider=_reference_provider(),
+            address=_reference_address(),
+            client=None,
+            variant=GuaranteeVariant.INITIAL,
+            guarantee_number="ГП-2026-0001",
+            guarantee_date=today,
+            contract_number=None,
+            contract_date=None,
+        )
+    if kind == TemplateKind.GUARANTEE_FULL:
+        return build_guarantee_context(
+            application=_reference_application(with_client=True),
+            provider=_reference_provider(),
+            address=_reference_address(),
+            client=_reference_client(),
+            variant=GuaranteeVariant.FULL,
+            guarantee_number="ГП-2026-0002",
+            guarantee_date=today,
+            contract_number="ДА-2026-0001",
+            contract_date=today,
+        )
+    raise ValueError(f"Неизвестный TemplateKind: {kind}")
