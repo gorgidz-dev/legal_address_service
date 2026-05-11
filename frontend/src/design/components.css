@@ -1,0 +1,439 @@
+/*
+ * Component primitives. All classes prefixed with .ds- to avoid
+ * collision with existing styles.css. Spec section 2.
+ */
+
+/* ===================== Buttons ===================== */
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: var(--ds-radius-pill);
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-snappy),
+    border-color var(--ds-motion-fast) var(--ds-ease-snappy),
+    transform var(--ds-motion-fast) var(--ds-ease-snappy),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-snappy);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ds-btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.ds-btn--primary {
+  background: var(--ds-indigo-500);
+  color: #fff;
+}
+.ds-btn--primary:hover {
+  background: var(--ds-indigo-600);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(91, 91, 214, 0.3);
+}
+
+.ds-btn--secondary {
+  background: #fff;
+  color: var(--ds-indigo-950);
+  border-color: var(--ds-slate-200);
+}
+.ds-btn--secondary:hover {
+  background: var(--ds-slate-50);
+  border-color: var(--ds-slate-300);
+}
+
+.ds-btn--ghost {
+  background: transparent;
+  color: var(--ds-indigo-500);
+}
+.ds-btn--ghost:hover {
+  background: var(--ds-indigo-50);
+}
+
+.ds-btn--danger {
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger-fg);
+}
+.ds-btn--danger:hover {
+  background: #fecaca;
+}
+
+.ds-btn--sm {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+.ds-btn--md {
+  font-size: 13px;
+  padding: 9px 16px;
+}
+.ds-btn--lg {
+  font-size: 14px;
+  padding: 12px 22px;
+}
+.ds-btn--icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-radius: var(--ds-radius-md);
+}
+
+/* ===================== Chips ===================== */
+.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: 6px 12px;
+  border-radius: var(--ds-radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--ds-motion-fast) var(--ds-ease-snappy),
+    border-color var(--ds-motion-fast) var(--ds-ease-snappy),
+    color var(--ds-motion-fast) var(--ds-ease-snappy);
+  border: 1px solid var(--ds-slate-200);
+  background: #fff;
+  color: var(--ds-indigo-950);
+  font-family: inherit;
+}
+.ds-chip:hover {
+  border-color: var(--ds-slate-300);
+}
+.ds-chip--active {
+  background: var(--ds-indigo-950);
+  color: #fff;
+  border-color: var(--ds-indigo-950);
+}
+.ds-chip--active:hover {
+  background: var(--ds-indigo-900);
+}
+.ds-chip__x {
+  opacity: 0.6;
+  font-size: 14px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+/* ===================== Badges ===================== */
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+  padding: 3px 9px;
+  border-radius: var(--ds-radius-pill);
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.ds-badge__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--ds-radius-pill);
+  background: currentColor;
+}
+.ds-badge--new {
+  background: var(--ds-success-bg);
+  color: var(--ds-success-fg);
+}
+.ds-badge--warning {
+  background: var(--ds-warning-bg);
+  color: var(--ds-warning-fg);
+}
+.ds-badge--info {
+  background: var(--ds-info-bg);
+  color: var(--ds-info-fg);
+}
+.ds-badge--neutral {
+  background: var(--ds-neutral-bg);
+  color: var(--ds-neutral-fg);
+}
+.ds-badge--brand {
+  background: var(--ds-brand-bg);
+  color: var(--ds-brand-fg);
+}
+
+/* ===================== Inputs / Select ===================== */
+.ds-input {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-lg);
+  transition:
+    border-color var(--ds-motion-fast) var(--ds-ease-snappy),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-snappy);
+  min-width: 220px;
+  color: var(--ds-indigo-950);
+}
+.ds-input:hover {
+  border-color: var(--ds-slate-300);
+}
+.ds-input:focus-within {
+  border-color: var(--ds-indigo-500);
+  box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.15);
+}
+.ds-input input {
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ds-indigo-950);
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+}
+.ds-input input::placeholder {
+  color: var(--ds-slate-400);
+}
+.ds-input__icon {
+  color: var(--ds-slate-400);
+  flex-shrink: 0;
+  display: inline-flex;
+}
+.ds-input--error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+.ds-input-error-text {
+  font-size: var(--ds-text-label);
+  color: var(--ds-danger-fg);
+  margin-top: var(--ds-space-1);
+}
+
+.ds-select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: 9px 12px;
+  background: #fff;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-lg);
+  font-size: 12px;
+  color: var(--ds-indigo-950);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition:
+    border-color var(--ds-motion-fast) var(--ds-ease-snappy);
+  appearance: none;
+  /* native arrow via background to keep height aligned with chips */
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%239BA3B1' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.ds-select:hover {
+  border-color: var(--ds-slate-300);
+}
+.ds-select:focus {
+  outline: none;
+  border-color: var(--ds-indigo-500);
+  box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.15);
+}
+
+/* ===================== Stat ===================== */
+.ds-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
+.ds-stat {
+  display: inline-flex;
+  flex-direction: column;
+  padding: 0 var(--ds-space-6);
+  border-left: 1px solid var(--ds-slate-200);
+}
+.ds-stat:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+.ds-stat__num {
+  font-size: var(--ds-text-display-md);
+  font-weight: 700;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-tight);
+  line-height: 1;
+}
+.ds-stat__lbl {
+  font-size: var(--ds-text-label);
+  color: var(--ds-slate-500);
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  margin-top: 6px;
+}
+
+/* ===================== Iconbox ===================== */
+.ds-iconbox {
+  border-radius: var(--ds-radius-md);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--ds-indigo-500), #8b87ff);
+  flex-shrink: 0;
+}
+.ds-iconbox--sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.ds-iconbox--md {
+  width: 40px;
+  height: 40px;
+  font-size: 13px;
+}
+.ds-iconbox--lg {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--ds-radius-lg);
+  font-size: 16px;
+}
+
+/* ===================== Address card ===================== */
+.ds-card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--ds-shadow-sm);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  font-family: inherit;
+  padding: 0;
+  width: 100%;
+  transition:
+    transform var(--ds-motion-base) var(--ds-ease-out),
+    box-shadow var(--ds-motion-base) var(--ds-ease-out),
+    border-color var(--ds-motion-base) var(--ds-ease-out);
+}
+.ds-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--ds-shadow-xl);
+  border-color: var(--ds-indigo-100);
+}
+.ds-card__media {
+  aspect-ratio: 4 / 3;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--ds-indigo-500) 0%, var(--ds-indigo-700) 100%);
+}
+.ds-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ds-card__media-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+}
+.ds-card__media-count {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(11, 10, 46, 0.75);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: var(--ds-radius-pill);
+  font-size: 10px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ds-card__media-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  text-align: center;
+  padding: 12px;
+}
+.ds-card__media-fallback-initials {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: var(--ds-tracking-tightest);
+  opacity: 0.9;
+  line-height: 1;
+}
+.ds-card__media-fallback-meta {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-top: 4px;
+  font-family: var(--ds-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ds-card__body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+}
+.ds-card__title {
+  font-size: var(--ds-text-heading-md);
+  font-weight: 600;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-snug);
+  margin: 0;
+  line-height: 1.25;
+}
+.ds-card__sub {
+  font-size: var(--ds-text-body-sm);
+  color: var(--ds-slate-500);
+  margin-top: 3px;
+}
+.ds-card__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  gap: var(--ds-space-3);
+}
+.ds-card__price {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ds-indigo-500);
+  letter-spacing: var(--ds-tracking-tight);
+}
+.ds-card__price-from {
+  font-size: var(--ds-text-label);
+  color: var(--ds-slate-500);
+  font-weight: 400;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+/* ===================== Link ===================== */
+.ds-lnk {
+  color: var(--ds-indigo-500);
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--ds-motion-fast) var(--ds-ease-snappy);
+}
+.ds-lnk:hover {
+  border-bottom-color: var(--ds-indigo-500);
+}
