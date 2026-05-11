@@ -144,6 +144,15 @@ def build_contract_context(
     if term_months not in (6, 11):
         raise ValueError("term_months должен быть 6 или 11")
     end_date = add_months_minus_one_day(start_date, term_months)
+    has_correspondence = bool(_get(application, "has_correspondence_service", False))
+    correspondence_price_raw = _get(address, "correspondence_price")
+    if has_correspondence and correspondence_price_raw is not None:
+        correspondence_price = Decimal(str(correspondence_price_raw))
+        correspondence_price_formatted = format_money(correspondence_price)
+        correspondence_price_in_words = money_in_words(correspondence_price)
+    else:
+        correspondence_price_formatted = ""
+        correspondence_price_in_words = ""
     return {
         **_provider_context(provider),
         **_address_context(address),
@@ -155,9 +164,9 @@ def build_contract_context(
         "end_date_ru": format_date_ru(end_date, quote_day=False),
         "term_months": term_months,
         "notice_period": _get(application, "notice_period", ""),
-        "has_correspondence_service": bool(
-            _get(application, "has_correspondence_service", False)
-        ),
+        "has_correspondence_service": has_correspondence,
+        "correspondence_price_formatted": correspondence_price_formatted,
+        "correspondence_price_in_words": correspondence_price_in_words,
         "price_total_formatted": format_money(price_total),
         "price_total_in_words": money_in_words(price_total),
     }
