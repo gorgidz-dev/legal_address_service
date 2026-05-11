@@ -501,3 +501,44 @@ async def download_latest_package(
         )
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+
+
+_GENERATED_DOC_MEDIA_TYPES = {
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pdf": "application/pdf",
+    "zip": "application/zip",
+}
+
+
+@router.get(
+    "/{application_id}/documents/{document_id}/download",
+    response_class=FileResponse,
+    summary="Скачать сгенерированный документ (договор/гарантийку/комплект) по id",
+)
+async def download_generated_document(
+    application_id: UUID,
+    document_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    document = await db.get(GeneratedDocument, document_id)
+    if document is None or document.application_id != application_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден в этой заявке")
+
+    for url, suffix in (
+        (document.docx_url, "docx"),
+        (document.pdf_url, "pdf"),
+        (document.zip_url, "zip"),
+    ):
+        if not url:
+            continue
+        try:
+            path = resolve_storage_file(url)
+        except (FileNotFoundError, ValueError):
+            continue
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type=_GENERATED_DOC_MEDIA_TYPES[suffix],
+        )
+
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл сгенерированного документа недоступен")
