@@ -117,3 +117,9 @@ class EgrulStatus(str, Enum):
     LIQUIDATED = "LIQUIDATED"
     BANKRUPT = "BANKRUPT"
     REORGANIZING = "REORGANIZING"
+
+
+class AddressPhotoModerationStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"

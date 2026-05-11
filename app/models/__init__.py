@@ -1,6 +1,7 @@
 """ORM-модели. Импорт всех моделей здесь нужен Alembic-у для автогенерации."""
 
 from app.models.address import Address
+from app.models.address_photo import AddressPhoto
 from app.models.application import Application
 from app.models.application_event import ApplicationEvent
 from app.models.base import Base
@@ -20,6 +21,7 @@ from app.models.user_session import UserSession
 
 __all__ = [
     "Address",
+    "AddressPhoto",
     "Application",
     "ApplicationEvent",
     "Base",
