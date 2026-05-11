@@ -16,7 +16,8 @@ class ApplicationEvent(UUIDPKMixin, Base):
     __table_args__ = (
         CheckConstraint(
             "kind IN ('created', 'status_changed', 'comment_added', 'document_uploaded', "
-            "'document_approved', 'correction_requested', 'dispute_opened', 'cancelled')",
+            "'document_approved', 'correction_requested', 'dispute_opened', 'cancelled', "
+            "'contract_expiring')",
             name="kind_valid",
         ),
         CheckConstraint("audience IN ('client', 'owner', 'admin')", name="audience_valid"),

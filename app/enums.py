@@ -102,6 +102,7 @@ class ApplicationEventKind(str, Enum):
     CORRECTION_REQUESTED = "correction_requested"
     DISPUTE_OPENED = "dispute_opened"
     CANCELLED = "cancelled"
+    CONTRACT_EXPIRING = "contract_expiring"
 
 
 class NotificationAudience(str, Enum):
