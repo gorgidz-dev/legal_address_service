@@ -65,13 +65,34 @@ def test_public_addresses_endpoint_accepts_term_months_query() -> None:
     )
     provider = SimpleNamespace(short_name="Адресный актив")
 
-    class FakeResult:
+    class FakeScalars:
+        def __init__(self, items):
+            self._items = items
+
         def all(self):
-            return [(address, provider)]
+            return self._items
+
+    class FakeResult:
+        def __init__(self, rows=None, scalars=None):
+            self._rows = rows or []
+            self._scalars = scalars or []
+
+        def all(self):
+            return self._rows
+
+        def scalars(self):
+            return FakeScalars(self._scalars)
 
     class FakeSession:
+        def __init__(self):
+            self.calls = 0
+
         async def execute(self, _statement):
-            return FakeResult()
+            self.calls += 1
+            if self.calls == 1:
+                return FakeResult(rows=[(address, provider)])
+            # Второй вызов — батч-загрузка одобренных фото; в тесте их нет.
+            return FakeResult(scalars=[])
 
     async def override_db():
         yield FakeSession()
@@ -83,4 +104,7 @@ def test_public_addresses_endpoint_accepts_term_months_query() -> None:
         app.dependency_overrides.pop(get_db, None)
 
     assert response.status_code == 200
-    assert response.json()[0]["selected_price"] == "36000.00"
+    body = response.json()
+    assert body[0]["selected_price"] == "36000.00"
+    assert body[0]["photos"] == []
+    assert body[0]["main_photo_url"] is None

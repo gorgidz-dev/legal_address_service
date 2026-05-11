@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.enums import (
+    AddressPhotoModerationStatus,
     AddressPublicationStatus,
     ApplicationEventKind,
     ApplicationStatus,
@@ -22,10 +23,12 @@ from app.enums import (
     UserRole,
 )
 from app.models.address import Address
+from app.models.address_photo import AddressPhoto
 from app.models.application import Application
 from app.models.provider import Provider
 from app.models.provider_connection_request import ProviderConnectionRequest
 from app.models.user import User
+from app.schemas.address_photo import AddressPhotoRead
 from app.schemas.marketplace import (
     ProviderConnectionRequestCreate,
     ProviderConnectionRequestRead,
@@ -38,6 +41,7 @@ from app.schemas.marketplace import (
 from app.routers.applications import _upsert_client_from_dadata
 from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUserRead
+from app.services.address_photos import photo_to_public_dict
 from app.services.auth_security import hash_password
 from app.services.auth_sessions import create_session
 from app.services.notification_events import create_application_event
@@ -50,8 +54,16 @@ def public_address_from_row(
     address: Address,
     provider: Provider,
     term_months: Literal[6, 11] = 11,
+    photos: list[AddressPhoto] | None = None,
 ) -> PublicAddressRead:
     selected_price: Decimal = address.price_6m if term_months == 6 else address.price_11m
+    photo_models = [
+        AddressPhotoRead.model_validate(photo_to_public_dict(p)) for p in (photos or [])
+    ]
+    main_url: Optional[str] = next(
+        (p.url for p in photo_models if p.is_main),
+        photo_models[0].url if photo_models else None,
+    )
     return PublicAddressRead(
         id=address.id,
         provider_id=address.provider_id,
@@ -68,7 +80,30 @@ def public_address_from_row(
         publication_status=address.publication_status,
         created_at=address.created_at,
         updated_at=address.updated_at,
+        photos=photo_models,
+        main_photo_url=main_url,
     )
+
+
+async def _load_approved_photos_for(
+    db: AsyncSession,
+    address_ids: list,
+) -> dict:
+    """Возвращает {address_id: [AddressPhoto, ...]} только для approved-фото."""
+    if not address_ids:
+        return {}
+    result = await db.execute(
+        select(AddressPhoto)
+        .where(
+            AddressPhoto.address_id.in_(address_ids),
+            AddressPhoto.moderation_status == AddressPhotoModerationStatus.APPROVED.value,
+        )
+        .order_by(AddressPhoto.is_main.desc(), AddressPhoto.sort_order, AddressPhoto.created_at)
+    )
+    photos_by_address: dict = {}
+    for photo in result.scalars().all():
+        photos_by_address.setdefault(photo.address_id, []).append(photo)
+    return photos_by_address
 
 
 @router.get("/addresses", response_model=list[PublicAddressRead])
@@ -100,9 +135,16 @@ async def public_addresses(
         stmt = stmt.where(Address.correspondence_price.is_not(None))
 
     result = await db.execute(stmt)
+    rows = list(result.all())
+    photos_by_address = await _load_approved_photos_for(db, [a.id for a, _ in rows])
     return [
-        public_address_from_row(address=address, provider=provider, term_months=6 if term_months == 6 else 11)
-        for address, provider in result.all()
+        public_address_from_row(
+            address=address,
+            provider=provider,
+            term_months=6 if term_months == 6 else 11,
+            photos=photos_by_address.get(address.id),
+        )
+        for address, provider in rows
     ]
 
 

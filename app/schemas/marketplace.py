@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.enums import ApplicationEventKind, ApplicationType, NoticePeriod, NotificationAudience, OwnerConnectionRequestStatus
+from app.schemas.address_photo import AddressPhotoRead
 from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUserRead
 from app.validators import INNLegal
@@ -130,3 +131,5 @@ class PublicAddressRead(BaseModel):
     publication_status: str
     created_at: datetime
     updated_at: datetime
+    photos: list[AddressPhotoRead] = Field(default_factory=list)
+    main_photo_url: Optional[str] = None
