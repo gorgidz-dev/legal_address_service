@@ -5,7 +5,7 @@ from typing import Annotated, Literal, Optional
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,7 +43,7 @@ from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUserRead
 from app.services.address_photos import photo_to_public_dict
 from app.services.auth_security import hash_password
-from app.services.auth_sessions import create_session
+from app.services.auth_sessions import create_session, extract_request_metadata
 from app.services.notification_events import create_application_event
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
@@ -186,6 +186,7 @@ async def _published_address_bundle(db: AsyncSession, address_id) -> tuple[Addre
 )
 async def create_public_client_application(
     payload: PublicClientApplicationCreate,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> PublicClientApplicationResult:
@@ -207,7 +208,8 @@ async def create_public_client_application(
     )
     db.add(user)
     await db.flush()
-    await create_session(db=db, user=user, response=response)
+    ua, ip = extract_request_metadata(request)
+    await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
 
     if isinstance(payload, PublicClientApplicationCreateInitial):
         application = Application(

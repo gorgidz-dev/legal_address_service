@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 
-from fastapi import Response
+from fastapi import Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import utcnow
@@ -84,6 +84,35 @@ def _refresh_ttl_hours(profile: SessionProfile) -> int:
     return settings.web_refresh_ttl_hours
 
 
+_USER_AGENT_MAX = 500
+_DEVICE_NAME_MAX = 200
+LAST_SEEN_THROTTLE = timedelta(minutes=5)
+
+
+def extract_request_metadata(request: Request) -> tuple[str | None, str | None]:
+    """Return (user_agent, ip_address) from incoming request."""
+    ua = request.headers.get("user-agent")
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        ip = forwarded.split(",")[0].strip()
+    else:
+        ip = request.client.host if request.client else None
+    return ua, ip
+
+
+def should_update_last_seen(session: UserSession, now: datetime) -> bool:
+    if session.last_seen_at is None:
+        return True
+    return (now - session.last_seen_at) >= LAST_SEEN_THROTTLE
+
+
+def _trim(value: str | None, limit: int) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    return value[:limit] if value else None
+
+
 async def create_session(
     *,
     db: AsyncSession,
@@ -91,6 +120,9 @@ async def create_session(
     response: Response | None = None,
     profile: SessionProfile = SessionProfile.WEB,
     set_cookie: bool | None = None,
+    user_agent: str | None = None,
+    ip_address: str | None = None,
+    device_name: str | None = None,
 ) -> SessionCredentials:
     now = utcnow()
     access_token = secrets.token_urlsafe(32)
@@ -111,6 +143,11 @@ async def create_session(
         refresh_token_hash=hash_token(refresh_token),
         refresh_expires_at=refresh_expires_at,
         created_at=now,
+        session_type=profile.value,
+        device_name=_trim(device_name, _DEVICE_NAME_MAX),
+        user_agent=_trim(user_agent, _USER_AGENT_MAX),
+        ip_address=_trim(ip_address, 64),
+        last_seen_at=now,
     )
     db.add(session)
     await db.flush()
@@ -135,8 +172,10 @@ async def rotate_session(
     response: Response | None = None,
     profile: SessionProfile = SessionProfile.WEB,
     set_cookie: bool | None = None,
+    user_agent: str | None = None,
+    ip_address: str | None = None,
 ) -> SessionCredentials:
-    """Rotate-on-use: revoke old session, issue fresh pair."""
+    """Rotate-on-use: revoke old session, issue fresh pair (carries forward device_name)."""
     old_session.revoked_at = utcnow()
     old_session.last_refreshed_at = utcnow()
     await db.flush()
@@ -146,4 +185,7 @@ async def rotate_session(
         response=response,
         profile=profile,
         set_cookie=set_cookie,
+        user_agent=user_agent,
+        ip_address=ip_address,
+        device_name=old_session.device_name,
     )

@@ -32,3 +32,8 @@ class UserSession(UUIDPKMixin, Base):
     refresh_token_hash: Mapped[Optional[str]] = mapped_column(Text)
     refresh_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_refreshed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    session_type: Mapped[Optional[str]] = mapped_column(Text)
+    device_name: Mapped[Optional[str]] = mapped_column(Text)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text)
+    ip_address: Mapped[Optional[str]] = mapped_column(Text)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

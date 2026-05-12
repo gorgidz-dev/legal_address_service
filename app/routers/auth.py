@@ -31,6 +31,7 @@ from app.services.auth_sessions import (
     SessionProfile,
     create_session,
     delete_session_cookie,
+    extract_request_metadata,
     rotate_session,
 )
 
@@ -50,6 +51,7 @@ async def bootstrap_state(db: AsyncSession = Depends(get_db)) -> BootstrapState:
 )
 async def bootstrap_admin(
     payload: BootstrapAdminRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AuthResponse:
@@ -66,7 +68,8 @@ async def bootstrap_admin(
     )
     db.add(user)
     await db.flush()
-    await create_session(db=db, user=user, response=response)
+    ua, ip = extract_request_metadata(request)
+    await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=CurrentUserRead.model_validate(user))
@@ -75,6 +78,7 @@ async def bootstrap_admin(
 @router.post("/login", response_model=AuthResponse)
 async def login(
     payload: LoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AuthResponse:
@@ -83,7 +87,8 @@ async def login(
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный e-mail или пароль")
 
-    await create_session(db=db, user=user, response=response)
+    ua, ip = extract_request_metadata(request)
+    await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=CurrentUserRead.model_validate(user))
@@ -116,12 +121,15 @@ async def refresh_session(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh-токен недействителен")
 
     session, user = row
+    ua, ip = extract_request_metadata(request)
     await rotate_session(
         db=db,
         old_session=session,
         user=user,
         response=response,
         profile=SessionProfile.WEB,
+        user_agent=ua,
+        ip_address=ip,
     )
     await db.commit()
     await db.refresh(user)
@@ -193,6 +201,11 @@ async def list_my_sessions(
             expires_at=s.expires_at,
             refresh_expires_at=s.refresh_expires_at,
             last_refreshed_at=s.last_refreshed_at,
+            last_seen_at=s.last_seen_at,
+            session_type=s.session_type,
+            device_name=s.device_name,
+            user_agent=s.user_agent,
+            ip_address=s.ip_address,
             is_current=(s.id == current_id),
         )
         for s in result.scalars().all()
@@ -252,6 +265,7 @@ async def create_invitation(
 async def accept_invitation(
     token: str,
     payload: InvitationAccept,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AuthResponse:
@@ -278,7 +292,8 @@ async def accept_invitation(
     invitation.accepted_at = utcnow()
     db.add(user)
     await db.flush()
-    await create_session(db=db, user=user, response=response)
+    ua, ip = extract_request_metadata(request)
+    await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=CurrentUserRead.model_validate(user))

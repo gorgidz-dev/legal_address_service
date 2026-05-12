@@ -128,6 +128,12 @@ async def auth_middleware(request: Request, call_next):
         request.state.user_email = user.email
         request.state.session_id = session.id
 
+        from app.services.auth_sessions import should_update_last_seen
+
+        if should_update_last_seen(session, now):
+            session.last_seen_at = now
+            await db.commit()
+
     return await call_next(request)
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,14 +10,19 @@ from app.models.user import User
 from app.models.user_session import UserSession
 from app.schemas.auth import (
     CurrentUserRead,
-    LoginRequest,
     MobileAuthResponse,
+    MobileLoginRequest,
     MobileRefreshRequest,
     MobileRefreshResponse,
     SessionTokenRead,
 )
 from app.services.auth_security import hash_token, verify_password
-from app.services.auth_sessions import SessionProfile, create_session, rotate_session
+from app.services.auth_sessions import (
+    SessionProfile,
+    create_session,
+    extract_request_metadata,
+    rotate_session,
+)
 
 router = APIRouter(prefix="/mobile/auth", tags=["mobile-auth"])
 
@@ -33,7 +38,8 @@ def _session_payload(credentials) -> SessionTokenRead:
 
 @router.post("/login", response_model=MobileAuthResponse)
 async def mobile_login(
-    payload: LoginRequest,
+    payload: MobileLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MobileAuthResponse:
     result = await db.execute(select(User).where(User.email == payload.email.lower()))
@@ -41,7 +47,15 @@ async def mobile_login(
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный e-mail или пароль")
 
-    credentials = await create_session(db=db, user=user, profile=SessionProfile.MOBILE)
+    ua, ip = extract_request_metadata(request)
+    credentials = await create_session(
+        db=db,
+        user=user,
+        profile=SessionProfile.MOBILE,
+        user_agent=ua,
+        ip_address=ip,
+        device_name=payload.device_name,
+    )
     await db.commit()
     await db.refresh(user)
     return MobileAuthResponse(
@@ -53,6 +67,7 @@ async def mobile_login(
 @router.post("/refresh", response_model=MobileRefreshResponse)
 async def mobile_refresh(
     payload: MobileRefreshRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MobileRefreshResponse:
     now = utcnow()
@@ -71,11 +86,14 @@ async def mobile_refresh(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh-токен недействителен")
 
     session, user = row
+    ua, ip = extract_request_metadata(request)
     credentials = await rotate_session(
         db=db,
         old_session=session,
         user=user,
         profile=SessionProfile.MOBILE,
+        user_agent=ua,
+        ip_address=ip,
     )
     await db.commit()
     return MobileRefreshResponse(session=_session_payload(credentials))

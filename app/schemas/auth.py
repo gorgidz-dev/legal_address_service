@@ -20,6 +20,10 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class MobileLoginRequest(LoginRequest):
+    device_name: Optional[str] = Field(default=None, max_length=200)
+
+
 class InvitationCreate(BaseModel):
     email: EmailStr
     full_name: Optional[str] = Field(default=None, max_length=200)
@@ -76,6 +80,11 @@ class SessionRead(BaseModel):
     expires_at: datetime
     refresh_expires_at: Optional[datetime] = None
     last_refreshed_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    session_type: Optional[str] = None
+    device_name: Optional[str] = None
+    user_agent: Optional[str] = None
+    ip_address: Optional[str] = None
     is_current: bool
 
 
