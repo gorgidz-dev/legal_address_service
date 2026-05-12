@@ -156,20 +156,80 @@ class _TTLCache:
         self._store.pop(key, None)
 
 
-class DaDataService:
-    """Сервис: HTTP-клиент + кэш + маппинг ответа в Pydantic-схему."""
+class CircuitBreaker:
+    """Three-state breaker: closed (normal) → open (skip calls) → half_open (one trial).
 
-    def __init__(self, token: str, *, cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS):
+    After `failure_threshold` consecutive failures the breaker opens for
+    `recovery_seconds`. While open, callers see DaDataError immediately —
+    no HTTP request goes out. After the recovery window a single trial is
+    allowed (half_open); success closes, failure re-opens.
+
+    Protects against cascading slowness when DaData is down: rather than
+    every request hanging for 10s, they fast-fail.
+    """
+
+    def __init__(self, *, failure_threshold: int, recovery_seconds: float):
+        self._threshold = max(1, failure_threshold)
+        self._recovery = recovery_seconds
+        self._consecutive_failures = 0
+        self._opened_at: Optional[float] = None
+
+    @property
+    def state(self) -> str:
+        if self._opened_at is None:
+            return "closed"
+        if time.monotonic() - self._opened_at >= self._recovery:
+            return "half_open"
+        return "open"
+
+    def allow_request(self) -> bool:
+        return self.state in {"closed", "half_open"}
+
+    def record_success(self) -> None:
+        self._consecutive_failures = 0
+        self._opened_at = None
+
+    def record_failure(self) -> None:
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._threshold:
+            self._opened_at = time.monotonic()
+
+
+class DaDataService:
+    """Сервис: HTTP-клиент + кэш + circuit breaker + маппинг ответа в Pydantic-схему."""
+
+    def __init__(
+        self,
+        token: str,
+        *,
+        cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS,
+        breaker: Optional[CircuitBreaker] = None,
+    ):
         self._client = DaDataClient(token)
         self._cache = _TTLCache(cache_ttl_seconds)
+        self._breaker = breaker or CircuitBreaker(
+            failure_threshold=3, recovery_seconds=30.0
+        )
 
     async def lookup(self, inn: str) -> Optional[DaDataLookupResponse]:
-        """Найти ЮЛ по ИНН. Использует кэш, чтобы не дёргать DaData повторно."""
+        """Найти ЮЛ по ИНН. Использует кэш + circuit breaker."""
         cached = self._cache.get(inn)
         if cached is not None:
             return cached
 
-        party = await self._client.find_by_inn(inn)
+        if not self._breaker.allow_request():
+            raise DaDataError(
+                "DaData временно недоступна (circuit breaker открыт после серии ошибок). Повторите позже."
+            )
+
+        try:
+            party = await self._client.find_by_inn(inn)
+        except DaDataError:
+            self._breaker.record_failure()
+            raise
+
+        self._breaker.record_success()
+
         if party is None:
             return None
 
@@ -197,7 +257,13 @@ def get_dadata_service() -> DaDataService:
                 "DADATA_TOKEN не задан. Получить ключ можно на dadata.ru (бесплатный тариф — "
                 "10 000 запросов/день), затем положить в .env: DADATA_TOKEN=..."
             )
-        _service = DaDataService(settings.dadata_token)
+        _service = DaDataService(
+            settings.dadata_token,
+            breaker=CircuitBreaker(
+                failure_threshold=settings.dadata_circuit_failure_threshold,
+                recovery_seconds=settings.dadata_circuit_recovery_seconds,
+            ),
+        )
     return _service
 
 

@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     dadata_token: str = ""
     dadata_secret: str = ""
+    dadata_circuit_failure_threshold: int = 3
+    dadata_circuit_recovery_seconds: float = 30.0
 
     s3_endpoint: str = ""
     s3_access_key: str = ""
