@@ -7,12 +7,23 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,
-    future=True,
-    pool_pre_ping=True,
-)
+
+def _build_engine_kwargs() -> dict:
+    """Pool config applies to PG; SQLite/in-memory engines ignore it (NullPool)."""
+    if settings.database_url.startswith("sqlite"):
+        return {"echo": settings.db_echo, "future": True}
+    return {
+        "echo": settings.db_echo,
+        "future": True,
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_timeout": settings.db_pool_timeout,
+        "pool_recycle": settings.db_pool_recycle,
+        "pool_pre_ping": settings.db_pool_pre_ping,
+    }
+
+
+engine = create_async_engine(settings.database_url, **_build_engine_kwargs())
 
 AsyncSessionLocal = async_sessionmaker(
     engine,

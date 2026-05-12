@@ -11,6 +11,19 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/legal_address"
 
+    # SQLAlchemy / asyncpg connection pool.
+    # pool_size: persistent connections kept open.
+    # max_overflow: extra short-lived connections allowed under burst (released after use).
+    # pool_timeout: seconds to wait for a free connection before raising TimeoutError.
+    # pool_recycle: drop & reopen connections older than N seconds (avoids stale server-side conns).
+    # pool_pre_ping: lightweight SELECT 1 before checkout — detects dropped connections.
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
+    db_pool_pre_ping: bool = True
+    db_echo: bool = False
+
     dadata_token: str = ""
     dadata_secret: str = ""
 
