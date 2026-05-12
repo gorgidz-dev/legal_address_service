@@ -94,13 +94,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
+    // Versioned API uses { error: { code, message, details } }; tolerate legacy { detail }.
+    const errorObj = body?.error;
     const detail = body?.detail;
     const message =
-      typeof detail === "string"
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map((item) => item.msg || JSON.stringify(item)).join("; ")
-          : `HTTP ${response.status}`;
+      typeof errorObj?.message === "string"
+        ? errorObj.message
+        : typeof detail === "string"
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((item) => item.msg || JSON.stringify(item)).join("; ")
+            : `HTTP ${response.status}`;
     throw new ApiError(message, response.status);
   }
 

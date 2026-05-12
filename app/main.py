@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
+from app.api_errors import register_error_handlers
 from app.auth import utcnow
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -36,14 +37,25 @@ from app.routers import (
 
 app = FastAPI(
     title="Legal Address Service API",
-    version="0.1.0",
+    version="1.0.0",
     description=(
-        "Сервис выдачи договоров и гарантийных писем на юридический адрес.\n\n"
-        "Исполнитель — ИП. Заказчик — ЮЛ. Заявка имеет два типа:\n"
-        "- `initial_registration` — выдаём только гарантийку, ЮЛ ещё не существует.\n"
-        "- `address_change` — выдаём договор + гарантийку для существующего ЮЛ."
+        "Сервис выдачи юридических адресов: маркетплейс, заявки клиентов, документы.\n\n"
+        "**Стабильный публичный API:** `/api/v1/...` — версионируем при ломающих изменениях.\n\n"
+        "**Формат ошибок:** `{\"error\": {\"code\": \"<slug>\", \"message\": \"...\", \"details\": ...}}`\n\n"
+        "**Аутентификация:**\n"
+        "- Web: cookie `legal_address_session` (HttpOnly) + refresh cookie на `/api/v1/auth/refresh`.\n"
+        "- Mobile / сторонние интеграции: `Authorization: Bearer <access_token>` из `/api/v1/mobile/auth/login`.\n\n"
+        "**Webhooks:** outbound события доставляются на зарегистрированные подписки с HMAC-SHA256 подписью."
     ),
+    openapi_tags=[
+        {"name": "auth", "description": "Регистрация/логин/сессии для web и публичных форм."},
+        {"name": "mobile-auth", "description": "Bearer-токены для нативных клиентов и интеграций."},
+        {"name": "marketplace", "description": "Публичный каталог адресов и приём заявок без авторизации."},
+        {"name": "webhooks", "description": "Подписки на события и входящие webhooks (платежи и т.п.)."},
+        {"name": "meta", "description": "Служебные ручки: liveness, readiness."},
+    ],
 )
+register_error_handlers(app)
 
 
 def _session_token_from_request(request: Request) -> str | None:
@@ -113,7 +125,10 @@ async def auth_middleware(request: Request, call_next):
 
     token = _session_token_from_request(request)
     if not token:
-        return JSONResponse({"detail": "Требуется вход"}, status_code=401)
+        return JSONResponse(
+            {"error": {"code": "unauthorized", "message": "Требуется вход"}},
+            status_code=401,
+        )
 
     from app.services.auth_security import hash_token
 
@@ -131,7 +146,10 @@ async def auth_middleware(request: Request, call_next):
         )
         row = result.first()
         if row is None:
-            return JSONResponse({"detail": "Сессия истекла. Войдите заново"}, status_code=401)
+            return JSONResponse(
+                {"error": {"code": "unauthorized", "message": "Сессия истекла. Войдите заново"}},
+                status_code=401,
+            )
 
         session, user = row
         request.state.user_id = user.id
