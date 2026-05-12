@@ -43,7 +43,7 @@ from app.services.document_generation import (
     render_guarantee_docx,
 )
 from app.services.marketplace_status import role_actions_for_status
-from app.services.storage import local_stored_file_path, read_stored_file, resolve_storage_file
+from app.services.storage import local_stored_file_path, read_stored_file_async, resolve_storage_file
 
 router = APIRouter(prefix="/applications", tags=["applications"], dependencies=[Depends(require_staff)])
 
@@ -495,7 +495,7 @@ async def download_latest_package(
             )
 
         return Response(
-            content=read_stored_file(file_record),
+            content=await read_stored_file_async(file_record),
             media_type=file_record.content_type,
             headers={"Content-Disposition": f'attachment; filename="{file_record.original_filename}"'},
         )

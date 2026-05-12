@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 from dataclasses import dataclass
@@ -173,7 +174,8 @@ async def create_stored_file_record(
         client_id=client_id,
         application_id=application_id,
     )
-    stored_object = get_object_storage().put_bytes(
+    stored_object = await asyncio.to_thread(
+        get_object_storage().put_bytes,
         key=key,
         content=content,
         content_type=content_type,
@@ -203,6 +205,11 @@ def read_stored_file(file_record: StoredFile) -> bytes:
     if file_record.storage_backend == "s3":
         return S3ObjectStorage().read_bytes(file_record.storage_key)
     raise ValueError(f"Неизвестный backend файла: {file_record.storage_backend}")
+
+
+async def read_stored_file_async(file_record: StoredFile) -> bytes:
+    """Off-load disk/S3 reads to a worker thread."""
+    return await asyncio.to_thread(read_stored_file, file_record)
 
 
 def local_stored_file_path(file_record: StoredFile) -> Path | None:

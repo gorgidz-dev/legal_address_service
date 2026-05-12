@@ -21,7 +21,7 @@ from app.services.application_documents import (
     list_application_documents,
     upload_application_document,
 )
-from app.services.storage import local_stored_file_path, read_stored_file
+from app.services.storage import local_stored_file_path, read_stored_file_async
 
 router = APIRouter(prefix="/workflow/applications", tags=["application-documents"])
 
@@ -91,7 +91,7 @@ async def download_document(
                 media_type=file_record.content_type,
             )
         return Response(
-            content=read_stored_file(file_record),
+            content=await read_stored_file_async(file_record),
             media_type=file_record.content_type,
             headers={"Content-Disposition": f'attachment; filename="{file_record.original_filename}"'},
         )

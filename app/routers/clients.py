@@ -29,7 +29,7 @@ from app.services.dadata import (
 from app.services.storage import (
     create_stored_file_record,
     local_stored_file_path,
-    read_stored_file,
+    read_stored_file_async,
 )
 from app.validators import INNLegal
 
@@ -224,7 +224,7 @@ async def download_payment_document(
             )
 
         return Response(
-            content=read_stored_file(file_record),
+            content=await read_stored_file_async(file_record),
             media_type=file_record.content_type,
             headers={"Content-Disposition": f'attachment; filename="{file_record.original_filename}"'},
         )
