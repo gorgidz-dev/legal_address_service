@@ -12,6 +12,7 @@ from app.models.document_template import DocumentTemplate
 from app.models.egrn_extract import EgrnExtract
 from app.models.generated_document import GeneratedDocument
 from app.models.guarantee_letter import GuaranteeLetter
+from app.models.incoming_webhook import IncomingWebhook
 from app.models.invitation import Invitation
 from app.models.payment_document import PaymentDocument
 from app.models.provider import Provider
@@ -35,6 +36,7 @@ __all__ = [
     "EgrnExtract",
     "GeneratedDocument",
     "GuaranteeLetter",
+    "IncomingWebhook",
     "Invitation",
     "PaymentDocument",
     "Provider",

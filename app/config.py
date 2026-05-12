@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     dadata_circuit_failure_threshold: int = 3
     dadata_circuit_recovery_seconds: float = 30.0
 
+    # HMAC-SHA256 secret shared with the payment provider for inbound webhook verification.
+    # Empty disables the endpoint (returns 503 — not configured).
+    payment_webhook_secret: str = ""
+
     s3_endpoint: str = ""
     s3_access_key: str = ""
     s3_secret_key: str = ""

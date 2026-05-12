@@ -1,14 +1,20 @@
-"""Admin CRUD for webhook subscriptions + delivery log."""
+"""Admin CRUD for webhook subscriptions + delivery log + inbound provider hooks."""
 from __future__ import annotations
 
+import json
+import logging
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_admin
+from app.config import settings
 from app.database import get_db
+from app.models.incoming_webhook import IncomingWebhook
 from app.models.user import User
 from app.models.webhook_delivery import WebhookDelivery
 from app.models.webhook_subscription import WebhookSubscription
@@ -20,6 +26,9 @@ from app.schemas.webhook import (
     WebhookSubscriptionUpdate,
     generate_secret,
 )
+from app.services.webhooks import SIGNATURE_HEADER, verify_signature
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -142,3 +151,95 @@ async def list_deliveries(
         .limit(100)
     )
     return list(result.scalars().all())
+
+
+def _extract_external_id(body: dict[str, Any]) -> str | None:
+    """Pick whatever field the provider uses for event-id idempotency."""
+    for key in ("id", "event_id", "delivery_id", "notification_id"):
+        value = body.get(key)
+        if isinstance(value, (str, int)):
+            return str(value)
+    return None
+
+
+@router.post(
+    "/payments/{provider}",
+    summary="Inbound payment webhook (HMAC-verified, idempotent)",
+)
+async def inbound_payment_webhook(
+    provider: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Receive a payment-status callback from an external provider.
+
+    Verification:
+    - HMAC-SHA256 over the raw body with `PAYMENT_WEBHOOK_SECRET`, sent in
+      `X-Webhook-Signature: sha256=<hex>`.
+
+    Idempotency:
+    - The provider's event id (`id` / `event_id` / `delivery_id` / `notification_id`)
+      stored on `(provider, external_id)` unique index. Replays return 200 with
+      `replayed: true`.
+
+    This endpoint only persists the event; downstream payment-application logic
+    is wired in by the "payments" feature (separate work item).
+    """
+    if not settings.payment_webhook_secret:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "webhook_not_configured",
+                "message": "Payment webhook secret is not configured on the server",
+            },
+        )
+
+    raw = await request.body()
+    signature = request.headers.get(SIGNATURE_HEADER)
+    if not verify_signature(settings.payment_webhook_secret, raw, signature):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "bad_signature",
+                "message": "Подпись запроса не совпала",
+            },
+        )
+
+    try:
+        body = json.loads(raw or b"{}")
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "bad_json", "message": f"Invalid JSON: {e}"},
+        ) from e
+    if not isinstance(body, dict):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "bad_payload", "message": "Корневой элемент должен быть объектом"},
+        )
+
+    external_id = _extract_external_id(body)
+    if not external_id:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "missing_event_id",
+                "message": "Нет поля id/event_id/delivery_id/notification_id для идемпотентности",
+            },
+        )
+
+    record = IncomingWebhook(
+        provider=provider,
+        external_id=external_id,
+        event_type=body.get("event") or body.get("type"),
+        raw_body=body,
+    )
+    db.add(record)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        log.info("Replayed payment webhook %s/%s — already stored", provider, external_id)
+        return {"received": True, "replayed": True}
+
+    return {"received": True, "replayed": False}
