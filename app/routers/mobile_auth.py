@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.auth import CurrentUserRead, LoginRequest, MobileAuthResponse, SessionTokenRead
 from app.services.auth_security import verify_password
-from app.services.auth_sessions import create_session
+from app.services.auth_sessions import SessionProfile, create_session
 
 router = APIRouter(prefix="/mobile/auth", tags=["mobile-auth"])
 
@@ -23,7 +23,7 @@ async def mobile_login(
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный e-mail или пароль")
 
-    credentials = await create_session(db=db, user=user, set_cookie=False)
+    credentials = await create_session(db=db, user=user, profile=SessionProfile.MOBILE)
     await db.commit()
     await db.refresh(user)
     return MobileAuthResponse(

@@ -26,7 +26,7 @@ from app.schemas.auth import (
     LoginRequest,
 )
 from app.services.auth_security import hash_password, hash_token, verify_password
-from app.services.auth_sessions import create_session
+from app.services.auth_sessions import SessionProfile, create_session, delete_session_cookie
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -100,7 +100,7 @@ async def logout(
     for session in result.scalars().all():
         session.revoked_at = now
     await db.commit()
-    response.delete_cookie(settings.session_cookie_name, path="/")
+    delete_session_cookie(response)
     return response
 
 
