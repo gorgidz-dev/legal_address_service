@@ -57,6 +57,7 @@ import type {
   OwnerApplication,
   OwnerConnectionRequestStatus,
   OwnerDashboard,
+  Payment,
   PaymentDocument,
   Provider,
   ProviderConnectionRequest,
@@ -1251,6 +1252,124 @@ export default function App() {
   );
 }
 
+function SbpPaymentPanel({
+  applicationId,
+  onPaid
+}: {
+  applicationId: string;
+  onPaid: () => void;
+}) {
+  const [payment, setPayment] = useState<Payment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initiate (or fetch existing active) payment on mount.
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .initiatePayment(applicationId)
+      .then((p) => alive && setPayment(p))
+      .catch((err: Error) => alive && setError(err.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [applicationId]);
+
+  // Poll status every 3s while awaiting_user or pending.
+  useEffect(() => {
+    if (!payment) return;
+    if (payment.status !== "awaiting_user" && payment.status !== "pending") return;
+    let alive = true;
+    const timer = setInterval(async () => {
+      try {
+        const fresh = await api.getPayment(payment.id);
+        if (!alive) return;
+        setPayment(fresh);
+        if (fresh.status === "succeeded") {
+          clearInterval(timer);
+          onPaid();
+        }
+      } catch (err) {
+        if (alive) setError((err as Error).message);
+      }
+    }, 3000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [payment?.id, payment?.status, onPaid]);
+
+  const cardStyle: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    padding: 16,
+    border: "1px solid #dfe3dc",
+    borderRadius: 12,
+    background: "#fdfdfb"
+  };
+
+  if (loading) {
+    return (
+      <div style={cardStyle}>
+        <Loader2 className="spin" size={18} /> Создаём платёж…
+      </div>
+    );
+  }
+  if (error) return <InlineError message={error} />;
+  if (!payment) return null;
+
+  if (payment.status === "succeeded") {
+    return (
+      <div style={{ ...cardStyle, background: "#eaf6ed", borderColor: "#3AB663" }}>
+        <CheckCircle2 size={18} /> Оплата получена. Заявка ушла на проверку администратора.
+      </div>
+    );
+  }
+
+  const amountRub = (payment.amount_kopeks / 100).toLocaleString("ru-RU");
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <strong>Оплата заявки через СБП</strong>
+        <span>
+          {amountRub} ₽ · CDEK Pay · статус: <b>{paymentStatusLabels[payment.status]}</b>
+        </span>
+      </div>
+      {payment.qr_image_base64 ? (
+        <img
+          alt="QR для оплаты СБП"
+          src={`data:image/png;base64,${payment.qr_image_base64}`}
+          style={{ width: 240, height: 240, alignSelf: "center" }}
+        />
+      ) : null}
+      {payment.qr_link ? (
+        <a className="btn primary" href={payment.qr_link} rel="noreferrer" target="_blank">
+          Открыть в банке
+        </a>
+      ) : null}
+      {payment.expires_at ? (
+        <small>Ссылка/QR действительны до {formatDate(payment.expires_at)}</small>
+      ) : null}
+    </div>
+  );
+}
+
+const paymentStatusLabels: Record<string, string> = {
+  pending: "создаётся",
+  awaiting_user: "ждёт оплату",
+  succeeded: "оплачено",
+  failed: "ошибка",
+  expired: "истёк",
+  cancelled: "отменён",
+  refund_requested: "ожидает возврата",
+  refunded: "возвращён"
+};
+
 function ClientDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) {
   const [applications, setApplications] = useState<ClientApplication[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1389,6 +1508,13 @@ function ClientDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: 
                   {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
                 </div>
               </div>
+
+              {selectedApplication.status === "awaiting_payment" ? (
+                <SbpPaymentPanel
+                  applicationId={selectedApplication.id}
+                  onPaid={() => setRefreshKey((value) => value + 1)}
+                />
+              ) : null}
 
               <div className="timeline-panel">
                 <div className="timeline-title">

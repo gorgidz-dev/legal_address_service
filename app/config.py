@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     egrn_extract_validity_days: int = 30
     initial_application_validity_days: int = 30
 
+    # CDEK Pay (SBP for individuals). Empty CDEK_LOGIN / CDEK_SECRET_KEY ⇒
+    # the integration is disabled; calls to it return 503.
+    cdek_login: str = ""
+    cdek_secret_key: str = ""
+    cdek_base_url: str = "https://secure.cdekfin.ru"
+    cdek_currency: Literal["TST", "RUR"] = "TST"
+    cdek_qr_life_time_minutes: int = 10
+    cdek_return_success_url: str = ""
+    cdek_return_fail_url: str = ""
+    cdek_request_timeout_seconds: float = 15.0
+    cdek_circuit_failure_threshold: int = 3
+    cdek_circuit_recovery_seconds: float = 30.0
+
     @model_validator(mode="after")
     def _validate_cookie_security(self) -> "Settings":
         if self.session_cookie_samesite == "none" and not self.session_cookie_secure:

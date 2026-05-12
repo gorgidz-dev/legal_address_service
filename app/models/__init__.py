@@ -14,6 +14,7 @@ from app.models.generated_document import GeneratedDocument
 from app.models.guarantee_letter import GuaranteeLetter
 from app.models.incoming_webhook import IncomingWebhook
 from app.models.invitation import Invitation
+from app.models.payment import Payment
 from app.models.payment_document import PaymentDocument
 from app.models.provider import Provider
 from app.models.provider_connection_request import ProviderConnectionRequest
@@ -38,6 +39,7 @@ __all__ = [
     "GuaranteeLetter",
     "IncomingWebhook",
     "Invitation",
+    "Payment",
     "PaymentDocument",
     "Provider",
     "ProviderConnectionRequest",

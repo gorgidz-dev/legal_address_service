@@ -127,7 +127,7 @@ def test_public_initial_application_creates_client_user_application_and_session(
     assert response.status_code == 201
     body = response.json()
     assert body["user"]["role"] == UserRole.CLIENT.value
-    assert body["application"]["status"] == ApplicationStatus.ADMIN_REVIEW.value
+    assert body["application"]["status"] == ApplicationStatus.AWAITING_PAYMENT.value
     assert response.cookies.get("legal_address_session")
 
     created_user = next(item for item in fake_db.added if isinstance(item, User))
@@ -140,4 +140,4 @@ def test_public_initial_application_creates_client_user_application_and_session(
     assert created_application.company_name == "Альфа"
     assert created_event.application_id == created_application.id
     assert created_event.audience == "client"
-    assert created_event.payload["status"] == ApplicationStatus.ADMIN_REVIEW.value
+    assert created_event.payload["status"] == ApplicationStatus.AWAITING_PAYMENT.value

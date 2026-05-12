@@ -27,6 +27,7 @@ import type {
   ProviderConnectionRequest,
   ProviderConnectionRequestApprove,
   ProviderConnectionRequestApproveResult,
+  Payment,
   ProviderConnectionRequestCreate,
   ProviderConnectionRequestStatusUpdate,
   PublicAddress,
@@ -197,6 +198,20 @@ export const api = {
   providers: () => request<Provider[]>("/providers"),
   createProvider: (payload: unknown) =>
     request<Provider>("/providers", { method: "POST", body: JSON.stringify(payload) }),
+
+  initiatePayment: (applicationId: string) =>
+    request<Payment>("/payments/initiate", {
+      method: "POST",
+      body: JSON.stringify({ application_id: applicationId, payer_type: "individual" })
+    }),
+  getPayment: (paymentId: string) => request<Payment>(`/payments/${paymentId}`),
+  cancelPayment: (paymentId: string) =>
+    request<Payment>(`/payments/${paymentId}/cancel`, { method: "POST" }),
+  refundPayment: (paymentId: string, valueRefundKopeks: number | null, reason: string) =>
+    request<Payment>(`/payments/${paymentId}/refund`, {
+      method: "POST",
+      body: JSON.stringify({ value_refund_kopeks: valueRefundKopeks, reason })
+    }),
 
   adminListProviderRequests: (status?: OwnerConnectionRequestStatus) => {
     const query = status ? `?status=${status}` : "";

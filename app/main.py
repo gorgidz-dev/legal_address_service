@@ -30,6 +30,7 @@ from app.routers import (
     mobile_auth,
     notifications,
     owner_dashboard,
+    payments,
     provider_requests,
     providers,
     registry,
@@ -205,6 +206,7 @@ api_v1.include_router(registry.router)
 api_v1.include_router(templates.router)
 api_v1.include_router(demo.router)
 api_v1.include_router(webhooks.router)
+api_v1.include_router(payments.router)
 app.include_router(api_v1)
 
 

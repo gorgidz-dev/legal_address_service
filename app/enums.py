@@ -123,3 +123,23 @@ class AddressPhotoModerationStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class PaymentProvider(str, Enum):
+    CDEK_PAY = "cdek_pay"
+
+
+class PaymentPayerType(str, Enum):
+    INDIVIDUAL = "individual"
+    JURIDICAL = "juridical"
+
+
+class PaymentStatus(str, Enum):
+    PENDING = "pending"              # row created, provider not yet called
+    AWAITING_USER = "awaiting_user"  # QR/link issued, waiting for payer
+    SUCCEEDED = "succeeded"          # provider confirmed payment
+    FAILED = "failed"                # provider returned failure / final non-paid
+    EXPIRED = "expired"              # QR/link TTL elapsed
+    CANCELLED = "cancelled"          # admin blocked the order
+    REFUND_REQUESTED = "refund_requested"
+    REFUNDED = "refunded"

@@ -243,7 +243,7 @@ async def create_public_client_application(
             contract_city=payload.contract_city,
             fns_number=address.fns_number,
             fns_city=address.fns_city,
-            status=ApplicationStatus.ADMIN_REVIEW.value,
+            status=ApplicationStatus.AWAITING_PAYMENT.value,
             expires_at=date.today() + timedelta(days=settings.initial_application_validity_days),
             created_by=user.id,
         )
@@ -264,7 +264,7 @@ async def create_public_client_application(
             contract_city=payload.contract_city,
             fns_number=address.fns_number,
             fns_city=address.fns_city,
-            status=ApplicationStatus.ADMIN_REVIEW.value,
+            status=ApplicationStatus.AWAITING_PAYMENT.value,
             created_by=user.id,
         )
     else:
@@ -279,8 +279,8 @@ async def create_public_client_application(
             kind=ApplicationEventKind.CREATED,
             audience=NotificationAudience.CLIENT,
             title="Заявка создана",
-            message="Заявка отправлена администратору на ручную проверку.",
-            payload={"status": ApplicationStatus.ADMIN_REVIEW.value},
+            message="Оплатите заявку через СБП, чтобы передать её администратору на проверку.",
+            payload={"status": ApplicationStatus.AWAITING_PAYMENT.value},
             created_by=user.id,
         )
         await db.commit()

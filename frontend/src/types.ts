@@ -127,6 +127,37 @@ export interface Provider {
   updated_at: string;
 }
 
+export type PaymentStatus =
+  | "pending"
+  | "awaiting_user"
+  | "succeeded"
+  | "failed"
+  | "expired"
+  | "cancelled"
+  | "refund_requested"
+  | "refunded";
+
+export interface Payment {
+  id: string;
+  application_id: string;
+  provider: string;
+  payer_type: "individual" | "juridical";
+  status: PaymentStatus;
+  amount_kopeks: number;
+  currency: string;
+  pay_for: string;
+  qr_link: string | null;
+  qr_image_base64: string | null;
+  cdek_access_key: string | null;
+  cdek_order_id: number | null;
+  cdek_payment_id: number | null;
+  expires_at: string | null;
+  paid_at: string | null;
+  refunded_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type AddressPublicationStatus =
   | "draft"
   | "moderation"

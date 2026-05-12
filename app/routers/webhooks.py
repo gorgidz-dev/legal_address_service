@@ -18,6 +18,10 @@ from app.models.incoming_webhook import IncomingWebhook
 from app.models.user import User
 from app.models.webhook_delivery import WebhookDelivery
 from app.models.webhook_subscription import WebhookSubscription
+from app.routers.payments import (
+    handle_cdek_pay_payment_callback,
+    handle_cdek_pay_refund_callback,
+)
 from app.schemas.webhook import (
     WebhookDeliveryRead,
     WebhookSubscriptionCreate,
@@ -25,6 +29,11 @@ from app.schemas.webhook import (
     WebhookSubscriptionRead,
     WebhookSubscriptionUpdate,
     generate_secret,
+)
+from app.services.cdek_pay import (
+    CdekPayNotConfigured,
+    get_cdek_pay_service,
+    verify_callback_signature,
 )
 from app.services.webhooks import SIGNATURE_HEADER, verify_signature
 
@@ -242,4 +251,135 @@ async def inbound_payment_webhook(
         log.info("Replayed payment webhook %s/%s — already stored", provider, external_id)
         return {"received": True, "replayed": True}
 
+    return {"received": True, "replayed": False}
+
+
+# ============================================================
+# CDEK Pay callbacks (own signature scheme — see app/services/cdek_pay.py)
+# ============================================================
+
+
+async def _read_cdek_body(request: Request) -> tuple[bytes, dict[str, Any]]:
+    raw = await request.body()
+    try:
+        body = json.loads(raw or b"{}")
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "bad_json", "message": f"Invalid JSON: {e}"},
+        ) from e
+    if not isinstance(body, dict):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "bad_payload", "message": "Корневой элемент должен быть объектом"},
+        )
+    return raw, body
+
+
+async def _store_idempotent(
+    db: AsyncSession,
+    *,
+    provider: str,
+    external_id: str,
+    event_type: str,
+    body: dict[str, Any],
+) -> bool:
+    """Returns True if newly stored, False if it was a replay (already in DB)."""
+    record = IncomingWebhook(
+        provider=provider,
+        external_id=external_id,
+        event_type=event_type,
+        raw_body=body,
+    )
+    db.add(record)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        log.info("Replayed CDEK webhook %s/%s — already stored", provider, external_id)
+        return False
+    return True
+
+
+@router.post(
+    "/cdek_pay/payment",
+    summary="CDEK Pay — успешный платёж (callback)",
+)
+async def cdek_pay_payment_callback(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    try:
+        service = get_cdek_pay_service()
+    except CdekPayNotConfigured as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+
+    _raw, body = await _read_cdek_body(request)
+    payment_section = body.get("payment") or {}
+    signature = body.get("signature") or ""
+    if not isinstance(payment_section, dict) or not signature:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Ожидаются поля payment (object) и signature (string)",
+        )
+    if not verify_callback_signature(payment_section, signature, service.secret_key):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Подпись не совпала")
+
+    external_id = str(payment_section.get("id") or "")
+    if not external_id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Нет payment.id")
+
+    stored = await _store_idempotent(
+        db,
+        provider="cdek_pay",
+        external_id=external_id,
+        event_type="payment_success",
+        body=body,
+    )
+    if not stored:
+        return {"received": True, "replayed": True}
+
+    await handle_cdek_pay_payment_callback(db=db, body=body)
+    return {"received": True, "replayed": False}
+
+
+@router.post(
+    "/cdek_pay/refund",
+    summary="CDEK Pay — успешный возврат (callback)",
+)
+async def cdek_pay_refund_callback(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    try:
+        service = get_cdek_pay_service()
+    except CdekPayNotConfigured as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+
+    _raw, body = await _read_cdek_body(request)
+    payment_section = body.get("payment") or {}
+    signature = body.get("signature") or ""
+    if not isinstance(payment_section, dict) or not signature:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Ожидаются поля payment (object) и signature (string)",
+        )
+    if not verify_callback_signature(payment_section, signature, service.secret_key):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Подпись не совпала")
+
+    external_id = f"refund:{payment_section.get('id', '')}"
+    if external_id == "refund:":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Нет payment.id")
+
+    stored = await _store_idempotent(
+        db,
+        provider="cdek_pay",
+        external_id=external_id,
+        event_type="refund_success",
+        body=body,
+    )
+    if not stored:
+        return {"received": True, "replayed": True}
+
+    await handle_cdek_pay_refund_callback(db=db, body=body)
     return {"received": True, "replayed": False}
