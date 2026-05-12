@@ -18,6 +18,7 @@ import {
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
+import { PhoneInput } from "./PhoneInput";
 import type {
   CurrentUser,
   ProviderConnectionRequestCreate,
@@ -657,9 +658,9 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
               </label>
               <label className="field">
                 <span>Телефон</span>
-                <input
+                <PhoneInput
                   value={applicationForm.contact_phone}
-                  onChange={(event) => setApplicationForm({ ...applicationForm, contact_phone: event.target.value })}
+                  onChange={(value) => setApplicationForm({ ...applicationForm, contact_phone: value })}
                 />
               </label>
               <label className="field">
@@ -763,9 +764,9 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
               </label>
               <label className="field">
                 <span>Телефон</span>
-                <input
+                <PhoneInput
                   value={ownerForm.contact_phone}
-                  onChange={(event) => setOwnerForm({ ...ownerForm, contact_phone: event.target.value })}
+                  onChange={(value) => setOwnerForm({ ...ownerForm, contact_phone: value })}
                 />
               </label>
               <label className="field">

@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ApiError, api, packageDownloadUrl, paymentDocumentDownloadUrl } from "./api";
+import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
 import type {
   ActiveClientRegistryItem,
@@ -2436,7 +2437,7 @@ function PromoteContractPanel({
   const [noticePeriod, setNoticePeriod] = useState<NoticePeriod>("1m");
   const [hasCorrespondence, setHasCorrespondence] = useState(false);
   const [contactName, setContactName] = useState(application?.contact_name || "");
-  const [contactPhone, setContactPhone] = useState(application?.contact_phone || "");
+  const [contactPhone, setContactPhone] = useState(formatRuPhone(application?.contact_phone || ""));
   const [contactEmail, setContactEmail] = useState(application?.contact_email || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2517,7 +2518,7 @@ function PromoteContractPanel({
             <input value={contactName} onChange={(event) => setContactName(event.target.value)} />
           </Field>
           <Field label="Телефон">
-            <input value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} />
+            <PhoneInput value={contactPhone} onChange={setContactPhone} />
           </Field>
           <Field label="E-mail">
             <input value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} type="email" />
@@ -2754,11 +2755,7 @@ function NewApplicationView({
             />
           </Field>
           <Field label="Телефон">
-            <input
-              value={contactPhone}
-              onChange={(event) => setContactPhone(event.target.value)}
-              placeholder="+7 900 000-00-00"
-            />
+            <PhoneInput value={contactPhone} onChange={setContactPhone} />
           </Field>
           <Field label="E-mail">
             <input
