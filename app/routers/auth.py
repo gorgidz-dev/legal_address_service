@@ -34,6 +34,12 @@ from app.services.auth_sessions import (
     extract_request_metadata,
     rotate_session,
 )
+from app.services.rate_limit import (
+    INVITATION_ACCEPT_RULES,
+    LOGIN_RULES,
+    assert_within_rate_limit,
+    record_attempt,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -82,12 +88,23 @@ async def login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AuthResponse:
-    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    ua, ip = extract_request_metadata(request)
+    email = payload.email.lower()
+    keys = {"email": email, "ip": ip}
+
+    await assert_within_rate_limit(db, LOGIN_RULES, keys)
+
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
+    succeeded = bool(
+        user is not None and user.is_active and verify_password(payload.password, user.password_hash)
+    )
+    await record_attempt(db, "login", keys, succeeded=succeeded)
+
+    if not succeeded:
+        await db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный e-mail или пароль")
 
-    ua, ip = extract_request_metadata(request)
     await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
     await db.commit()
     await db.refresh(user)
@@ -269,18 +286,27 @@ async def accept_invitation(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AuthResponse:
+    ua, ip = extract_request_metadata(request)
+    keys = {"ip": ip}
+    await assert_within_rate_limit(db, INVITATION_ACCEPT_RULES, keys)
+
+    async def _fail(http_exc: HTTPException) -> None:
+        await record_attempt(db, "invitation_accept", keys, succeeded=False)
+        await db.commit()
+        raise http_exc
+
     result = await db.execute(select(Invitation).where(Invitation.token_hash == hash_token(token)))
     invitation = result.scalar_one_or_none()
     if invitation is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Приглашение не найдено")
+        await _fail(HTTPException(status.HTTP_404_NOT_FOUND, "Приглашение не найдено"))
     if invitation.accepted_at is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Приглашение уже использовано")
+        await _fail(HTTPException(status.HTTP_409_CONFLICT, "Приглашение уже использовано"))
     if invitation.expires_at <= utcnow():
-        raise HTTPException(status.HTTP_409_CONFLICT, "Срок приглашения истёк")
+        await _fail(HTTPException(status.HTTP_409_CONFLICT, "Срок приглашения истёк"))
 
     existing = await db.execute(select(User).where(User.email == invitation.email))
     if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким e-mail уже существует")
+        await _fail(HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким e-mail уже существует"))
 
     user = User(
         email=invitation.email,
@@ -292,8 +318,8 @@ async def accept_invitation(
     invitation.accepted_at = utcnow()
     db.add(user)
     await db.flush()
-    ua, ip = extract_request_metadata(request)
     await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
+    await record_attempt(db, "invitation_accept", keys, succeeded=True)
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=CurrentUserRead.model_validate(user))

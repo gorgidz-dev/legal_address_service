@@ -44,6 +44,12 @@ from app.schemas.auth import CurrentUserRead
 from app.services.address_photos import photo_to_public_dict
 from app.services.auth_security import hash_password
 from app.services.auth_sessions import create_session, extract_request_metadata
+from app.services.rate_limit import (
+    PROVIDER_REQUEST_RULES,
+    PUBLIC_APPLICATION_RULES,
+    assert_within_rate_limit,
+    record_attempt,
+)
 from app.services.notification_events import create_application_event
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
@@ -155,16 +161,22 @@ async def public_addresses(
 )
 async def create_provider_request(
     payload: ProviderConnectionRequestCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> ProviderConnectionRequest:
-    request = ProviderConnectionRequest(
+    _, ip = extract_request_metadata(request)
+    keys = {"ip": ip}
+    await assert_within_rate_limit(db, PROVIDER_REQUEST_RULES, keys)
+
+    new_request = ProviderConnectionRequest(
         **payload.model_dump(),
         status=OwnerConnectionRequestStatus.NEW.value,
     )
-    db.add(request)
+    db.add(new_request)
+    await record_attempt(db, "provider_request", keys, succeeded=True)
     await db.commit()
-    await db.refresh(request)
-    return request
+    await db.refresh(new_request)
+    return new_request
 
 
 async def _published_address_bundle(db: AsyncSession, address_id) -> tuple[Address, Provider]:
@@ -190,6 +202,10 @@ async def create_public_client_application(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> PublicClientApplicationResult:
+    ua, ip = extract_request_metadata(request)
+    keys = {"ip": ip}
+    await assert_within_rate_limit(db, PUBLIC_APPLICATION_RULES, keys)
+
     address, provider = await _published_address_bundle(db, payload.address_id)
     if payload.has_correspondence_service and address.correspondence_price is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Для адреса не подключена корреспонденция")
@@ -208,8 +224,8 @@ async def create_public_client_application(
     )
     db.add(user)
     await db.flush()
-    ua, ip = extract_request_metadata(request)
     await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
+    await record_attempt(db, "public_application", keys, succeeded=True)
 
     if isinstance(payload, PublicClientApplicationCreateInitial):
         application = Application(

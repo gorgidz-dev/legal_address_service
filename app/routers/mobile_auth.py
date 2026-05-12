@@ -23,6 +23,11 @@ from app.services.auth_sessions import (
     extract_request_metadata,
     rotate_session,
 )
+from app.services.rate_limit import (
+    MOBILE_LOGIN_RULES,
+    assert_within_rate_limit,
+    record_attempt,
+)
 
 router = APIRouter(prefix="/mobile/auth", tags=["mobile-auth"])
 
@@ -42,12 +47,23 @@ async def mobile_login(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MobileAuthResponse:
-    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    ua, ip = extract_request_metadata(request)
+    email = payload.email.lower()
+    keys = {"email": email, "ip": ip}
+
+    await assert_within_rate_limit(db, MOBILE_LOGIN_RULES, keys)
+
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
+    succeeded = bool(
+        user is not None and user.is_active and verify_password(payload.password, user.password_hash)
+    )
+    await record_attempt(db, "mobile_login", keys, succeeded=succeeded)
+
+    if not succeeded:
+        await db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный e-mail или пароль")
 
-    ua, ip = extract_request_metadata(request)
     credentials = await create_session(
         db=db,
         user=user,

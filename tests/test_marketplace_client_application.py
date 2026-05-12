@@ -58,6 +58,9 @@ def test_public_initial_application_creates_client_user_application_and_session(
         def scalar_one_or_none(self):
             return None
 
+        def scalar_one(self):
+            return 0  # rate-limit count: no prior attempts
+
     class FakeSession:
         def __init__(self):
             self.added = []

@@ -59,8 +59,14 @@ def test_mobile_login_returns_bearer_session_without_setting_cookie() -> None:
     )
 
     class FakeScalarResult:
+        def __init__(self, mode="user"):
+            self._mode = mode
+
         def scalar_one_or_none(self):
             return user
+
+        def scalar_one(self):
+            return 0  # rate-limit count: no prior attempts
 
     class FakeSession:
         def __init__(self):

@@ -4,6 +4,7 @@ from app.models.address import Address
 from app.models.address_photo import AddressPhoto
 from app.models.application import Application
 from app.models.application_event import ApplicationEvent
+from app.models.auth_attempt import AuthAttempt
 from app.models.base import Base
 from app.models.client import Client
 from app.models.contract import Contract
@@ -24,6 +25,7 @@ __all__ = [
     "AddressPhoto",
     "Application",
     "ApplicationEvent",
+    "AuthAttempt",
     "Base",
     "Client",
     "Contract",
