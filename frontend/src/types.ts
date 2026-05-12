@@ -50,6 +50,20 @@ export interface BootstrapState {
   can_bootstrap: boolean;
 }
 
+export interface UserSessionInfo {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  refresh_expires_at: string | null;
+  last_refreshed_at: string | null;
+  last_seen_at: string | null;
+  session_type: string | null;
+  device_name: string | null;
+  user_agent: string | null;
+  ip_address: string | null;
+  is_current: boolean;
+}
+
 export interface Invitation {
   id: string;
   email: string;

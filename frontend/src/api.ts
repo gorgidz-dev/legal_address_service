@@ -23,7 +23,8 @@ import type {
   PublicClientApplicationResult,
   ProviderConnectionRequest,
   ProviderConnectionRequestCreate,
-  PublicAddress
+  PublicAddress,
+  UserSessionInfo
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
@@ -37,8 +38,39 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+// Paths that must NOT trigger an auto-refresh attempt on 401 (would loop or be meaningless).
+const NO_REFRESH_PATHS = new Set([
+  "/auth/login",
+  "/auth/refresh",
+  "/auth/logout",
+  "/auth/bootstrap-state",
+  "/auth/bootstrap-admin"
+]);
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function attemptRefresh(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const r = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "include"
+      });
+      return r.ok;
+    } catch {
+      return false;
+    } finally {
+      setTimeout(() => {
+        refreshInFlight = null;
+      }, 0);
+    }
+  })();
+  return refreshInFlight;
+}
+
+async function doFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: "include",
     headers: {
@@ -46,6 +78,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers || {})
     }
   });
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response = await doFetch(path, init);
+
+  if (response.status === 401 && !NO_REFRESH_PATHS.has(path)) {
+    const refreshed = await attemptRefresh();
+    if (refreshed) {
+      response = await doFetch(path, init);
+    }
+  }
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -71,6 +114,9 @@ export const api = {
   login: (payload: unknown) =>
     request<{ user: CurrentUser }>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
+  logoutAll: () => request<void>("/auth/logout-all", { method: "POST" }),
+  listSessions: () => request<UserSessionInfo[]>("/auth/sessions"),
+  refreshSession: () => request<{ user: CurrentUser }>("/auth/refresh", { method: "POST" }),
   invitations: () => request<Invitation[]>("/auth/invitations"),
   createInvitation: (payload: unknown) =>
     request<InvitationCreateResult>("/auth/invitations", { method: "POST", body: JSON.stringify(payload) }),

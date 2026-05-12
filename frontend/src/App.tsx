@@ -14,8 +14,10 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  Monitor,
   Plus,
   RefreshCw,
+  Smartphone,
   ReceiptText,
   Search,
   Settings,
@@ -47,7 +49,8 @@ import type {
   OwnerApplication,
   OwnerDashboard,
   PaymentDocument,
-  Provider
+  Provider,
+  UserSessionInfo
 } from "./types";
 
 type View = "applications" | "registry" | "new" | "providers" | "addresses" | "templates" | "access";
@@ -472,6 +475,112 @@ function AuthView({
   );
 }
 
+function SessionsView() {
+  const [sessions, setSessions] = useState<UserSessionInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmKick, setConfirmKick] = useState(false);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    api
+      .listSessions()
+      .then(setSessions)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function logoutOthers() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.logoutAll();
+      setConfirmKick(false);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const others = sessions.filter((s) => !s.is_current);
+
+  return (
+    <section className="stack">
+      <div className="panel">
+        <div className="panel-title">
+          <Monitor size={20} />
+          <div>
+            <strong>Активные сессии</strong>
+            <span>Устройства, где сейчас открыт аккаунт. Можно завершить все, кроме этого.</span>
+          </div>
+        </div>
+
+        {error ? <p className="error">{error}</p> : null}
+
+        {loading ? (
+          <LoadingRows />
+        ) : (
+          <>
+            <div className="sessions-list">
+              {sessions.map((session) => (
+                <div key={session.id} className={`session-row${session.is_current ? " session-row--current" : ""}`}>
+                  <div className="session-icon">
+                    {session.session_type === "mobile" ? <Smartphone size={18} /> : <Monitor size={18} />}
+                  </div>
+                  <div className="session-main">
+                    <div className="session-title">
+                      {session.device_name || (session.session_type === "mobile" ? "Мобильное устройство" : "Браузер")}
+                      {session.is_current ? <span className="session-badge">эта сессия</span> : null}
+                    </div>
+                    <div className="session-meta">
+                      {session.user_agent ? <span title={session.user_agent}>{session.user_agent.slice(0, 80)}</span> : null}
+                    </div>
+                    <div className="session-meta">
+                      {session.ip_address ? <span>IP: {session.ip_address}</span> : null}
+                      <span>Создана: {formatDateTime(session.created_at)}</span>
+                      <span>Активность: {formatDateTime(session.last_seen_at)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {others.length > 0 ? (
+              <div className="sessions-actions">
+                {confirmKick ? (
+                  <>
+                    <span>Завершить {others.length} {others.length === 1 ? "сессию" : "сессий"}? Текущая останется активной.</span>
+                    <Button disabled={busy} onClick={logoutOthers} variant="secondary">
+                      {busy ? <Loader2 className="spin" size={16} /> : <LogOut size={16} />}
+                      Подтвердить
+                    </Button>
+                    <Button onClick={() => setConfirmKick(false)} variant="ghost">
+                      Отмена
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={() => setConfirmKick(true)} variant="secondary">
+                    <LogOut size={16} />
+                    Завершить остальные сессии ({others.length})
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <p className="hint">Других активных сессий нет.</p>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function AccessView() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [form, setForm] = useState({ email: "", full_name: "", role: "manager" });
@@ -842,7 +951,12 @@ export default function App() {
               />
             )}
             {view === "templates" && <TemplatesView />}
-            {view === "access" && currentUser.role === "admin" && <AccessView />}
+            {view === "access" && currentUser.role === "admin" && (
+              <>
+                <SessionsView />
+                <AccessView />
+              </>
+            )}
           </>
         )}
       </main>
