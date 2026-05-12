@@ -42,7 +42,7 @@ from app.routers.applications import _upsert_client_from_dadata
 from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUserRead
 from app.services.address_photos import photo_to_public_dict
-from app.services.auth_security import hash_password
+from app.services.auth_security import hash_password_async
 from app.services.auth_sessions import create_session, extract_request_metadata
 from app.services.rate_limit import (
     PROVIDER_REQUEST_RULES,
@@ -218,7 +218,7 @@ async def create_public_client_application(
     user = User(
         email=email,
         full_name=payload.contact_name,
-        password_hash=hash_password(payload.password),
+        password_hash=await hash_password_async(payload.password),
         role=UserRole.CLIENT.value,
         is_active=True,
     )

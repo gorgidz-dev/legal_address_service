@@ -26,7 +26,11 @@ from app.schemas.auth import (
     LoginRequest,
     SessionRead,
 )
-from app.services.auth_security import hash_password, hash_token, verify_password
+from app.services.auth_security import (
+    hash_password_async,
+    hash_token,
+    verify_password_async,
+)
 from app.services.auth_sessions import (
     SessionProfile,
     atomic_consume_refresh,
@@ -68,7 +72,7 @@ async def bootstrap_admin(
     user = User(
         email=payload.email.lower(),
         full_name=payload.full_name,
-        password_hash=hash_password(payload.password),
+        password_hash=await hash_password_async(payload.password),
         role=UserRole.ADMIN.value,
         is_active=True,
     )
@@ -97,7 +101,9 @@ async def login(
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     succeeded = bool(
-        user is not None and user.is_active and verify_password(payload.password, user.password_hash)
+        user is not None
+        and user.is_active
+        and await verify_password_async(payload.password, user.password_hash)
     )
     await record_attempt(db, "login", keys, succeeded=succeeded)
 
@@ -304,7 +310,7 @@ async def accept_invitation(
     user = User(
         email=invitation.email,
         full_name=payload.full_name or invitation.full_name or invitation.email,
-        password_hash=hash_password(payload.password),
+        password_hash=await hash_password_async(payload.password),
         role=invitation.role,
         is_active=True,
     )

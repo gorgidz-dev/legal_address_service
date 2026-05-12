@@ -26,7 +26,7 @@ from app.services.document_context import (
     money_in_words,
 )
 from app.services.document_package import create_package_zip
-from app.services.document_renderer import render_docx
+from app.services.document_renderer import render_docx_async
 from app.services.storage import (
     application_storage_dir,
     create_stored_file_record,
@@ -183,7 +183,7 @@ async def render_guarantee_docx(
         contract_number=contract.number if contract else None,
         contract_date=contract.contract_date if contract else None,
     )
-    render_docx(template_path=template_path, output_path=output_path, context=context)
+    await render_docx_async(template_path=template_path, output_path=output_path, context=context)
     await create_stored_file_record(
         db=db,
         content=output_path.read_bytes(),
@@ -229,7 +229,7 @@ async def render_contract_docx(
         start_date=contract.start_date,
         price_total=Decimal(contract.price_total),
     )
-    render_docx(template_path=template_path, output_path=output_path, context=context)
+    await render_docx_async(template_path=template_path, output_path=output_path, context=context)
     await create_stored_file_record(
         db=db,
         content=output_path.read_bytes(),

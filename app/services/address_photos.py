@@ -7,6 +7,7 @@ Owner загружает фото своего адреса -> Pillow ресай
 Админ модерирует. Только одно главное фото на адрес (partial unique index).
 """
 
+import asyncio
 import hashlib
 import io
 from dataclasses import dataclass
@@ -152,14 +153,15 @@ async def upload_address_photo(
             f"У адреса уже {MAX_PHOTOS_PER_ADDRESS} фотографий — удалите ненужные перед загрузкой новой",
         )
 
-    processed = process_image_bytes(file_content)
+    processed = await asyncio.to_thread(process_image_bytes, file_content)
     content_hash = hashlib.sha256(processed.content).hexdigest()
     safe_name = safe_storage_filename(original_filename or "photo.jpg")
     if not safe_name.lower().endswith(OUTPUT_EXTENSION):
         safe_name = f"{safe_name}{OUTPUT_EXTENSION}"
     key = f"addresses/{address_id}/photos/{content_hash[:16]}/{safe_name}"
 
-    stored = get_object_storage().put_bytes(
+    stored = await asyncio.to_thread(
+        get_object_storage().put_bytes,
         key=key,
         content=processed.content,
         content_type=OUTPUT_CONTENT_TYPE,
