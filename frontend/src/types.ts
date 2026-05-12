@@ -127,6 +127,13 @@ export interface Provider {
   updated_at: string;
 }
 
+export type AddressPublicationStatus =
+  | "draft"
+  | "moderation"
+  | "published"
+  | "rejected"
+  | "archived";
+
 export interface Address {
   id: string;
   provider_id: string;
@@ -141,6 +148,11 @@ export interface Address {
   fns_number: number | null;
   fns_city: string | null;
   is_available: boolean;
+  publication_status: AddressPublicationStatus;
+  published_at: string | null;
+  moderation_comment: string | null;
+  moderated_by: string | null;
+  moderated_at: string | null;
   created_at: string;
   updated_at: string;
 }

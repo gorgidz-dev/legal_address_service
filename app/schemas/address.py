@@ -48,5 +48,14 @@ class AddressRead(AddressBase):
     id: UUID
     provider_id: UUID
     is_available: bool
+    publication_status: str
+    published_at: Optional[datetime] = None
+    moderation_comment: Optional[str] = None
+    moderated_by: Optional[UUID] = None
+    moderated_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+
+
+class AddressModerationReject(BaseModel):
+    moderation_comment: str = Field(min_length=2, max_length=2000)

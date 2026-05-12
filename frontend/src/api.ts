@@ -1,5 +1,6 @@
 import type {
   Address,
+  AddressPublicationStatus,
   ActiveClientRegistryItem,
   AddressPhotoAdmin,
   Application,
@@ -224,6 +225,22 @@ export const api = {
   },
   createAddress: (payload: unknown) =>
     request<Address>("/addresses", { method: "POST", body: JSON.stringify(payload) }),
+
+  submitAddressForModeration: (addressId: string) =>
+    request<Address>(`/addresses/${addressId}/submit`, { method: "POST" }),
+  archiveAddress: (addressId: string) =>
+    request<Address>(`/addresses/${addressId}/archive`, { method: "POST" }),
+  adminListAddressesForModeration: (status?: AddressPublicationStatus) => {
+    const query = status ? `?status=${status}` : "";
+    return request<Address[]>(`/admin/addresses${query}`);
+  },
+  adminPublishAddress: (addressId: string) =>
+    request<Address>(`/admin/addresses/${addressId}/publish`, { method: "POST" }),
+  adminRejectAddress: (addressId: string, moderationComment: string) =>
+    request<Address>(`/admin/addresses/${addressId}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ moderation_comment: moderationComment })
+    }),
 
   applications: () => request<Application[]>("/applications"),
   createApplication: (payload: unknown) =>

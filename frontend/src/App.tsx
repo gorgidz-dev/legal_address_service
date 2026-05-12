@@ -38,6 +38,7 @@ import type {
   ActiveClientRegistryItem,
   Address,
   AddressPhotoAdmin,
+  AddressPublicationStatus,
   Application,
   ApplicationDocumentModeration,
   ApplicationDocument,
@@ -71,7 +72,8 @@ type View =
   | "templates"
   | "access"
   | "photos"
-  | "provider-requests";
+  | "provider-requests"
+  | "address-moderation";
 
 const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "applications", label: "Заявки", icon: FolderOpen },
@@ -98,6 +100,12 @@ const adminProviderRequestsNavItem: { id: View; label: string; icon: typeof Home
   id: "provider-requests",
   label: "Заявки собственников",
   icon: Building2
+};
+
+const adminAddressModerationNavItem: { id: View; label: string; icon: typeof Home } = {
+  id: "address-moderation",
+  label: "Модерация адресов",
+  icon: Home
 };
 
 const ownerRequestStatusLabels: Record<string, string> = {
@@ -1078,7 +1086,13 @@ export default function App() {
 
   const navItems =
     currentUser?.role === "admin"
-      ? [...baseNavItems, adminProviderRequestsNavItem, adminPhotosNavItem, adminNavItem]
+      ? [
+          ...baseNavItems,
+          adminProviderRequestsNavItem,
+          adminAddressModerationNavItem,
+          adminPhotosNavItem,
+          adminNavItem
+        ]
       : baseNavItems;
   const selectedTitle = navItems.find((item) => item.id === view)?.label || "Сервис";
 
@@ -1219,6 +1233,9 @@ export default function App() {
             {view === "photos" && currentUser.role === "admin" && <AdminPhotoModerationView />}
             {view === "provider-requests" && currentUser.role === "admin" && (
               <ProviderRequestsView />
+            )}
+            {view === "address-moderation" && currentUser.role === "admin" && (
+              <AdminAddressModerationView />
             )}
             {view === "access" && currentUser.role === "admin" && (
               <>
@@ -3244,17 +3261,197 @@ function AddressesView({
       <SimpleList
         items={addresses}
         render={(address) => (
-          <>
-            <strong>{address.full_address}</strong>
-            <span>
-              {address.cadastral_number} · {address.price_6m} / {address.price_11m} руб.
-            </span>
-          </>
+          <AddressListRow address={address} onChanged={onChanged} setError={setError} />
         )}
       />
     </div>
   );
 }
+
+function AddressListRow({
+  address,
+  onChanged,
+  setError
+}: {
+  address: Address;
+  onChanged: () => void;
+  setError: (msg: string | null) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.submitAddressForModeration(address.id);
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function archive() {
+    if (!window.confirm("Архивировать адрес?")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.archiveAddress(address.id);
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <strong>{address.full_address}</strong>
+      <span>
+        {address.cadastral_number} · {address.price_6m} / {address.price_11m} руб.
+      </span>
+      <span>
+        Статус публикации:{" "}
+        <strong>
+          {addressPublicationStatusLabels[address.publication_status] || address.publication_status}
+        </strong>
+        {address.moderation_comment ? ` · ${address.moderation_comment}` : ""}
+      </span>
+      <div className="row-actions">
+        {(address.publication_status === "draft" || address.publication_status === "rejected") && (
+          <Button disabled={busy} onClick={submit} variant="secondary">
+            Отправить на модерацию
+          </Button>
+        )}
+        {address.publication_status !== "archived" && (
+          <Button disabled={busy} onClick={archive} variant="secondary">
+            Архивировать
+          </Button>
+        )}
+      </div>
+    </>
+  );
+}
+
+const addressPublicationStatusLabels: Record<string, string> = {
+  draft: "Черновик",
+  moderation: "На модерации",
+  published: "Опубликовано",
+  rejected: "Отклонено",
+  archived: "В архиве"
+};
+
+function AdminAddressModerationView() {
+  const [statusFilter, setStatusFilter] = useState<AddressPublicationStatusFilter>("moderation");
+  const [items, setItems] = useState<Address[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    api
+      .adminListAddressesForModeration(statusFilter === "all" ? undefined : statusFilter)
+      .then(setItems)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [statusFilter]);
+
+  async function publish(address: Address) {
+    setBusyId(address.id);
+    setError(null);
+    try {
+      await api.adminPublishAddress(address.id);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reject(address: Address) {
+    const comment = window.prompt("Причина отклонения") || "";
+    if (comment.trim().length < 2) return;
+    setBusyId(address.id);
+    setError(null);
+    try {
+      await api.adminRejectAddress(address.id, comment.trim());
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="stack">
+      <Field label="Фильтр статусов">
+        <select
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(event.target.value as AddressPublicationStatusFilter)
+          }
+        >
+          <option value="all">Все</option>
+          <option value="moderation">На модерации</option>
+          <option value="published">Опубликованы</option>
+          <option value="rejected">Отклонены</option>
+          <option value="draft">Черновики</option>
+          <option value="archived">В архиве</option>
+        </select>
+      </Field>
+      <InlineError message={error} />
+      {loading ? (
+        <LoadingRows />
+      ) : items.length === 0 ? (
+        <p className="hint">Адресов в выбранном статусе нет.</p>
+      ) : (
+        <SimpleList
+          items={items}
+          render={(address) => (
+            <>
+              <strong>{address.full_address}</strong>
+              <span>
+                {address.cadastral_number} · {address.price_6m} / {address.price_11m} руб.
+              </span>
+              <span>
+                Статус:{" "}
+                <strong>
+                  {addressPublicationStatusLabels[address.publication_status] ||
+                    address.publication_status}
+                </strong>
+                {address.moderation_comment ? ` · ${address.moderation_comment}` : ""}
+              </span>
+              {address.publication_status === "moderation" ? (
+                <div className="row-actions">
+                  <Button disabled={busyId === address.id} onClick={() => publish(address)}>
+                    Опубликовать
+                  </Button>
+                  <Button
+                    disabled={busyId === address.id}
+                    onClick={() => reject(address)}
+                    variant="secondary"
+                  >
+                    Отклонить
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          )}
+        />
+      )}
+    </section>
+  );
+}
+
+type AddressPublicationStatusFilter = AddressPublicationStatus | "all";
 
 function TemplatesView() {
   return (
