@@ -3,7 +3,7 @@ from __future__ import annotations
 """FastAPI-точка входа."""
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -60,6 +60,9 @@ def _session_token_from_request(request: Request) -> str | None:
     return token.strip()
 
 
+API_PREFIX = "/api/v1"
+
+
 def _is_public_path(path: str, method: str) -> bool:
     if method == "OPTIONS":
         return True
@@ -70,12 +73,12 @@ def _is_public_path(path: str, method: str) -> bool:
         "/redoc",
         "/openapi.json",
         "/favicon.ico",
-        "/auth/login",
-        "/auth/refresh",
-        "/auth/bootstrap-admin",
-        "/auth/bootstrap-state",
-        "/mobile/auth/login",
-        "/mobile/auth/refresh",
+        f"{API_PREFIX}/auth/login",
+        f"{API_PREFIX}/auth/refresh",
+        f"{API_PREFIX}/auth/bootstrap-admin",
+        f"{API_PREFIX}/auth/bootstrap-state",
+        f"{API_PREFIX}/mobile/auth/login",
+        f"{API_PREFIX}/mobile/auth/refresh",
     }
     if path in public_exact:
         return True
@@ -83,16 +86,24 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path.startswith("/invite/"):
         return True
-    if path == "/marketplace/addresses" and method == "GET":
+    if path.startswith(f"{API_PREFIX}/webhooks/"):
         return True
-    if path == "/marketplace/provider-requests" and method == "POST":
+    if path == f"{API_PREFIX}/marketplace/addresses" and method == "GET":
         return True
-    if path == "/marketplace/applications" and method == "POST":
+    if path == f"{API_PREFIX}/marketplace/provider-requests" and method == "POST":
+        return True
+    if path == f"{API_PREFIX}/marketplace/applications" and method == "POST":
         return True
     # Сами фото отдаются роутером: approved -> публично, остальные -> auth-check внутри.
-    if path.startswith("/address-photos/") and path.endswith("/raw") and method == "GET":
+    if (
+        path.startswith(f"{API_PREFIX}/address-photos/")
+        and path.endswith("/raw")
+        and method == "GET"
+    ):
         return True
-    return path.startswith("/auth/invitations/") and path.endswith("/accept")
+    return (
+        path.startswith(f"{API_PREFIX}/auth/invitations/") and path.endswith("/accept")
+    )
 
 
 @app.middleware("http")
@@ -151,23 +162,25 @@ app.add_middleware(
 )
 
 
-app.include_router(auth.router)
-app.include_router(mobile_auth.router)
-app.include_router(marketplace.router)
-app.include_router(notifications.router)
-app.include_router(client_dashboard.router)
-app.include_router(owner_dashboard.router)
-app.include_router(workflow.router)
-app.include_router(application_documents.router)
-app.include_router(address_photos.router)
-app.include_router(providers.router)
-app.include_router(addresses.router)
-app.include_router(egrn.router)
-app.include_router(clients.router)
-app.include_router(applications.router)
-app.include_router(registry.router)
-app.include_router(templates.router)
-app.include_router(demo.router)
+api_v1 = APIRouter(prefix=API_PREFIX)
+api_v1.include_router(auth.router)
+api_v1.include_router(mobile_auth.router)
+api_v1.include_router(marketplace.router)
+api_v1.include_router(notifications.router)
+api_v1.include_router(client_dashboard.router)
+api_v1.include_router(owner_dashboard.router)
+api_v1.include_router(workflow.router)
+api_v1.include_router(application_documents.router)
+api_v1.include_router(address_photos.router)
+api_v1.include_router(providers.router)
+api_v1.include_router(addresses.router)
+api_v1.include_router(egrn.router)
+api_v1.include_router(clients.router)
+api_v1.include_router(applications.router)
+api_v1.include_router(registry.router)
+api_v1.include_router(templates.router)
+api_v1.include_router(demo.router)
+app.include_router(api_v1)
 
 
 @app.get("/health", tags=["meta"], summary="Liveness probe")

@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/api/v1": "http://127.0.0.1:8000",
       "/auth": "http://127.0.0.1:8000",
       "/client": "http://127.0.0.1:8000",
       "/owner": "http://127.0.0.1:8000",

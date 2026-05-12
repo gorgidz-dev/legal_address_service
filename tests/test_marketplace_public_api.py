@@ -13,9 +13,9 @@ from app.routers.marketplace import public_address_from_row
 
 
 def test_marketplace_public_paths_do_not_require_auth() -> None:
-    assert _is_public_path("/marketplace/addresses", "GET")
-    assert _is_public_path("/marketplace/provider-requests", "POST")
-    assert not _is_public_path("/marketplace/provider-requests", "GET")
+    assert _is_public_path("/api/v1/marketplace/addresses", "GET")
+    assert _is_public_path("/api/v1/marketplace/provider-requests", "POST")
+    assert not _is_public_path("/api/v1/marketplace/provider-requests", "GET")
 
 
 def test_public_address_from_row_uses_selected_term_price() -> None:
@@ -99,7 +99,7 @@ def test_public_addresses_endpoint_accepts_term_months_query() -> None:
 
     app.dependency_overrides[get_db] = override_db
     try:
-        response = TestClient(app).get("/marketplace/addresses?term_months=11")
+        response = TestClient(app).get("/api/v1/marketplace/addresses?term_months=11")
     finally:
         app.dependency_overrides.pop(get_db, None)
 

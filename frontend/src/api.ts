@@ -27,7 +27,9 @@ import type {
   UserSessionInfo
 } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+// All API calls go through the versioned prefix. Override with VITE_API_BASE if hosting
+// the API on a different origin (e.g. https://api.example.com/v1).
+const API_BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
 
 export class ApiError extends Error {
   status: number;

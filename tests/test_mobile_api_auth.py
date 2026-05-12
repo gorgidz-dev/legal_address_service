@@ -26,7 +26,7 @@ def _request_with_headers(headers: list[tuple[bytes, bytes]]) -> Request:
 
 
 def test_mobile_auth_login_is_public() -> None:
-    assert _is_public_path("/mobile/auth/login", "POST")
+    assert _is_public_path("/api/v1/mobile/auth/login", "POST")
 
 
 def test_session_token_from_request_prefers_cookie_then_bearer_header() -> None:
@@ -100,7 +100,7 @@ def test_mobile_login_returns_bearer_session_without_setting_cookie() -> None:
     app.dependency_overrides[get_db] = override_db
     try:
         response = TestClient(app).post(
-            "/mobile/auth/login",
+            "/api/v1/mobile/auth/login",
             json={"email": "CLIENT@example.com", "password": "secret123"},
         )
     finally:

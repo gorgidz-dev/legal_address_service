@@ -17,8 +17,8 @@ from app.schemas.marketplace import PublicClientApplicationCreateInitial
 
 
 def test_marketplace_application_create_is_public_post_only() -> None:
-    assert _is_public_path("/marketplace/applications", "POST")
-    assert not _is_public_path("/marketplace/applications", "GET")
+    assert _is_public_path("/api/v1/marketplace/applications", "POST")
+    assert not _is_public_path("/api/v1/marketplace/applications", "GET")
 
 
 def test_public_client_application_schema_normalizes_email() -> None:
@@ -108,7 +108,7 @@ def test_public_initial_application_creates_client_user_application_and_session(
     app.dependency_overrides[get_db] = override_db
     try:
         response = TestClient(app).post(
-            "/marketplace/applications",
+            "/api/v1/marketplace/applications",
             json={
                 "type": "initial_registration",
                 "address_id": str(address_id),
