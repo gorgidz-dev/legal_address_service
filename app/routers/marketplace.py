@@ -44,6 +44,7 @@ from app.schemas.auth import CurrentUserRead
 from app.services.address_photos import photo_to_public_dict
 from app.services.auth_security import hash_password_async
 from app.services.auth_sessions import create_session, extract_request_metadata
+from app.services.user_create import try_persist_user
 from app.services.rate_limit import (
     PROVIDER_REQUEST_RULES,
     PUBLIC_APPLICATION_RULES,
@@ -222,8 +223,8 @@ async def create_public_client_application(
         role=UserRole.CLIENT.value,
         is_active=True,
     )
-    db.add(user)
-    await db.flush()
+    if not await try_persist_user(db, user):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким e-mail уже существует")
     await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
     await record_attempt(db, "public_application", keys, succeeded=True)
 

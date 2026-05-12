@@ -44,6 +44,7 @@ from app.services.rate_limit import (
     assert_within_rate_limit,
     record_attempt,
 )
+from app.services.user_create import try_persist_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -76,8 +77,8 @@ async def bootstrap_admin(
         role=UserRole.ADMIN.value,
         is_active=True,
     )
-    db.add(user)
-    await db.flush()
+    if not await try_persist_user(db, user):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Первый администратор уже создан")
     ua, ip = extract_request_metadata(request)
     await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
     await db.commit()
@@ -315,8 +316,8 @@ async def accept_invitation(
         is_active=True,
     )
     invitation.accepted_at = utcnow()
-    db.add(user)
-    await db.flush()
+    if not await try_persist_user(db, user):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким e-mail уже существует")
     await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
     await record_attempt(db, "invitation_accept", keys, succeeded=True)
     await db.commit()
