@@ -241,6 +241,39 @@ export interface PaymentDocument {
   download_url: string;
 }
 
+export type AddressPhotoModerationStatus = "pending" | "approved" | "rejected";
+
+export interface AddressPhoto {
+  id: string;
+  address_id: string;
+  url: string;
+  content_type: string;
+  width: number;
+  height: number;
+  is_main: boolean;
+  sort_order: number;
+}
+
+export interface AddressPhotoAdmin {
+  id: string;
+  address_id: string;
+  url: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  width: number;
+  height: number;
+  moderation_status: AddressPhotoModerationStatus;
+  moderation_comment: string | null;
+  moderated_by: string | null;
+  moderated_at: string | null;
+  is_main: boolean;
+  sort_order: number;
+  uploaded_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PublicAddress {
   id: string;
   provider_id: string;
@@ -257,6 +290,8 @@ export interface PublicAddress {
   publication_status: string;
   created_at: string;
   updated_at: string;
+  photos: AddressPhoto[];
+  main_photo_url: string | null;
 }
 
 export interface ProviderConnectionRequestCreate {
@@ -269,6 +304,8 @@ export interface ProviderConnectionRequestCreate {
   comment?: string | null;
 }
 
+export type OwnerConnectionRequestStatus = "new" | "reviewing" | "invited" | "rejected";
+
 export interface ProviderConnectionRequest {
   id: string;
   company_name: string;
@@ -278,12 +315,34 @@ export interface ProviderConnectionRequest {
   city: string | null;
   address_count: number | null;
   comment: string | null;
-  status: "new" | "reviewing" | "invited" | "rejected";
+  status: OwnerConnectionRequestStatus;
   admin_comment: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  invitation_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProviderConnectionRequestStatusUpdate {
+  status: "reviewing" | "rejected";
+  admin_comment?: string | null;
+}
+
+export interface ProviderConnectionRequestApprove {
+  code: string;
+  short_name: string;
+  full_name: string;
+  admin_comment?: string | null;
+}
+
+export interface ProviderConnectionRequestApproveResult {
+  request: ProviderConnectionRequest;
+  provider_id: string;
+  invitation_id: string;
+  invitation_token: string;
+  invitation_path: string;
+  invitation_expires_at: string;
 }
 
 export type PublicClientApplicationCreate =

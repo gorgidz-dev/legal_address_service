@@ -1,6 +1,7 @@
 import {
   Bell,
   Building2,
+  Camera,
   CheckCircle2,
   Copy,
   Database,
@@ -11,6 +12,7 @@ import {
   FileText,
   FolderOpen,
   Home,
+  Image as ImageIcon,
   KeyRound,
   Loader2,
   LogOut,
@@ -22,8 +24,11 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Star,
+  Trash2,
   Upload,
   UserPlus,
+  X,
   XCircle
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -32,6 +37,7 @@ import PublicCatalog from "./publicCatalog";
 import type {
   ActiveClientRegistryItem,
   Address,
+  AddressPhotoAdmin,
   Application,
   ApplicationDocumentModeration,
   ApplicationDocument,
@@ -47,13 +53,25 @@ import type {
   AppNotification,
   NotificationInbox,
   OwnerApplication,
+  OwnerConnectionRequestStatus,
   OwnerDashboard,
   PaymentDocument,
   Provider,
+  ProviderConnectionRequest,
+  ProviderConnectionRequestApproveResult,
   UserSessionInfo
 } from "./types";
 
-type View = "applications" | "registry" | "new" | "providers" | "addresses" | "templates" | "access";
+type View =
+  | "applications"
+  | "registry"
+  | "new"
+  | "providers"
+  | "addresses"
+  | "templates"
+  | "access"
+  | "photos"
+  | "provider-requests";
 
 const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "applications", label: "Заявки", icon: FolderOpen },
@@ -68,6 +86,31 @@ const adminNavItem: { id: View; label: string; icon: typeof Home } = {
   id: "access",
   label: "Доступ",
   icon: ShieldCheck
+};
+
+const adminPhotosNavItem: { id: View; label: string; icon: typeof Home } = {
+  id: "photos",
+  label: "Фото на модерацию",
+  icon: ImageIcon
+};
+
+const adminProviderRequestsNavItem: { id: View; label: string; icon: typeof Home } = {
+  id: "provider-requests",
+  label: "Заявки собственников",
+  icon: Building2
+};
+
+const ownerRequestStatusLabels: Record<string, string> = {
+  new: "Новая",
+  reviewing: "В работе",
+  invited: "Приглашение отправлено",
+  rejected: "Отклонена"
+};
+
+const photoModerationStatusLabels: Record<string, string> = {
+  pending: "На модерации",
+  approved: "Одобрено",
+  rejected: "Отклонено"
 };
 
 const statusLabels: Record<string, string> = {
@@ -743,6 +786,225 @@ function AccessView() {
   );
 }
 
+function ProviderRequestsView() {
+  const [statusFilter, setStatusFilter] = useState<OwnerConnectionRequestStatus | "all">("all");
+  const [requests, setRequests] = useState<ProviderConnectionRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [approveTarget, setApproveTarget] = useState<ProviderConnectionRequest | null>(null);
+  const [approved, setApproved] = useState<ProviderConnectionRequestApproveResult | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    api
+      .adminListProviderRequests(statusFilter === "all" ? undefined : statusFilter)
+      .then(setRequests)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [statusFilter]);
+
+  async function changeStatus(req: ProviderConnectionRequest, status: "reviewing" | "rejected") {
+    setBusyId(req.id);
+    setError(null);
+    try {
+      const comment =
+        status === "rejected"
+          ? window.prompt("Комментарий (необязательно)") ?? undefined
+          : undefined;
+      await api.adminUpdateProviderRequestStatus(req.id, {
+        status,
+        admin_comment: comment ?? null
+      });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const approveUrl = approved ? `${window.location.origin}${approved.invitation_path}` : "";
+
+  return (
+    <section className="stack">
+      <Field label="Фильтр статусов">
+        <select
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(event.target.value as OwnerConnectionRequestStatus | "all")
+          }
+        >
+          <option value="all">Все</option>
+          <option value="new">Новые</option>
+          <option value="reviewing">В работе</option>
+          <option value="invited">Приглашение отправлено</option>
+          <option value="rejected">Отклонены</option>
+        </select>
+      </Field>
+
+      <InlineError message={error} />
+
+      {approved ? (
+        <div className="invite-result">
+          <div>
+            <strong>Приглашение собственника готово</strong>
+            <span>{approveUrl}</span>
+          </div>
+          <button
+            className="text-action"
+            onClick={() => navigator.clipboard?.writeText(approveUrl)}
+            type="button"
+          >
+            <Copy size={15} /> Копировать
+          </button>
+          <button className="text-action" onClick={() => setApproved(null)} type="button">
+            <X size={15} /> Закрыть
+          </button>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <LoadingRows />
+      ) : requests.length === 0 ? (
+        <p className="hint">Заявок нет.</p>
+      ) : (
+        <SimpleList
+          items={requests}
+          render={(req) => (
+            <>
+              <strong>{req.company_name}</strong>
+              <span>
+                {req.contact_name} · {req.contact_email}
+                {req.contact_phone ? ` · ${req.contact_phone}` : ""}
+                {req.city ? ` · ${req.city}` : ""}
+                {req.address_count !== null ? ` · ${req.address_count} адресов` : ""}
+              </span>
+              {req.comment ? <span>{req.comment}</span> : null}
+              <span>
+                Статус: <strong>{ownerRequestStatusLabels[req.status] || req.status}</strong>
+                {req.admin_comment ? ` · ${req.admin_comment}` : ""}
+              </span>
+              {req.status === "new" || req.status === "reviewing" ? (
+                <div className="row-actions">
+                  {req.status === "new" ? (
+                    <Button
+                      disabled={busyId === req.id}
+                      onClick={() => changeStatus(req, "reviewing")}
+                      variant="secondary"
+                    >
+                      Взять в работу
+                    </Button>
+                  ) : null}
+                  <Button
+                    disabled={busyId === req.id}
+                    onClick={() => setApproveTarget(req)}
+                  >
+                    Пригласить
+                  </Button>
+                  <Button
+                    disabled={busyId === req.id}
+                    onClick={() => changeStatus(req, "rejected")}
+                    variant="secondary"
+                  >
+                    Отклонить
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          )}
+        />
+      )}
+
+      {approveTarget ? (
+        <ApproveProviderRequestModal
+          request={approveTarget}
+          onCancel={() => setApproveTarget(null)}
+          onApproved={(result) => {
+            setApproved(result);
+            setApproveTarget(null);
+            load();
+          }}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function ApproveProviderRequestModal({
+  request,
+  onCancel,
+  onApproved
+}: {
+  request: ProviderConnectionRequest;
+  onCancel: () => void;
+  onApproved: (result: ProviderConnectionRequestApproveResult) => void;
+}) {
+  const [code, setCode] = useState("");
+  const [shortName, setShortName] = useState(request.company_name);
+  const [fullName, setFullName] = useState(request.company_name);
+  const [adminComment, setAdminComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.adminApproveProviderRequest(request.id, {
+        code: code.trim(),
+        short_name: shortName.trim(),
+        full_name: fullName.trim(),
+        admin_comment: adminComment.trim() || null
+      });
+      onApproved(result);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <form className="modal-panel compact-form" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h3>Создать собственника из заявки</h3>
+        <p className="hint">{request.company_name} · {request.contact_email}</p>
+        <Field label="Код собственника">
+          <input value={code} onChange={(e) => setCode(e.target.value)} required />
+        </Field>
+        <Field label="Короткое наименование">
+          <input value={shortName} onChange={(e) => setShortName(e.target.value)} required />
+        </Field>
+        <Field label="Полное наименование">
+          <input value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+        </Field>
+        <Field label="Комментарий администратора">
+          <textarea
+            value={adminComment}
+            onChange={(e) => setAdminComment(e.target.value)}
+            rows={2}
+          />
+        </Field>
+        <InlineError message={error} />
+        <div className="row-actions">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Отмена
+          </Button>
+          <Button disabled={busy} type="submit">
+            {busy ? <Loader2 className="spin" size={16} /> : <UserPlus size={16} />}
+            Создать и пригласить
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>("applications");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -814,7 +1076,10 @@ export default function App() {
     };
   }, [currentUser, refreshKey]);
 
-  const navItems = currentUser?.role === "admin" ? [...baseNavItems, adminNavItem] : baseNavItems;
+  const navItems =
+    currentUser?.role === "admin"
+      ? [...baseNavItems, adminProviderRequestsNavItem, adminPhotosNavItem, adminNavItem]
+      : baseNavItems;
   const selectedTitle = navItems.find((item) => item.id === view)?.label || "Сервис";
 
   async function handleLogout() {
@@ -951,6 +1216,10 @@ export default function App() {
               />
             )}
             {view === "templates" && <TemplatesView />}
+            {view === "photos" && currentUser.role === "admin" && <AdminPhotoModerationView />}
+            {view === "provider-requests" && currentUser.role === "admin" && (
+              <ProviderRequestsView />
+            )}
             {view === "access" && currentUser.role === "admin" && (
               <>
                 <SessionsView />
@@ -1147,6 +1416,8 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [photoAddressId, setPhotoAddressId] = useState<string | null>(null);
+  const [photoAddressLabel, setPhotoAddressLabel] = useState<string>("");
 
   useEffect(() => {
     let alive = true;
@@ -1317,6 +1588,16 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
                       {address.is_available ? "доступен" : "недоступен"}
                     </span>
                     <small>{formatMoney(address.price_11m)} за 11 мес.</small>
+                    <button
+                      className="text-action owner-address-photos-link"
+                      onClick={() => {
+                        setPhotoAddressId(address.id);
+                        setPhotoAddressLabel(address.full_address);
+                      }}
+                      type="button"
+                    >
+                      <Camera size={14} /> Фотографии адреса
+                    </button>
                   </div>
                 ))
               ) : (
@@ -1507,7 +1788,346 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
           </div>
         </section>
       )}
+
+      {photoAddressId ? (
+        <AddressPhotosModal
+          addressId={photoAddressId}
+          addressLabel={photoAddressLabel}
+          mode="owner"
+          onClose={() => setPhotoAddressId(null)}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function AddressPhotosModal({
+  addressId,
+  addressLabel,
+  mode,
+  onClose
+}: {
+  addressId: string;
+  addressLabel: string;
+  mode: "owner" | "admin";
+  onClose: () => void;
+}) {
+  const [photos, setPhotos] = useState<AddressPhotoAdmin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .ownerListAddressPhotos(addressId)
+      .then((rows) => {
+        if (alive) setPhotos(rows);
+      })
+      .catch((err: Error) => {
+        if (alive) setError(err.message);
+      })
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [addressId, refreshKey]);
+
+  async function handleUpload(event: FormEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    setUploadBusy(true);
+    setUploadError(null);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      await api.ownerUploadAddressPhoto(addressId, form);
+      setRefreshKey((value) => value + 1);
+      setFileInputKey((value) => value + 1);
+    } catch (err) {
+      setUploadError((err as Error).message);
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
+  async function handleDelete(photoId: string) {
+    if (!window.confirm("Удалить фотографию?")) return;
+    setActionBusy(`delete-${photoId}`);
+    try {
+      await api.ownerDeletePhoto(photoId);
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      setUploadError((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleSetMain(photoId: string) {
+    setActionBusy(`main-${photoId}`);
+    try {
+      await api.ownerSetMainPhoto(photoId);
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      setUploadError((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div className="modal-panel address-photos-modal" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span className="eyebrow">Фотографии адреса</span>
+            <h2>{addressLabel}</h2>
+          </div>
+          <button className="text-action" onClick={onClose} type="button">
+            <X size={16} /> Закрыть
+          </button>
+        </header>
+
+        {mode === "owner" ? (
+          <label className="photo-uploader">
+            <input
+              key={fileInputKey}
+              accept="image/jpeg,image/png,image/webp"
+              type="file"
+              onChange={handleUpload}
+              disabled={uploadBusy}
+            />
+            <span>
+              {uploadBusy ? <Loader2 className="spin" size={18} /> : <Upload size={18} />}
+              {uploadBusy ? "Загружаем..." : "Загрузить фотографию"}
+            </span>
+            <small>JPEG, PNG или WebP — до 8 МБ. Перед публикацией админ проверит снимок.</small>
+          </label>
+        ) : null}
+
+        <InlineError message={error || uploadError} />
+
+        {loading ? (
+          <LoadingRows />
+        ) : photos.length === 0 ? (
+          <EmptyState
+            title="Фото нет"
+            text={mode === "owner" ? "Добавьте хотя бы одну фотографию здания, чтобы клиенты её видели." : "Собственник ещё не загружал фото для этого адреса."}
+          />
+        ) : (
+          <div className="photo-grid">
+            {photos.map((photo) => (
+              <div className={`photo-card photo-card--${photo.moderation_status}`} key={photo.id}>
+                <div className="photo-card__media">
+                  <img src={photo.url} alt={photo.original_filename} loading="lazy" />
+                  {photo.is_main && photo.moderation_status === "approved" ? (
+                    <span className="photo-card__main-badge">
+                      <Star size={11} /> Главное
+                    </span>
+                  ) : null}
+                </div>
+                <div className="photo-card__body">
+                  <span className={`photo-card__status photo-card__status--${photo.moderation_status}`}>
+                    {photoModerationStatusLabels[photo.moderation_status] || photo.moderation_status}
+                  </span>
+                  {photo.moderation_comment ? <p>{photo.moderation_comment}</p> : null}
+                  <small>
+                    {photo.width}×{photo.height} · {formatFileSize(photo.size_bytes)}
+                  </small>
+                  {mode === "owner" ? (
+                    <div className="photo-card__actions">
+                      {photo.moderation_status === "approved" && !photo.is_main ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => handleSetMain(photo.id)}
+                          disabled={actionBusy === `main-${photo.id}`}
+                        >
+                          {actionBusy === `main-${photo.id}` ? (
+                            <Loader2 className="spin" size={14} />
+                          ) : (
+                            <Star size={14} />
+                          )}
+                          Сделать главным
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleDelete(photo.id)}
+                        disabled={actionBusy === `delete-${photo.id}`}
+                      >
+                        {actionBusy === `delete-${photo.id}` ? (
+                          <Loader2 className="spin" size={14} />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                        Удалить
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminPhotoModerationView() {
+  const [photos, setPhotos] = useState<AddressPhotoAdmin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [rejectingPhotoId, setRejectingPhotoId] = useState<string | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .adminPendingPhotos()
+      .then((rows) => {
+        if (alive) setPhotos(rows);
+      })
+      .catch((err: Error) => {
+        if (alive) setError(err.message);
+      })
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [refreshKey]);
+
+  async function handleApprove(photoId: string) {
+    setActionBusy(`approve-${photoId}`);
+    try {
+      await api.adminApprovePhoto(photoId);
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleReject(photoId: string) {
+    if (rejectComment.trim().length < 2) {
+      setError("Укажите причину отказа (минимум 2 символа)");
+      return;
+    }
+    setActionBusy(`reject-${photoId}`);
+    try {
+      await api.adminRejectPhoto(photoId, rejectComment.trim());
+      setRejectingPhotoId(null);
+      setRejectComment("");
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  return (
+    <section className="admin-photos-view">
+      <div className="view-heading">
+        <span className="eyebrow">Модерация контента</span>
+        <h2>Фотографии адресов на проверке</h2>
+        <p>Подтвердите снимки от собственников, чтобы они появились в публичном каталоге.</p>
+      </div>
+
+      <InlineError message={error} />
+
+      {loading ? (
+        <LoadingRows />
+      ) : photos.length === 0 ? (
+        <EmptyState
+          title="Очередь пуста"
+          text="Все загруженные собственниками фотографии уже промодерированы."
+        />
+      ) : (
+        <div className="photo-grid">
+          {photos.map((photo) => (
+            <div className="photo-card photo-card--pending" key={photo.id}>
+              <div className="photo-card__media">
+                <img src={photo.url} alt={photo.original_filename} loading="lazy" />
+              </div>
+              <div className="photo-card__body">
+                <span className="photo-card__status photo-card__status--pending">На модерации</span>
+                <small>
+                  {photo.width}×{photo.height} · {formatFileSize(photo.size_bytes)} · {photo.content_type}
+                </small>
+                <small>Загружено {formatDateTime(photo.created_at)}</small>
+                <div className="photo-card__actions">
+                  <Button
+                    onClick={() => handleApprove(photo.id)}
+                    disabled={actionBusy?.startsWith(`approve-${photo.id}`)}
+                  >
+                    {actionBusy === `approve-${photo.id}` ? (
+                      <Loader2 className="spin" size={14} />
+                    ) : (
+                      <CheckCircle2 size={14} />
+                    )}
+                    Одобрить
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setRejectingPhotoId(photo.id);
+                      setRejectComment("");
+                    }}
+                  >
+                    <XCircle size={14} /> Отклонить
+                  </Button>
+                </div>
+                {rejectingPhotoId === photo.id ? (
+                  <div className="photo-card__reject">
+                    <textarea
+                      value={rejectComment}
+                      onChange={(event) => setRejectComment(event.target.value)}
+                      placeholder="Почему фото не подходит? (видно собственнику)"
+                      rows={3}
+                    />
+                    <div className="photo-card__actions">
+                      <Button
+                        onClick={() => handleReject(photo.id)}
+                        disabled={actionBusy === `reject-${photo.id}`}
+                      >
+                        {actionBusy === `reject-${photo.id}` ? (
+                          <Loader2 className="spin" size={14} />
+                        ) : (
+                          <XCircle size={14} />
+                        )}
+                        Подтвердить отказ
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setRejectingPhotoId(null);
+                          setRejectComment("");
+                        }}
+                      >
+                        Отмена
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -40,8 +40,34 @@ class ProviderConnectionRequestRead(BaseModel):
     admin_comment: Optional[str]
     reviewed_by: Optional[UUID]
     reviewed_at: Optional[datetime]
+    invitation_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
+
+
+class ProviderConnectionRequestStatusUpdate(BaseModel):
+    """Перевод заявки в статус reviewing/rejected. Approve — отдельный эндпоинт."""
+
+    status: Literal[OwnerConnectionRequestStatus.REVIEWING, OwnerConnectionRequestStatus.REJECTED]
+    admin_comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ProviderConnectionRequestApprove(BaseModel):
+    """Превращает заявку в провайдера + приглашение на роль owner."""
+
+    code: str = Field(min_length=1, max_length=50, examples=["msk-tverskaya-1"])
+    short_name: str = Field(min_length=1, max_length=300, examples=["ИП Иванов И. И."])
+    full_name: str = Field(min_length=1, max_length=500, examples=["ИП Иванов Иван Иванович"])
+    admin_comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ProviderConnectionRequestApproveResult(BaseModel):
+    request: ProviderConnectionRequestRead
+    provider_id: UUID
+    invitation_id: UUID
+    invitation_token: str
+    invitation_path: str
+    invitation_expires_at: datetime
 
 
 class _PublicClientApplicationCreateBase(BaseModel):

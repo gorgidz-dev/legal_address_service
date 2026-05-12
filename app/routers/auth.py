@@ -314,6 +314,7 @@ async def accept_invitation(
         password_hash=await hash_password_async(payload.password),
         role=invitation.role,
         is_active=True,
+        provider_id=invitation.provider_id,
     )
     invitation.accepted_at = utcnow()
     if not await try_persist_user(db, user):

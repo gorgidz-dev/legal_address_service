@@ -21,6 +21,7 @@ class ProviderConnectionRequest(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint("address_count IS NULL OR address_count >= 0", name="address_count_non_negative"),
         Index("ix_provider_connection_requests_status_created", "status", "created_at"),
         Index("ix_provider_connection_requests_contact_email", "contact_email"),
+        Index("ix_provider_connection_requests_invitation_id", "invitation_id"),
     )
 
     company_name: Mapped[str] = mapped_column(Text, nullable=False)
@@ -34,3 +35,7 @@ class ProviderConnectionRequest(UUIDPKMixin, TimestampMixin, Base):
     admin_comment: Mapped[Optional[str]] = mapped_column(Text)
     reviewed_by: Mapped[Optional[UUID]] = mapped_column(PgUUID(as_uuid=True), ForeignKey("users.id"))
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    invitation_id: Mapped[Optional[UUID]] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("invitations.id", ondelete="SET NULL"),
+    )

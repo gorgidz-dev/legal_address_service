@@ -29,6 +29,7 @@ from app.routers import (
     mobile_auth,
     notifications,
     owner_dashboard,
+    provider_requests,
     providers,
     registry,
     templates,
@@ -192,6 +193,7 @@ api_v1.include_router(workflow.router)
 api_v1.include_router(application_documents.router)
 api_v1.include_router(address_photos.router)
 api_v1.include_router(providers.router)
+api_v1.include_router(provider_requests.router)
 api_v1.include_router(addresses.router)
 api_v1.include_router(egrn.router)
 api_v1.include_router(clients.router)

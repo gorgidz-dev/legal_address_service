@@ -1,6 +1,7 @@
 import type {
   Address,
   ActiveClientRegistryItem,
+  AddressPhotoAdmin,
   Application,
   ApplicationActionResult,
   ApplicationDocument,
@@ -21,8 +22,12 @@ import type {
   Provider,
   PublicClientApplicationCreate,
   PublicClientApplicationResult,
+  OwnerConnectionRequestStatus,
   ProviderConnectionRequest,
+  ProviderConnectionRequestApprove,
+  ProviderConnectionRequestApproveResult,
   ProviderConnectionRequestCreate,
+  ProviderConnectionRequestStatusUpdate,
   PublicAddress,
   UserSessionInfo
 } from "./types";
@@ -63,6 +68,7 @@ async function attemptRefresh(): Promise<boolean> {
     } catch {
       return false;
     } finally {
+      // Reset on next microtask so concurrent callers share this run, future callers get a fresh attempt.
       setTimeout(() => {
         refreshInFlight = null;
       }, 0);
@@ -191,6 +197,27 @@ export const api = {
   createProvider: (payload: unknown) =>
     request<Provider>("/providers", { method: "POST", body: JSON.stringify(payload) }),
 
+  adminListProviderRequests: (status?: OwnerConnectionRequestStatus) => {
+    const query = status ? `?status=${status}` : "";
+    return request<ProviderConnectionRequest[]>(`/admin/provider-requests${query}`);
+  },
+  adminUpdateProviderRequestStatus: (
+    requestId: string,
+    payload: ProviderConnectionRequestStatusUpdate
+  ) =>
+    request<ProviderConnectionRequest>(`/admin/provider-requests/${requestId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  adminApproveProviderRequest: (
+    requestId: string,
+    payload: ProviderConnectionRequestApprove
+  ) =>
+    request<ProviderConnectionRequestApproveResult>(
+      `/admin/provider-requests/${requestId}/approve`,
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+
   addresses: (providerId?: string) => {
     const query = providerId ? `?provider_id=${providerId}` : "";
     return request<Address[]>(`/addresses${query}`);
@@ -222,7 +249,28 @@ export const api = {
 
   paymentDocuments: (clientId: string) => request<PaymentDocument[]>(`/clients/${clientId}/payment-documents`),
   uploadPaymentDocument: (clientId: string, form: FormData) =>
-    request<PaymentDocument>(`/clients/${clientId}/payment-documents`, { method: "POST", body: form })
+    request<PaymentDocument>(`/clients/${clientId}/payment-documents`, { method: "POST", body: form }),
+
+  // Address photos — owner
+  ownerListAddressPhotos: (addressId: string) =>
+    request<AddressPhotoAdmin[]>(`/owner/addresses/${addressId}/photos`),
+  ownerUploadAddressPhoto: (addressId: string, form: FormData) =>
+    request<AddressPhotoAdmin>(`/owner/addresses/${addressId}/photos`, { method: "POST", body: form }),
+  ownerDeletePhoto: (photoId: string) =>
+    request<void>(`/owner/photos/${photoId}`, { method: "DELETE" }),
+  ownerSetMainPhoto: (photoId: string) =>
+    request<AddressPhotoAdmin>(`/owner/photos/${photoId}/main`, { method: "POST" }),
+
+  // Address photos — admin moderation
+  adminPendingPhotos: () =>
+    request<AddressPhotoAdmin[]>("/admin/address-photos/pending"),
+  adminApprovePhoto: (photoId: string) =>
+    request<AddressPhotoAdmin>(`/admin/address-photos/${photoId}/approve`, { method: "POST" }),
+  adminRejectPhoto: (photoId: string, comment: string) =>
+    request<AddressPhotoAdmin>(`/admin/address-photos/${photoId}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ comment })
+    })
 };
 
 export function packageDownloadUrl(applicationId: string): string {
