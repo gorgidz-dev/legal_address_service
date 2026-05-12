@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.contacts import OptionalPhone
 from app.validators import (
     BIK,
     INN,
@@ -39,11 +40,13 @@ class ProviderBase(BaseModel):
     corr_account: Optional[CorrAccount] = None
     bik: Optional[BIK] = None
 
+    # On read the phone is shown as-is (legacy unnormalised seed data may exist);
+    # ProviderCreate below tightens it to E.164.
     phone: Optional[str] = None
 
 
 class ProviderCreate(ProviderBase):
-    pass
+    phone: OptionalPhone = None
 
 
 class ProviderRead(ProviderBase):

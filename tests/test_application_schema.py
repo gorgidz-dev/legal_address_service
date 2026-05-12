@@ -53,7 +53,7 @@ def test_promote_to_contract_accepts_contact_updates() -> None:
     )
 
     assert payload.contact_name == "Ирина Ковалёва"
-    assert payload.contact_phone == "+7 925 747-11-03"
+    assert payload.contact_phone == "+79257471103"  # normalised to E.164
     assert payload.contact_email == "office@example.ru"
 
 

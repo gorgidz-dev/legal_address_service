@@ -5,8 +5,9 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
+from app.contacts import ContactName, Email, OptionalPhone
 from app.enums import ApplicationEventKind, ApplicationType, NoticePeriod, NotificationAudience, OwnerConnectionRequestStatus
 from app.schemas.address_photo import AddressPhotoRead
 from app.schemas.application import ApplicationRead
@@ -16,18 +17,12 @@ from app.validators import INNLegal
 
 class ProviderConnectionRequestCreate(BaseModel):
     company_name: str = Field(min_length=2, max_length=300)
-    contact_name: str = Field(min_length=2, max_length=200)
-    contact_email: EmailStr
-    contact_phone: Optional[str] = Field(default=None, max_length=80)
+    contact_name: ContactName
+    contact_email: Email
+    contact_phone: OptionalPhone = None
     city: Optional[str] = Field(default=None, max_length=120)
     address_count: Optional[int] = Field(default=None, ge=0, le=10_000)
     comment: Optional[str] = Field(default=None, max_length=2000)
-
-    @field_validator("contact_email")
-    @classmethod
-    def normalize_email(cls, value: str) -> str:
-        local, _, domain = value.partition("@")
-        return f"{local}@{domain.lower()}"
 
 
 class ProviderConnectionRequestRead(BaseModel):
@@ -36,7 +31,7 @@ class ProviderConnectionRequestRead(BaseModel):
     id: UUID
     company_name: str
     contact_name: str
-    contact_email: EmailStr
+    contact_email: str
     contact_phone: Optional[str]
     city: Optional[str]
     address_count: Optional[int]
@@ -51,19 +46,13 @@ class ProviderConnectionRequestRead(BaseModel):
 
 class _PublicClientApplicationCreateBase(BaseModel):
     address_id: UUID
-    contact_name: str = Field(min_length=2, max_length=200)
-    contact_email: EmailStr
-    contact_phone: Optional[str] = Field(default=None, max_length=80)
+    contact_name: ContactName
+    contact_email: Email
+    contact_phone: OptionalPhone = None
     password: str = Field(min_length=8, max_length=200)
     term_months: Literal[6, 11] = 11
     has_correspondence_service: bool = False
     contract_city: Optional[str] = Field(default=None, max_length=120)
-
-    @field_validator("contact_email")
-    @classmethod
-    def normalize_contact_email(cls, value: str) -> str:
-        local, _, domain = value.partition("@")
-        return f"{local}@{domain.lower()}"
 
 
 class PublicClientApplicationCreateInitial(_PublicClientApplicationCreateBase):

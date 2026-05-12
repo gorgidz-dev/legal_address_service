@@ -211,7 +211,7 @@ async def create_public_client_application(
     if payload.has_correspondence_service and address.correspondence_price is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Для адреса не подключена корреспонденция")
 
-    email = str(payload.contact_email).lower()
+    email = payload.contact_email  # already normalised by Email type
     existing = await db.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким e-mail уже существует")

@@ -31,7 +31,7 @@ def test_public_client_application_schema_normalizes_email() -> None:
         term_months=11,
     )
 
-    assert payload.contact_email == "CLIENT@example.com"
+    assert payload.contact_email == "client@example.com"  # full lowercase normalisation
 
 
 def test_public_initial_application_creates_client_user_application_and_session() -> None:

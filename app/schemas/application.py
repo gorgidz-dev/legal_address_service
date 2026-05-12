@@ -13,6 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.contacts import OptionalContactName, OptionalEmail, OptionalPhone
 from app.enums import ApplicationStatus, ApplicationType, NoticePeriod
 from app.validators import INNLegal
 
@@ -24,9 +25,9 @@ from app.validators import INNLegal
 class _ApplicationCreateBase(BaseModel):
     provider_id: UUID
     address_id: UUID
-    contact_name: Optional[str] = Field(default=None, max_length=200)
-    contact_phone: Optional[str] = Field(default=None, max_length=80)
-    contact_email: Optional[str] = Field(default=None, max_length=200)
+    contact_name: OptionalContactName = None
+    contact_phone: OptionalPhone = None
+    contact_email: OptionalEmail = None
     contract_city: Optional[str] = Field(
         default=None,
         description="Город заключения договора. Если не указан — берётся из адреса собственника.",
@@ -120,6 +121,6 @@ class PromoteToContractRequest(BaseModel):
     notice_period: NoticePeriod
     has_correspondence_service: bool = False
     contract_city: Optional[str] = None
-    contact_name: Optional[str] = Field(default=None, max_length=200)
-    contact_phone: Optional[str] = Field(default=None, max_length=80)
-    contact_email: Optional[str] = Field(default=None, max_length=200)
+    contact_name: OptionalContactName = None
+    contact_phone: OptionalPhone = None
+    contact_email: OptionalEmail = None

@@ -39,7 +39,8 @@ def test_provider_connection_request_create_normalizes_email() -> None:
         comment="Есть помещения в ЦАО",
     )
 
-    assert payload.contact_email == "Owner@example.ru"
+    assert payload.contact_email == "owner@example.ru"  # full lowercase
+    assert payload.contact_phone == "+79000000000"  # normalised to E.164
     assert payload.address_count == 4
 
 
