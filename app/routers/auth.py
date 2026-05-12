@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +26,12 @@ from app.schemas.auth import (
     LoginRequest,
 )
 from app.services.auth_security import hash_password, hash_token, verify_password
-from app.services.auth_sessions import SessionProfile, create_session, delete_session_cookie
+from app.services.auth_sessions import (
+    SessionProfile,
+    create_session,
+    delete_session_cookie,
+    rotate_session,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -78,6 +83,45 @@ async def login(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный e-mail или пароль")
 
     await create_session(db=db, user=user, response=response)
+    await db.commit()
+    await db.refresh(user)
+    return AuthResponse(user=CurrentUserRead.model_validate(user))
+
+
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh_session(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    token = request.cookies.get(settings.refresh_cookie_name)
+    if not token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нет refresh-токена")
+
+    now = utcnow()
+    result = await db.execute(
+        select(UserSession, User)
+        .join(User, User.id == UserSession.user_id)
+        .where(
+            UserSession.refresh_token_hash == hash_token(token),
+            UserSession.revoked_at.is_(None),
+            UserSession.refresh_expires_at > now,
+            User.is_active.is_(True),
+        )
+    )
+    row = result.first()
+    if row is None:
+        delete_session_cookie(response)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh-токен недействителен")
+
+    session, user = row
+    await rotate_session(
+        db=db,
+        old_session=session,
+        user=user,
+        response=response,
+        profile=SessionProfile.WEB,
+    )
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=CurrentUserRead.model_validate(user))

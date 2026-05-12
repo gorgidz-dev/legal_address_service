@@ -22,9 +22,15 @@ class Settings(BaseSettings):
     storage_backend: str = "local"
 
     session_cookie_name: str = "legal_address_session"
+    refresh_cookie_name: str = "legal_address_refresh"
+    refresh_cookie_path: str = "/auth/refresh"
     session_ttl_hours: int = 24 * 14  # legacy fallback
+    # access token lifetime
     web_session_ttl_hours: int = 24
     mobile_session_ttl_hours: int = 24 * 7
+    # refresh token lifetime
+    web_refresh_ttl_hours: int = 24 * 30
+    mobile_refresh_ttl_hours: int = 24 * 90
 
     session_cookie_secure: bool = False
     session_cookie_samesite: Literal["lax", "strict", "none"] = "lax"

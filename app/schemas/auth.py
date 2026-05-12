@@ -50,9 +50,19 @@ class SessionTokenRead(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_at: datetime
+    refresh_token: str
+    refresh_expires_at: datetime
 
 
 class MobileAuthResponse(AuthResponse):
+    session: SessionTokenRead
+
+
+class MobileRefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1, max_length=400)
+
+
+class MobileRefreshResponse(BaseModel):
     session: SessionTokenRead
 
 

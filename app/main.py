@@ -71,9 +71,11 @@ def _is_public_path(path: str, method: str) -> bool:
         "/openapi.json",
         "/favicon.ico",
         "/auth/login",
+        "/auth/refresh",
         "/auth/bootstrap-admin",
         "/auth/bootstrap-state",
         "/mobile/auth/login",
+        "/mobile/auth/refresh",
     }
     if path in public_exact:
         return True
