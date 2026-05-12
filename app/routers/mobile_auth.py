@@ -16,12 +16,12 @@ from app.schemas.auth import (
     MobileRefreshResponse,
     SessionTokenRead,
 )
-from app.services.auth_security import hash_token, verify_password
+from app.services.auth_security import verify_password
 from app.services.auth_sessions import (
     SessionProfile,
+    atomic_consume_refresh,
     create_session,
     extract_request_metadata,
-    rotate_session,
 )
 from app.services.rate_limit import (
     MOBILE_LOGIN_RULES,
@@ -86,30 +86,22 @@ async def mobile_refresh(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MobileRefreshResponse:
-    now = utcnow()
-    result = await db.execute(
-        select(UserSession, User)
-        .join(User, User.id == UserSession.user_id)
-        .where(
-            UserSession.refresh_token_hash == hash_token(payload.refresh_token),
-            UserSession.revoked_at.is_(None),
-            UserSession.refresh_expires_at > now,
-            User.is_active.is_(True),
-        )
-    )
-    row = result.first()
-    if row is None:
+    revoked = await atomic_consume_refresh(db, payload.refresh_token)
+    if revoked is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh-токен недействителен")
 
-    session, user = row
+    user = await db.get(User, revoked.user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Пользователь недоступен")
+
     ua, ip = extract_request_metadata(request)
-    credentials = await rotate_session(
+    credentials = await create_session(
         db=db,
-        old_session=session,
         user=user,
         profile=SessionProfile.MOBILE,
         user_agent=ua,
         ip_address=ip,
+        device_name=revoked.device_name,
     )
     await db.commit()
     return MobileRefreshResponse(session=_session_payload(credentials))

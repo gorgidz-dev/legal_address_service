@@ -4,8 +4,10 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
+from uuid import UUID
 
 from fastapi import Request, Response
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import utcnow
@@ -164,6 +166,41 @@ async def create_session(
     )
 
 
+@dataclass(frozen=True)
+class RevokedRefreshInfo:
+    user_id: UUID
+    device_name: str | None
+
+
+async def atomic_consume_refresh(
+    db: AsyncSession,
+    refresh_token: str,
+) -> RevokedRefreshInfo | None:
+    """Atomically revoke an active refresh token in a single UPDATE ... RETURNING.
+
+    Returns the (user_id, device_name) of the revoked row, or None if no active
+    refresh matched (already used, expired, revoked, or wrong token). The DB
+    guarantees only one concurrent transaction wins — parallel refresh requests
+    with the same token cannot both succeed.
+    """
+    now = utcnow()
+    stmt = (
+        update(UserSession)
+        .where(
+            UserSession.refresh_token_hash == hash_token(refresh_token),
+            UserSession.revoked_at.is_(None),
+            UserSession.refresh_expires_at > now,
+        )
+        .values(revoked_at=now, last_refreshed_at=now)
+        .returning(UserSession.user_id, UserSession.device_name)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+    if row is None:
+        return None
+    return RevokedRefreshInfo(user_id=row.user_id, device_name=row.device_name)
+
+
 async def rotate_session(
     *,
     db: AsyncSession,
@@ -175,7 +212,7 @@ async def rotate_session(
     user_agent: str | None = None,
     ip_address: str | None = None,
 ) -> SessionCredentials:
-    """Rotate-on-use: revoke old session, issue fresh pair (carries forward device_name)."""
+    """Legacy rotate helper. Prefer atomic_consume_refresh + create_session for race-proof rotation."""
     old_session.revoked_at = utcnow()
     old_session.last_refreshed_at = utcnow()
     await db.flush()
