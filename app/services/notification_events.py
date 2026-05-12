@@ -60,6 +60,28 @@ async def create_application_event(
     )
     db.add(event)
     await db.flush()
+
+    # Fan-out to subscribed webhook listeners. Inline enqueue (no HTTP yet — that
+    # happens in deliver_pending). Safe to do under the same transaction; webhooks
+    # are an opt-in feature and any error here would otherwise mask the real event.
+    from app.services.webhooks import dispatch_event  # avoid circular import
+
+    try:
+        await dispatch_event(
+            db=db,
+            event=f"application.{kind.value}",
+            data={
+                "application_id": str(application_id),
+                "kind": kind.value,
+                "audience": audience.value,
+                "title": title,
+                "message": message,
+                "payload": payload or {},
+            },
+        )
+    except Exception:  # pragma: no cover — defensive; webhook errors must never break event creation
+        pass
+
     return event
 
 

@@ -32,6 +32,7 @@ from app.routers import (
     providers,
     registry,
     templates,
+    webhooks,
     workflow,
 )
 
@@ -198,6 +199,7 @@ api_v1.include_router(applications.router)
 api_v1.include_router(registry.router)
 api_v1.include_router(templates.router)
 api_v1.include_router(demo.router)
+api_v1.include_router(webhooks.router)
 app.include_router(api_v1)
 
 
