@@ -70,6 +70,15 @@ class BootstrapState(BaseModel):
     can_bootstrap: bool
 
 
+class SessionRead(BaseModel):
+    id: UUID
+    created_at: datetime
+    expires_at: datetime
+    refresh_expires_at: Optional[datetime] = None
+    last_refreshed_at: Optional[datetime] = None
+    is_current: bool
+
+
 class InvitationCreateResult(BaseModel):
     id: UUID
     email: EmailStr

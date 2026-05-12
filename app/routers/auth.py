@@ -24,6 +24,7 @@ from app.schemas.auth import (
     InvitationCreateResult,
     InvitationRead,
     LoginRequest,
+    SessionRead,
 )
 from app.services.auth_security import hash_password, hash_token, verify_password
 from app.services.auth_sessions import (
@@ -129,23 +130,73 @@ async def refresh_session(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
+    """Logout current device only."""
+    session_id = getattr(request.state, "session_id", None)
+    if session_id is not None:
+        current = await db.get(UserSession, session_id)
+        if current is not None and current.user_id == user.id and current.revoked_at is None:
+            current.revoked_at = utcnow()
+            await db.commit()
+    delete_session_cookie(response)
+    return response
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_all_others(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    """Logout every session of this user except the current one."""
+    current_id = getattr(request.state, "session_id", None)
     now = utcnow()
+    stmt = select(UserSession).where(
+        UserSession.user_id == user.id,
+        UserSession.revoked_at.is_(None),
+        UserSession.expires_at > now,
+    )
+    if current_id is not None:
+        stmt = stmt.where(UserSession.id != current_id)
+    result = await db.execute(stmt)
+    for session in result.scalars().all():
+        session.revoked_at = now
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/sessions", response_model=list[SessionRead])
+async def list_my_sessions(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[SessionRead]:
+    now = utcnow()
+    current_id = getattr(request.state, "session_id", None)
     result = await db.execute(
-        select(UserSession).where(
+        select(UserSession)
+        .where(
             UserSession.user_id == user.id,
             UserSession.revoked_at.is_(None),
             UserSession.expires_at > now,
         )
+        .order_by(UserSession.created_at.desc())
     )
-    for session in result.scalars().all():
-        session.revoked_at = now
-    await db.commit()
-    delete_session_cookie(response)
-    return response
+    return [
+        SessionRead(
+            id=s.id,
+            created_at=s.created_at,
+            expires_at=s.expires_at,
+            refresh_expires_at=s.refresh_expires_at,
+            last_refreshed_at=s.last_refreshed_at,
+            is_current=(s.id == current_id),
+        )
+        for s in result.scalars().all()
+    ]
 
 
 @router.get("/me", response_model=CurrentUserRead)
