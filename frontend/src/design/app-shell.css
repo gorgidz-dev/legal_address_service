@@ -592,3 +592,128 @@ h1 {
 .sidebar-footer button:hover {
   color: var(--ds-indigo-700);
 }
+
+/* Override базового modal-backdrop из styles.css (z=5) — должен быть выше
+   sticky-фильтрбара публичного каталога (z=30) и панели сравнения (z=60). */
+.modal-backdrop {
+  z-index: 80;
+}
+
+/* ===================== Address services admin ===================== */
+.address-services-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  gap: 18px;
+  align-items: flex-start;
+}
+@media (max-width: 900px) {
+  .address-services-layout { grid-template-columns: 1fr; }
+}
+.address-services-list {
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  background: #fff;
+  padding: 12px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.address-services-list h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-slate-500);
+}
+.address-services-list ul { list-style: none; margin: 0; padding: 0; }
+.address-services-list li + li { margin-top: 4px; }
+.address-services-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--ds-radius-md);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ds-indigo-950);
+}
+.address-services-list__item span {
+  font-size: 11px;
+  color: var(--ds-slate-500);
+}
+.address-services-list__item:hover {
+  background: var(--ds-slate-50);
+}
+.address-services-list__item.selected {
+  background: var(--ds-indigo-50);
+  border-color: var(--ds-indigo-200);
+}
+.address-services-editor {
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  background: #fff;
+  padding: 16px;
+}
+.address-services-editor__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+  gap: 12px;
+}
+.address-services-editor__head h3 { margin: 0; font-size: 16px; }
+.address-services-editor__head span {
+  font-size: 12px;
+  color: var(--ds-slate-500);
+}
+.address-services-group + .address-services-group { margin-top: 18px; }
+.address-services-group h4 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-indigo-600);
+}
+.address-services-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.address-services-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) 140px 110px auto;
+  align-items: end;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--ds-slate-50);
+  border-radius: var(--ds-radius-md);
+}
+@media (max-width: 760px) {
+  .address-services-row {
+    grid-template-columns: 1fr;
+  }
+}
+.address-services-row__label { display: flex; flex-direction: column; gap: 2px; }
+.address-services-row__label strong { font-size: 13px; }
+.address-services-row__label .hint { font-size: 11px; color: var(--ds-slate-500); }
+.address-services-row__price { display: flex; flex-direction: column; font-size: 11px; color: var(--ds-slate-500); }
+.address-services-row__price input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-md);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.address-services-row__active { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.address-services-row__err {
+  grid-column: 1 / -1;
+  color: var(--ds-danger-fg);
+  font-size: 12px;
+}

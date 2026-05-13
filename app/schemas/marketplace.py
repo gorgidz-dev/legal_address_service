@@ -140,6 +140,15 @@ class ApplicationEventRead(BaseModel):
     read_at: Optional[datetime]
 
 
+class PublicAddressServiceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    kind: str
+    price: Decimal
+    is_active: bool
+
+
 class PublicAddressRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -148,6 +157,7 @@ class PublicAddressRead(BaseModel):
     provider_name: str
     full_address: str
     room_number: Optional[str]
+    description: Optional[str] = None
     price_6m: Decimal
     price_11m: Decimal
     selected_price: Decimal
@@ -160,3 +170,4 @@ class PublicAddressRead(BaseModel):
     updated_at: datetime
     photos: list[AddressPhotoRead] = Field(default_factory=list)
     main_photo_url: Optional[str] = None
+    services: list[PublicAddressServiceRead] = Field(default_factory=list)

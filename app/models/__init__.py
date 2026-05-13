@@ -1,7 +1,9 @@
 """ORM-модели. Импорт всех моделей здесь нужен Alembic-у для автогенерации."""
 
 from app.models.address import Address
+from app.models.address_chat import AddressChat, AddressChatMessage
 from app.models.address_photo import AddressPhoto
+from app.models.address_service import AddressService
 from app.models.application import Application
 from app.models.application_event import ApplicationEvent
 from app.models.auth_attempt import AuthAttempt
@@ -26,7 +28,10 @@ from app.models.webhook_subscription import WebhookSubscription
 
 __all__ = [
     "Address",
+    "AddressChat",
+    "AddressChatMessage",
     "AddressPhoto",
+    "AddressService",
     "Application",
     "ApplicationEvent",
     "AuthAttempt",

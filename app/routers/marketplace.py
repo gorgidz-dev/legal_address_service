@@ -27,6 +27,7 @@ from app.enums import (
 )
 from app.models.address import Address
 from app.models.address_photo import AddressPhoto
+from app.models.address_service import AddressService
 from app.models.application import Application
 from app.models.payment import Payment
 from app.models.provider import Provider
@@ -36,6 +37,7 @@ from app.schemas.address_photo import AddressPhotoRead
 from app.schemas.marketplace import (
     ProviderConnectionRequestCreate,
     ProviderConnectionRequestRead,
+    PublicAddressServiceRead,
     PublicClientApplicationCreate,
     PublicClientApplicationCreateAddressChange,
     PublicClientApplicationCreateInitial,
@@ -82,6 +84,7 @@ def public_address_from_row(
     provider: Provider,
     term_months: Literal[6, 11] = 11,
     photos: list[AddressPhoto] | None = None,
+    services: list[AddressService] | None = None,
 ) -> PublicAddressRead:
     selected_price: Decimal = address.price_6m if term_months == 6 else address.price_11m
     photo_models = [
@@ -91,12 +94,16 @@ def public_address_from_row(
         (p.url for p in photo_models if p.is_main),
         photo_models[0].url if photo_models else None,
     )
+    service_models = [
+        PublicAddressServiceRead.model_validate(s) for s in (services or []) if s.is_active
+    ]
     return PublicAddressRead(
         id=address.id,
         provider_id=address.provider_id,
         provider_name=provider.short_name,
         full_address=address.full_address,
         room_number=address.room_number,
+        description=address.description,
         price_6m=address.price_6m,
         price_11m=address.price_11m,
         selected_price=selected_price,
@@ -109,6 +116,7 @@ def public_address_from_row(
         updated_at=address.updated_at,
         photos=photo_models,
         main_photo_url=main_url,
+        services=service_models,
     )
 
 
@@ -131,6 +139,27 @@ async def _load_approved_photos_for(
     for photo in result.scalars().all():
         photos_by_address.setdefault(photo.address_id, []).append(photo)
     return photos_by_address
+
+
+async def _load_active_services_for(
+    db: AsyncSession,
+    address_ids: list,
+) -> dict:
+    """Возвращает {address_id: [AddressService, ...]} только активные."""
+    if not address_ids:
+        return {}
+    result = await db.execute(
+        select(AddressService)
+        .where(
+            AddressService.address_id.in_(address_ids),
+            AddressService.is_active.is_(True),
+        )
+        .order_by(AddressService.kind)
+    )
+    by_address: dict = {}
+    for svc in result.scalars().all():
+        by_address.setdefault(svc.address_id, []).append(svc)
+    return by_address
 
 
 @router.get("/addresses", response_model=list[PublicAddressRead])
@@ -163,13 +192,16 @@ async def public_addresses(
 
     result = await db.execute(stmt)
     rows = list(result.all())
-    photos_by_address = await _load_approved_photos_for(db, [a.id for a, _ in rows])
+    address_ids = [a.id for a, _ in rows]
+    photos_by_address = await _load_approved_photos_for(db, address_ids)
+    services_by_address = await _load_active_services_for(db, address_ids)
     return [
         public_address_from_row(
             address=address,
             provider=provider,
             term_months=6 if term_months == 6 else 11,
             photos=photos_by_address.get(address.id),
+            services=services_by_address.get(address.id),
         )
         for address, provider in rows
     ]

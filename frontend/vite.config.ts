@@ -6,7 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api/v1": "http://127.0.0.1:8000",
+      "/api/v1": {
+        target: "http://127.0.0.1:8000",
+        ws: true,
+        changeOrigin: false
+      },
       "/auth": "http://127.0.0.1:8000",
       "/client": "http://127.0.0.1:8000",
       "/owner": "http://127.0.0.1:8000",
@@ -20,7 +24,9 @@ export default defineConfig({
       "/registry": "http://127.0.0.1:8000",
       "/demo": "http://127.0.0.1:8000",
       "/document-templates": "http://127.0.0.1:8000",
-      "/egrn-extracts": "http://127.0.0.1:8000"
+      "/egrn-extracts": "http://127.0.0.1:8000",
+      "/admin": "http://127.0.0.1:8000",
+      "/address-photos": "http://127.0.0.1:8000"
     }
   }
 });

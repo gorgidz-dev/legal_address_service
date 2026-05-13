@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
 
 if TYPE_CHECKING:
+    from app.models.address_service import AddressService
     from app.models.provider import Provider
     from app.models.egrn_extract import EgrnExtract
 
@@ -51,6 +52,7 @@ class Address(UUIDPKMixin, TimestampMixin, Base):
 
     is_available: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
     publication_status: Mapped[str] = mapped_column(
         Text,
         server_default="'draft'",
@@ -66,3 +68,7 @@ class Address(UUIDPKMixin, TimestampMixin, Base):
 
     provider: Mapped["Provider"] = relationship(back_populates="addresses")
     egrn_extracts: Mapped[list["EgrnExtract"]] = relationship(back_populates="address")
+    services: Mapped[list["AddressService"]] = relationship(
+        back_populates="address",
+        cascade="all, delete-orphan",
+    )

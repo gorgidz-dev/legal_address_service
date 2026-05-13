@@ -316,9 +316,11 @@ def photo_public_url(photo: AddressPhoto) -> str:
     """URL для скачивания/отображения фото через FastAPI.
 
     Один маршрут на всех (admin/owner/public). Серверная сторона решает доступ
-    по статусу модерации.
+    по статусу модерации. Префикс /api/v1 — потому что роутер примонтирован
+    в api_v1 (см. app/main.py), а middleware `_is_public_path` пропускает
+    approved-фото только под этим префиксом.
     """
-    return f"/address-photos/{photo.id}/raw"
+    return f"/api/v1/address-photos/{photo.id}/raw"
 
 
 def photo_to_admin_dict(photo: AddressPhoto) -> dict:

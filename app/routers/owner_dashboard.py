@@ -4,6 +4,7 @@ from collections import defaultdict
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -133,3 +134,25 @@ async def get_owner_dashboard(
             for application, address in rows
         ],
     )
+
+
+class AddressDescriptionUpdate(BaseModel):
+    description: str | None = Field(default=None, max_length=4000)
+
+
+@router.patch("/addresses/{address_id}/description")
+async def update_address_description(
+    address_id: UUID,
+    payload: AddressDescriptionUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> dict:
+    address = await db.get(Address, address_id)
+    if address is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес не найден")
+    if address.provider_id != user.provider_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Адрес не принадлежит вашей организации")
+    address.description = (payload.description or "").strip() or None
+    await db.commit()
+    await db.refresh(address)
+    return {"id": str(address.id), "description": address.description}

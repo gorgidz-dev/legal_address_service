@@ -126,6 +126,27 @@ class AddressPhotoModerationStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class AddressServiceKind(str, Enum):
+    """Доп.услуги, доступные на адресе. Цену устанавливает собственник.
+
+    Каталог фиксированный (две группы):
+    - юридические документы: guarantee_letter, lease_agreement, owner_confirmation;
+    - физический сервис: door_sign, mail_reception, fns_visit_photo,
+      phone_answering, visitor_reception.
+    """
+    GUARANTEE_LETTER = "guarantee_letter"
+    LEASE_AGREEMENT = "lease_agreement"
+    OWNER_CONFIRMATION = "owner_confirmation"
+    DOOR_SIGN = "door_sign"
+    MAIL_RECEPTION = "mail_reception"
+    FNS_VISIT_PHOTO = "fns_visit_photo"
+    PHONE_ANSWERING = "phone_answering"
+    VISITOR_RECEPTION = "visitor_reception"
+
+
+ADDRESS_SERVICE_KIND_VALUES: tuple[str, ...] = tuple(k.value for k in AddressServiceKind)
+
+
 class PaymentProvider(str, Enum):
     CDEK_PAY = "cdek_pay"
     MANUAL_INVOICE = "manual_invoice"  # юр.лица: счёт от собственника или маркетплейса

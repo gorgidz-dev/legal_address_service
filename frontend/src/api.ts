@@ -2,7 +2,10 @@ import type {
   Address,
   AddressPublicationStatus,
   ActiveClientRegistryItem,
+  AddressChat,
+  AddressChatMessage,
   AddressPhotoAdmin,
+  AddressServiceAdmin,
   Application,
   ApplicationActionResult,
   ApplicationDocument,
@@ -266,6 +269,40 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ moderation_comment: moderationComment })
     }),
+  adminListAddressServices: (addressId: string) =>
+    request<AddressServiceAdmin[]>(`/admin/addresses/${addressId}/services`),
+  adminUpsertAddressService: (
+    addressId: string,
+    kind: string,
+    payload: { price: string | number; is_active: boolean }
+  ) =>
+    request<AddressServiceAdmin>(
+      `/admin/addresses/${addressId}/services/${kind}`,
+      { method: "PUT", body: JSON.stringify(payload) }
+    ),
+  adminDeleteAddressService: (addressId: string, kind: string) =>
+    request<void>(`/admin/addresses/${addressId}/services/${kind}`, {
+      method: "DELETE"
+    }),
+
+  // ===== Address chats =====
+  openChatForAddress: (addressId: string) =>
+    request<AddressChat>(`/chats/addresses/${addressId}`, { method: "POST" }),
+  listMyChats: () => request<AddressChat[]>(`/chats`),
+  getChatMessages: (chatId: string) =>
+    request<AddressChatMessage[]>(`/chats/${chatId}/messages`),
+  postChatMessage: (chatId: string, body: string) =>
+    request<AddressChatMessage>(`/chats/${chatId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body })
+    }),
+
+  // ===== Owner address description =====
+  ownerUpdateAddressDescription: (addressId: string, description: string | null) =>
+    request<{ id: string; description: string | null }>(
+      `/owner/addresses/${addressId}/description`,
+      { method: "PATCH", body: JSON.stringify({ description }) }
+    ),
 
   applications: () => request<Application[]>("/applications"),
   createApplication: (payload: unknown) =>

@@ -17,9 +17,11 @@ import {
 } from "lucide-react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { AddressChatPanel } from "./AddressChatPanel";
 import { api } from "./api";
 import { PhoneInput } from "./PhoneInput";
 import type {
+  AddressChat,
   CurrentUser,
   ProviderConnectionRequestCreate,
   PublicAddress,
@@ -28,24 +30,43 @@ import type {
 
 type PublicCatalogProps = {
   canBootstrap: boolean;
+  currentUser: CurrentUser | null;
   onAuthenticated: (user: CurrentUser) => void;
   onLoginClick: () => void;
 };
+
+type CatalogSort = "default" | "price_asc" | "price_desc" | "newest";
 
 type CatalogFilters = {
   query: string;
   city: string;
   fnsNumber: string;
+  sort: CatalogSort;
+  withCorr: boolean;
+  budgetUnder30k: boolean;
+  premium11: boolean;
 };
 
 const initialFilters: CatalogFilters = {
   query: "",
   city: "Москва",
   fnsNumber: "",
+  sort: "default",
+  withCorr: false,
+  budgetUnder30k: false,
+  premium11: false,
 };
 
 type CardOptions = { term: 6 | 11; corr: boolean };
 const defaultCardOptions: CardOptions = { term: 11, corr: false };
+
+// ИФНС Москвы: 1–31, 33–36, 43, 51.
+const MOSCOW_FNS_NUMBERS: number[] = [
+  ...Array.from({ length: 31 }, (_, i) => i + 1),
+  33, 34, 35, 36,
+  43,
+  51,
+];
 
 type OwnerRequestForm = {
   company_name: string;
@@ -125,6 +146,25 @@ function isRecent(createdAt: string): boolean {
   return Date.now() - ts <= NEW_ADDRESS_WINDOW_MS;
 }
 
+const SERVICE_KIND_LABEL: Record<string, string> = {
+  guarantee_letter: "Гарантийное письмо",
+  lease_agreement: "Договор аренды",
+  owner_confirmation: "Подтверждение собственника",
+  door_sign: "Табличка на входе",
+  mail_reception: "Приём почты",
+  fns_visit_photo: "Фотофиксация приёма ФНС",
+  phone_answering: "Звонки",
+  visitor_reception: "Приём посетителей",
+};
+const SERVICE_DOCUMENTS = new Set([
+  "guarantee_letter",
+  "lease_agreement",
+  "owner_confirmation",
+]);
+function serviceLabel(kind: string): string {
+  return SERVICE_KIND_LABEL[kind] ?? kind;
+}
+
 const heroStaggerVariants: Variants = {
   hidden: {},
   visible: {
@@ -147,7 +187,7 @@ const cardVariants: Variants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" } },
 };
 
-export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginClick }: PublicCatalogProps) {
+export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticated, onLoginClick }: PublicCatalogProps) {
   const reduceMotion = useReducedMotion();
   const motionVariants = reduceMotion ? undefined : heroStaggerVariants;
   const childMotion = reduceMotion ? undefined : heroChildVariants;
@@ -182,6 +222,32 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
   // Расширенный поиск — модалка с фильтрами (город + ИФНС).
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // Детальная карточка адреса (фото-галерея + услуги).
+  const [detailAddress, setDetailAddress] = useState<PublicAddress | null>(null);
+  const [detailPhotoIdx, setDetailPhotoIdx] = useState(0);
+
+  // Чат с собственником: открытый чат + indicator "ожидание входа".
+  const [activeChat, setActiveChat] = useState<AddressChat | null>(null);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatAuthPrompt, setChatAuthPrompt] = useState(false);
+
+  async function startChatWithOwner(address: PublicAddress) {
+    if (!currentUser) {
+      setChatAuthPrompt(true);
+      return;
+    }
+    setChatBusy(true);
+    try {
+      const chat = await api.openChatForAddress(address.id);
+      setActiveChat(chat);
+      setDetailAddress(null);
+    } catch (err) {
+      setApplicationError((err as Error).message);
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -207,12 +273,40 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
 
   const filteredAddresses = useMemo(() => {
     const q = filters.query.trim().toLowerCase();
-    if (!q) return addresses;
-    return addresses.filter((address) => {
-      const haystack = `${address.full_address} ${address.fns_number ?? ""} ${address.fns_city ?? ""} ${address.provider_name}`.toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [addresses, filters.query]);
+    let list = addresses;
+    if (q) {
+      list = list.filter((address) => {
+        const haystack = `${address.full_address} ${address.fns_number ?? ""} ${address.fns_city ?? ""} ${address.provider_name}`.toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+    if (filters.withCorr) {
+      list = list.filter((a) => a.correspondence_price != null);
+    }
+    if (filters.budgetUnder30k) {
+      list = list.filter((a) => Number(a.price_11m) < 30000);
+    }
+    if (filters.premium11) {
+      list = list.filter((a) => Number(a.price_11m) >= 25000);
+    }
+    if (filters.sort === "price_asc") {
+      list = [...list].sort((a, b) => Number(a.price_11m) - Number(b.price_11m));
+    } else if (filters.sort === "price_desc") {
+      list = [...list].sort((a, b) => Number(b.price_11m) - Number(a.price_11m));
+    } else if (filters.sort === "newest") {
+      list = [...list].sort(
+        (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+      );
+    }
+    return list;
+  }, [
+    addresses,
+    filters.query,
+    filters.withCorr,
+    filters.budgetUnder30k,
+    filters.premium11,
+    filters.sort,
+  ]);
 
   const ifnsCount = useMemo(() => {
     const set = new Set<number>();
@@ -234,8 +328,33 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
   const hasActiveFilters = Boolean(
     filters.query.trim() ||
       filters.fnsNumber ||
-      filters.city !== initialFilters.city,
+      filters.city !== initialFilters.city ||
+      filters.withCorr ||
+      filters.budgetUnder30k ||
+      filters.premium11 ||
+      filters.sort !== "default",
   );
+
+  // Compare state — выбранные адреса для сравнения.
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [compareOpen, setCompareOpen] = useState(false);
+  const compareList = useMemo(
+    () => filteredAddresses.filter((a) => compareIds.has(a.id)),
+    [filteredAddresses, compareIds],
+  );
+  const COMPARE_MAX = 4;
+  function toggleCompare(id: string) {
+    setCompareIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < COMPARE_MAX) next.add(id);
+      return next;
+    });
+  }
+  function clearCompare() {
+    setCompareIds(new Set());
+    setCompareOpen(false);
+  }
 
   function resetFilters() {
     setFilters(initialFilters);
@@ -389,56 +508,106 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
         </motion.div>
       </motion.section>
 
-      <section className="ds-filterbar" aria-label="Фильтры каталога">
-        <label className="ds-input">
-          <span className="ds-input__icon">
-            <Search size={14} />
-          </span>
-          <input
-            list="ds-public-cities"
-            placeholder="Найти адрес или ИФНС"
-            value={filters.query}
-            onChange={(event) => setFilters({ ...filters, query: event.target.value })}
-          />
-          <datalist id="ds-public-cities">
-            {cities.map((city) => (
-              <option key={city} value={city} />
-            ))}
-          </datalist>
-        </label>
-        <button
-          type="button"
-          className={`ds-chip${filters.city === "Москва" ? " ds-chip--active" : ""}`}
-          onClick={() =>
-            setFilters({ ...filters, city: filters.city === "Москва" ? "" : "Москва" })
-          }
-        >
-          Москва
-          {filters.city === "Москва" && <span className="ds-chip__x" aria-hidden>×</span>}
-        </button>
-        <label className="ds-input" style={{ minWidth: 160, flex: "0 0 auto" }}>
-          <span className="ds-input__icon">№</span>
-          <input
-            type="number"
-            min={1}
-            placeholder="ИФНС"
-            value={filters.fnsNumber}
-            onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
-          />
-        </label>
-        <button
-          type="button"
-          className="ds-btn ds-btn--secondary ds-btn--sm"
-          onClick={() => setAdvancedOpen(true)}
-        >
-          Расширенный поиск
-        </button>
-        {hasActiveFilters && (
-          <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm ds-filterbar__reset" onClick={resetFilters}>
-            Сбросить
+      <div className="ds-filterbar-wrap">
+        <section className="ds-filterbar" aria-label="Фильтры каталога">
+          <label className="ds-input">
+            <span className="ds-input__icon">
+              <Search size={14} />
+            </span>
+            <input
+              list="ds-public-cities"
+              placeholder="Найти адрес или ИФНС"
+              value={filters.query}
+              onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+            />
+            <datalist id="ds-public-cities">
+              {cities.map((city) => (
+                <option key={city} value={city} />
+              ))}
+            </datalist>
+          </label>
+          <button
+            type="button"
+            className={`ds-chip${filters.city === "Москва" ? " ds-chip--active" : ""}`}
+            onClick={() =>
+              setFilters({ ...filters, city: filters.city === "Москва" ? "" : "Москва" })
+            }
+          >
+            Москва
+            {filters.city === "Москва" && <span className="ds-chip__x" aria-hidden>×</span>}
           </button>
-        )}
-      </section>
+          <label className="ds-input" style={{ minWidth: 160, flex: "0 0 auto" }}>
+            <span className="ds-input__icon">№</span>
+            <select
+              value={filters.fnsNumber}
+              onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
+            >
+              <option value="">ИФНС: все</option>
+              {MOSCOW_FNS_NUMBERS.map((num) => (
+                <option key={num} value={num}>
+                  ИФНС № {num}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="ds-input" style={{ minWidth: 180, flex: "0 0 auto" }}>
+            <span className="ds-input__icon">⇅</span>
+            <select
+              value={filters.sort}
+              onChange={(event) =>
+                setFilters({ ...filters, sort: event.target.value as CatalogSort })
+              }
+            >
+              <option value="default">Без сортировки</option>
+              <option value="price_asc">Цена ↑</option>
+              <option value="price_desc">Цена ↓</option>
+              <option value="newest">Сначала новые</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="ds-btn ds-btn--secondary ds-btn--sm"
+            onClick={() => setAdvancedOpen(true)}
+          >
+            Расширенный поиск
+          </button>
+          {hasActiveFilters && (
+            <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm ds-filterbar__reset" onClick={resetFilters}>
+              Сбросить
+            </button>
+          )}
+        </section>
+        <section className="ds-quickchips" aria-label="Быстрые фильтры">
+          <button
+            type="button"
+            className={`ds-chip${filters.withCorr ? " ds-chip--active" : ""}`}
+            onClick={() => setFilters({ ...filters, withCorr: !filters.withCorr })}
+          >
+            ✉ С корреспонденцией
+            {filters.withCorr && <span className="ds-chip__x" aria-hidden>×</span>}
+          </button>
+          <button
+            type="button"
+            className={`ds-chip${filters.budgetUnder30k ? " ds-chip--active" : ""}`}
+            onClick={() =>
+              setFilters({ ...filters, budgetUnder30k: !filters.budgetUnder30k, premium11: false })
+            }
+          >
+            До 30 000 ₽
+            {filters.budgetUnder30k && <span className="ds-chip__x" aria-hidden>×</span>}
+          </button>
+          <button
+            type="button"
+            className={`ds-chip${filters.premium11 ? " ds-chip--active" : ""}`}
+            onClick={() =>
+              setFilters({ ...filters, premium11: !filters.premium11, budgetUnder30k: false })
+            }
+          >
+            Премиум от 25 000 ₽
+            {filters.premium11 && <span className="ds-chip__x" aria-hidden>×</span>}
+          </button>
+        </section>
+      </div>
 
       <div className="ds-resultbar" id="catalog-grid">
         <div>
@@ -453,7 +622,21 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
       </div>
 
       <div className="ds-gridwrap">
-        {error ? (
+        {loading ? (
+          <div className="ds-grid">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div className="ds-skel-card" key={idx}>
+                <div className="ds-skel-card__media" />
+                <div className="ds-skel-card__body">
+                  <div className="ds-skel-line ds-skel-line--lg" />
+                  <div className="ds-skel-line" style={{ width: "60%" }} />
+                  <div className="ds-skel-line" style={{ width: "40%" }} />
+                  <div className="ds-skel-line ds-skel-line--lg" style={{ width: "70%", marginTop: 12 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : error ? (
           <div className="ds-emptystate">
             <div className="ds-emptystate__icon ds-emptystate__icon--danger">
               <AlertTriangle size={26} strokeWidth={1.8} />
@@ -529,8 +712,34 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
                   : base;
               const hasCorr = address.correspondence_price !== null && address.correspondence_price !== undefined;
               return (
-                <motion.div className="ds-card" variants={cardMotion} key={address.id}>
-                  <div className="ds-card__media">
+                <motion.div
+                  className={`ds-card${compareIds.has(address.id) ? " ds-card--compared" : ""}`}
+                  variants={cardMotion}
+                  key={address.id}
+                >
+                  <label
+                    className={`ds-card__compare${compareIds.has(address.id) ? " selected" : ""}`}
+                    title="Добавить к сравнению"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={compareIds.has(address.id)}
+                      onChange={() => toggleCompare(address.id)}
+                      disabled={
+                        !compareIds.has(address.id) && compareIds.size >= COMPARE_MAX
+                      }
+                    />
+                    <span>Сравнить</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="ds-card__media ds-card__media--clickable"
+                    onClick={() => {
+                      setDetailPhotoIdx(0);
+                      setDetailAddress(address);
+                    }}
+                    aria-label={`Открыть карточку: ${address.full_address}`}
+                  >
                     {fresh && (
                       <span className="ds-card__media-overlay ds-badge ds-badge--new">
                         <span className="ds-badge__dot" />
@@ -545,7 +754,24 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
                         </div>
                       </div>
                     </div>
-                  </div>
+                    {address.main_photo_url && (
+                      <img
+                        className="ds-card__media-img"
+                        src={address.main_photo_url}
+                        alt=""
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    )}
+                    {address.photos.length > 1 && (
+                      <span className="ds-card__media-count">
+                        +{address.photos.length - 1} фото
+                      </span>
+                    )}
+                    <span className="ds-card__media-hint">Подробнее →</span>
+                  </button>
                   <div className="ds-card__body">
                     <h3 className="ds-card__title">{address.full_address}</h3>
                     <div className="ds-card__sub">
@@ -583,16 +809,16 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
                       )}
                     </div>
                     <div className="ds-card__row">
-                      <div className="ds-card__price">
-                        <span className="ds-card__price-from">от</span>
-                        {formatMoney(total)}
+                      <div className="ds-card__price-block">
+                        <div className="ds-card__price">{formatMoney(total)}</div>
+                        <div className="ds-card__price-term">за {options.term} мес.</div>
                       </div>
                       <button
                         type="button"
                         className="ds-btn ds-btn--primary ds-btn--sm"
                         onClick={() => openApplicationForm(address)}
                       >
-                        Подробнее
+                        Оформить заявку
                         <ChevronRight size={14} />
                       </button>
                     </div>
@@ -770,6 +996,220 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
         </div>
       )}
 
+      {detailAddress && (
+        <div className="modal-backdrop" onClick={() => setDetailAddress(null)}>
+          <div
+            className="modal-panel ds-address-detail"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span className="eyebrow">Адрес</span>
+                <h2>{detailAddress.full_address}</h2>
+              </div>
+              <button className="text-action" onClick={() => setDetailAddress(null)} type="button">
+                <X size={16} /> Закрыть
+              </button>
+            </header>
+
+            <div className="ds-address-detail__body">
+              <div className="ds-address-detail__gallery">
+                <div className="ds-address-detail__photo">
+                  <div className="ds-address-detail__photo-fallback">
+                    <div className="ds-card__media-fallback-initials">
+                      {streetInitials(detailAddress.full_address)}
+                    </div>
+                    <div className="ds-card__media-fallback-meta">
+                      {detailAddress.fns_number
+                        ? `ИФНС № ${detailAddress.fns_number}`
+                        : "ИФНС не указана"}
+                    </div>
+                  </div>
+                  {detailAddress.photos.length > 0 && (
+                    <img
+                      src={detailAddress.photos[detailPhotoIdx]?.url}
+                      alt=""
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  )}
+                  {detailAddress.photos.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        className="ds-address-detail__nav ds-address-detail__nav--prev"
+                        onClick={() =>
+                          setDetailPhotoIdx(
+                            (idx) =>
+                              (idx - 1 + detailAddress.photos.length) %
+                              detailAddress.photos.length,
+                          )
+                        }
+                        aria-label="Предыдущее фото"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        className="ds-address-detail__nav ds-address-detail__nav--next"
+                        onClick={() =>
+                          setDetailPhotoIdx(
+                            (idx) => (idx + 1) % detailAddress.photos.length,
+                          )
+                        }
+                        aria-label="Следующее фото"
+                      >
+                        ›
+                      </button>
+                    </>
+                  )}
+                </div>
+                {detailAddress.photos.length > 1 && (
+                  <div className="ds-address-detail__thumbs">
+                    {detailAddress.photos.map((photo, idx) => (
+                      <button
+                        type="button"
+                        key={photo.id}
+                        className={`ds-address-detail__thumb${
+                          idx === detailPhotoIdx ? " selected" : ""
+                        }`}
+                        onClick={() => setDetailPhotoIdx(idx)}
+                      >
+                        <img src={photo.url} alt="" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {detailAddress.description && (
+                  <p className="ds-address-detail__description">
+                    {detailAddress.description}
+                  </p>
+                )}
+              </div>
+
+              <aside className="ds-address-detail__info">
+                <div className="ds-address-detail__meta">
+                  <div>
+                    <span className="ds-address-detail__lbl">Собственник</span>
+                    <span className="ds-address-detail__val">
+                      {detailAddress.provider_name}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="ds-address-detail__lbl">ИФНС</span>
+                    <span className="ds-address-detail__val">
+                      {detailAddress.fns_number
+                        ? `№ ${detailAddress.fns_number}${
+                            detailAddress.fns_city ? ` по ${detailAddress.fns_city}` : ""
+                          }`
+                        : "не указана"}
+                    </span>
+                  </div>
+                  {detailAddress.room_number && (
+                    <div>
+                      <span className="ds-address-detail__lbl">Помещение</span>
+                      <span className="ds-address-detail__val">
+                        {detailAddress.room_number}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="ds-address-detail__prices">
+                  <div className="ds-address-detail__price-row">
+                    <span>6 месяцев</span>
+                    <strong>{formatMoney(detailAddress.price_6m)}</strong>
+                  </div>
+                  <div className="ds-address-detail__price-row">
+                    <span>11 месяцев</span>
+                    <strong>{formatMoney(detailAddress.price_11m)}</strong>
+                  </div>
+                  {detailAddress.correspondence_price && (
+                    <div className="ds-address-detail__price-row ds-address-detail__price-row--soft">
+                      <span>Корреспонденция</span>
+                      <strong>{formatMoney(detailAddress.correspondence_price)}</strong>
+                    </div>
+                  )}
+                </div>
+
+                {detailAddress.services.length > 0 && (() => {
+                  const docs = detailAddress.services.filter((s) =>
+                    SERVICE_DOCUMENTS.has(s.kind),
+                  );
+                  const extras = detailAddress.services.filter(
+                    (s) => !SERVICE_DOCUMENTS.has(s.kind),
+                  );
+                  return (
+                    <div className="ds-address-detail__services">
+                      {docs.length > 0 && (
+                        <>
+                          <h3>Входит в стоимость</h3>
+                          <ul className="ds-address-detail__services--included">
+                            {docs.map((svc) => (
+                              <li key={svc.id}>
+                                <span>{serviceLabel(svc.kind)}</span>
+                                <CheckCircle2
+                                  size={18}
+                                  strokeWidth={2.2}
+                                  className="ds-address-detail__check"
+                                  aria-label="включено"
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                      {extras.length > 0 && (
+                        <>
+                          <h3 style={{ marginTop: docs.length > 0 ? 12 : 0 }}>
+                            Дополнительные услуги
+                          </h3>
+                          <ul className="ds-address-detail__services--extras">
+                            {extras.map((svc) => (
+                              <li key={svc.id}>
+                                <span>{serviceLabel(svc.kind)}</span>
+                                <strong>{formatMoney(svc.price)}</strong>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                      <p className="ds-address-detail__services-hint">
+                        Подключаются после оформления заявки.
+                      </p>
+                    </div>
+                  );
+                })()}
+
+                <div className="ds-address-detail__ctas">
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn--primary ds-btn--md ds-address-detail__cta"
+                    onClick={() => {
+                      const target = detailAddress;
+                      setDetailAddress(null);
+                      openApplicationForm(target);
+                    }}
+                  >
+                    Оформить заявку
+                    <ChevronRight size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn--secondary ds-btn--md ds-address-detail__cta"
+                    disabled={chatBusy}
+                    onClick={() => startChatWithOwner(detailAddress)}
+                  >
+                    {chatBusy ? "Открываем…" : "Задать вопрос"}
+                  </button>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      )}
+
       {advancedOpen && (
         <div className="modal-backdrop" onClick={() => setAdvancedOpen(false)}>
           <div
@@ -806,13 +1246,17 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
               </label>
               <label className="field">
                 <span>ИФНС</span>
-                <input
-                  type="number"
-                  min={1}
+                <select
                   value={filters.fnsNumber}
                   onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
-                  placeholder="например, 46"
-                />
+                >
+                  <option value="">Все ИФНС</option>
+                  {MOSCOW_FNS_NUMBERS.map((num) => (
+                    <option key={num} value={num}>
+                      ИФНС № {num}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="field" style={{ gridColumn: "1 / -1" }}>
                 <span>Поиск по адресу или номеру ИФНС</span>
@@ -942,6 +1386,188 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {chatAuthPrompt && (
+        <div className="modal-backdrop" onClick={() => setChatAuthPrompt(false)}>
+          <div className="modal-panel" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <header>
+              <div>
+                <span className="eyebrow">Регистрация</span>
+                <h2>Чтобы написать собственнику — войдите</h2>
+              </div>
+              <button className="text-action" type="button" onClick={() => setChatAuthPrompt(false)}>
+                <X size={16} /> Закрыть
+              </button>
+            </header>
+            <p style={{ margin: 0, color: "var(--ds-slate-600)", fontSize: 14, lineHeight: 1.5 }}>
+              Чат становится доступен после регистрации. Вы можете оформить заявку на адрес —
+              аккаунт создастся автоматически вместе с заявкой. Либо войдите в существующий аккаунт.
+            </p>
+            <div className="row-actions" style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+              <button
+                type="button"
+                className="ds-btn ds-btn--ghost ds-btn--sm"
+                onClick={() => {
+                  setChatAuthPrompt(false);
+                  onLoginClick();
+                }}
+              >
+                Войти
+              </button>
+              {detailAddress && (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn--primary ds-btn--sm"
+                  onClick={() => {
+                    setChatAuthPrompt(false);
+                    const target = detailAddress;
+                    setDetailAddress(null);
+                    openApplicationForm(target);
+                  }}
+                >
+                  Оформить заявку
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeChat && currentUser && (
+        <div className="modal-backdrop" onClick={() => setActiveChat(null)}>
+          <div
+            className="modal-panel"
+            style={{ maxWidth: 640, width: "100%", padding: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AddressChatPanel
+              chat={activeChat}
+              currentUser={currentUser}
+              onClose={() => setActiveChat(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {compareIds.size > 0 && (
+        <div className="ds-compare-bar">
+          <div className="ds-compare-bar__count">
+            <strong>{compareIds.size}</strong> / {COMPARE_MAX} к сравнению
+          </div>
+          <button
+            type="button"
+            className="ds-btn ds-btn--primary ds-btn--sm"
+            onClick={() => setCompareOpen(true)}
+            disabled={compareIds.size < 2}
+          >
+            Открыть сравнение
+          </button>
+          <button
+            type="button"
+            className="ds-btn ds-btn--ghost ds-btn--sm"
+            onClick={clearCompare}
+          >
+            Сбросить
+          </button>
+        </div>
+      )}
+
+      {compareOpen && compareList.length >= 2 && (
+        <div className="modal-backdrop" onClick={() => setCompareOpen(false)}>
+          <div
+            className="modal-panel ds-compare-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span className="eyebrow">Сравнение</span>
+                <h2>{compareList.length} адреса бок-о-бок</h2>
+              </div>
+              <button className="text-action" type="button" onClick={() => setCompareOpen(false)}>
+                <X size={16} /> Закрыть
+              </button>
+            </header>
+            <div className="ds-compare-table" style={{ gridTemplateColumns: `170px repeat(${compareList.length}, minmax(180px, 1fr))` }}>
+              <div className="ds-compare-table__rowlbl" />
+              {compareList.map((a) => (
+                <div key={`hdr-${a.id}`} className="ds-compare-table__hdr">
+                  <div className="ds-compare-table__photo">
+                    {a.main_photo_url ? (
+                      <img src={a.main_photo_url} alt="" />
+                    ) : (
+                      <span>{streetInitials(a.full_address)}</span>
+                    )}
+                  </div>
+                  <strong>{a.full_address}</strong>
+                  <span>{a.provider_name}</span>
+                </div>
+              ))}
+
+              <div className="ds-compare-table__rowlbl">ИФНС</div>
+              {compareList.map((a) => (
+                <div key={`fns-${a.id}`} className="ds-compare-table__cell">
+                  {a.fns_number ? `№ ${a.fns_number}` : "—"}
+                </div>
+              ))}
+
+              <div className="ds-compare-table__rowlbl">Цена 6 мес</div>
+              {compareList.map((a) => (
+                <div key={`p6-${a.id}`} className="ds-compare-table__cell">{formatMoney(a.price_6m)}</div>
+              ))}
+
+              <div className="ds-compare-table__rowlbl">Цена 11 мес</div>
+              {compareList.map((a) => (
+                <div key={`p11-${a.id}`} className="ds-compare-table__cell">
+                  <strong>{formatMoney(a.price_11m)}</strong>
+                </div>
+              ))}
+
+              <div className="ds-compare-table__rowlbl">Корреспонденция</div>
+              {compareList.map((a) => (
+                <div key={`corr-${a.id}`} className="ds-compare-table__cell">
+                  {a.correspondence_price != null ? formatMoney(a.correspondence_price) : "—"}
+                </div>
+              ))}
+
+              <div className="ds-compare-table__rowlbl">Фото</div>
+              {compareList.map((a) => (
+                <div key={`ph-${a.id}`} className="ds-compare-table__cell">
+                  {a.photos.length} шт.
+                </div>
+              ))}
+
+              <div className="ds-compare-table__rowlbl">Доп.услуги</div>
+              {compareList.map((a) => (
+                <div key={`sv-${a.id}`} className="ds-compare-table__cell ds-compare-table__cell--mini">
+                  {a.services.length === 0
+                    ? "—"
+                    : a.services.map((s) => (
+                        <div key={s.id}>
+                          {serviceLabel(s.kind)} — {formatMoney(s.price)}
+                        </div>
+                      ))}
+                </div>
+              ))}
+
+              <div className="ds-compare-table__rowlbl" />
+              {compareList.map((a) => (
+                <div key={`cta-${a.id}`} className="ds-compare-table__cell">
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn--primary ds-btn--sm"
+                    onClick={() => {
+                      setCompareOpen(false);
+                      openApplicationForm(a);
+                    }}
+                  >
+                    Оформить
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </main>

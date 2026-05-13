@@ -320,12 +320,37 @@ export interface AddressPhotoAdmin {
   updated_at: string;
 }
 
+export type PublicAddressServiceKind =
+  | "guarantee_letter"
+  | "lease_agreement"
+  | "owner_confirmation"
+  | "door_sign"
+  | "mail_reception"
+  | "fns_visit_photo"
+  | "phone_answering"
+  | "visitor_reception";
+
+export interface AddressServiceAdmin {
+  id: string;
+  kind: PublicAddressServiceKind | string;
+  price: string;
+  is_active: boolean;
+}
+
+export interface PublicAddressService {
+  id: string;
+  kind: PublicAddressServiceKind | string;
+  price: string;
+  is_active: boolean;
+}
+
 export interface PublicAddress {
   id: string;
   provider_id: string;
   provider_name: string;
   full_address: string;
   room_number: string | null;
+  description: string | null;
   price_6m: string;
   price_11m: string;
   selected_price: string;
@@ -338,6 +363,26 @@ export interface PublicAddress {
   updated_at: string;
   photos: AddressPhoto[];
   main_photo_url: string | null;
+  services: PublicAddressService[];
+}
+
+export interface AddressChat {
+  id: string;
+  address_id: string;
+  address_full: string;
+  provider_name: string;
+  client_user_id: string;
+  client_email: string;
+  last_message_at: string | null;
+  created_at: string;
+}
+
+export interface AddressChatMessage {
+  id: string;
+  chat_id: string;
+  author_user_id: string;
+  body: string;
+  created_at: string;
 }
 
 export interface ProviderConnectionRequestCreate {

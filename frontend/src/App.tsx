@@ -39,6 +39,7 @@ import type {
   ActiveClientRegistryItem,
   Address,
   AddressPhotoAdmin,
+  AddressServiceAdmin,
   AddressPublicationStatus,
   Application,
   ApplicationDocumentModeration,
@@ -75,7 +76,8 @@ type View =
   | "access"
   | "photos"
   | "provider-requests"
-  | "address-moderation";
+  | "address-moderation"
+  | "address-services";
 
 const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "applications", label: "Заявки", icon: FolderOpen },
@@ -108,6 +110,12 @@ const adminAddressModerationNavItem: { id: View; label: string; icon: typeof Hom
   id: "address-moderation",
   label: "Модерация адресов",
   icon: Home
+};
+
+const adminAddressServicesNavItem: { id: View; label: string; icon: typeof Home } = {
+  id: "address-services",
+  label: "Услуги адресов",
+  icon: Settings
 };
 
 const ownerRequestStatusLabels: Record<string, string> = {
@@ -1092,6 +1100,7 @@ export default function App() {
           ...baseNavItems,
           adminProviderRequestsNavItem,
           adminAddressModerationNavItem,
+          adminAddressServicesNavItem,
           adminPhotosNavItem,
           adminNavItem
         ]
@@ -1132,6 +1141,7 @@ export default function App() {
     return (
       <PublicCatalog
         canBootstrap={canBootstrap}
+        currentUser={currentUser}
         onAuthenticated={(user) => setCurrentUser(user)}
         onLoginClick={() => setShowAuth(true)}
       />
@@ -1238,6 +1248,9 @@ export default function App() {
             )}
             {view === "address-moderation" && currentUser.role === "admin" && (
               <AdminAddressModerationView />
+            )}
+            {view === "address-services" && currentUser.role === "admin" && (
+              <AdminAddressServicesView />
             )}
             {view === "access" && currentUser.role === "admin" && (
               <>
@@ -3598,6 +3611,234 @@ function AdminAddressModerationView() {
 }
 
 type AddressPublicationStatusFilter = AddressPublicationStatus | "all";
+
+const ADDRESS_SERVICE_CATALOG: Array<{ kind: string; label: string; group: "doc" | "extra" }> = [
+  { kind: "guarantee_letter", label: "Гарантийное письмо", group: "doc" },
+  { kind: "lease_agreement", label: "Договор аренды", group: "doc" },
+  { kind: "owner_confirmation", label: "Подтверждение собственника", group: "doc" },
+  { kind: "door_sign", label: "Табличка на входе", group: "extra" },
+  { kind: "mail_reception", label: "Приём почты", group: "extra" },
+  { kind: "fns_visit_photo", label: "Фотофиксация приёма ФНС", group: "extra" },
+  { kind: "phone_answering", label: "Звонки", group: "extra" },
+  { kind: "visitor_reception", label: "Приём посетителей", group: "extra" }
+];
+
+type ServiceDraft = { price: string; is_active: boolean; saving: boolean; error: string | null };
+
+function AdminAddressServicesView() {
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [services, setServices] = useState<AddressServiceAdmin[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, ServiceDraft>>({});
+  const [loadingServices, setLoadingServices] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    api
+      .adminListAddressesForModeration()
+      .then((items) => {
+        setAddresses(items);
+        if (items.length > 0 && !selectedId) setSelectedId(items[0].id);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    setLoadingServices(true);
+    setError(null);
+    api
+      .adminListAddressServices(selectedId)
+      .then((items) => {
+        setServices(items);
+        const next: Record<string, ServiceDraft> = {};
+        for (const c of ADDRESS_SERVICE_CATALOG) {
+          const existing = items.find((s) => s.kind === c.kind);
+          next[c.kind] = {
+            price: existing ? String(existing.price) : "",
+            is_active: existing ? existing.is_active : false,
+            saving: false,
+            error: null
+          };
+        }
+        setDrafts(next);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoadingServices(false));
+  }, [selectedId]);
+
+  const selectedAddress = addresses.find((a) => a.id === selectedId);
+
+  async function save(kind: string) {
+    if (!selectedId) return;
+    const draft = drafts[kind];
+    if (!draft) return;
+    const priceNum = Number(draft.price);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      setDrafts((prev) => ({ ...prev, [kind]: { ...draft, error: "Некорректная цена" } }));
+      return;
+    }
+    setDrafts((prev) => ({ ...prev, [kind]: { ...draft, saving: true, error: null } }));
+    try {
+      const result = await api.adminUpsertAddressService(selectedId, kind, {
+        price: priceNum.toFixed(2),
+        is_active: draft.is_active
+      });
+      setServices((prev) => {
+        const without = prev.filter((s) => s.kind !== kind);
+        return [...without, result];
+      });
+      setDrafts((prev) => ({
+        ...prev,
+        [kind]: { price: String(result.price), is_active: result.is_active, saving: false, error: null }
+      }));
+    } catch (err) {
+      setDrafts((prev) => ({
+        ...prev,
+        [kind]: { ...draft, saving: false, error: (err as Error).message }
+      }));
+    }
+  }
+
+  async function removeService(kind: string) {
+    if (!selectedId) return;
+    if (!window.confirm("Удалить услугу с адреса?")) return;
+    try {
+      await api.adminDeleteAddressService(selectedId, kind);
+      setServices((prev) => prev.filter((s) => s.kind !== kind));
+      setDrafts((prev) => ({
+        ...prev,
+        [kind]: { price: "", is_active: false, saving: false, error: null }
+      }));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  if (loading) return <LoadingRows />;
+
+  return (
+    <section className="address-services-panel">
+      <InlineError message={error} />
+      <div className="address-services-layout">
+        <aside className="address-services-list">
+          <h3>Адреса</h3>
+          {addresses.length === 0 ? (
+            <p className="hint">Нет адресов</p>
+          ) : (
+            <ul>
+              {addresses.map((a) => (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    className={`address-services-list__item${
+                      a.id === selectedId ? " selected" : ""
+                    }`}
+                    onClick={() => setSelectedId(a.id)}
+                  >
+                    <strong>{a.full_address}</strong>
+                    <span>
+                      {addressPublicationStatusLabels[a.publication_status] ||
+                        a.publication_status}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+
+        <div className="address-services-editor">
+          {!selectedAddress ? (
+            <p className="hint">Выбери адрес слева</p>
+          ) : loadingServices ? (
+            <LoadingRows />
+          ) : (
+            <>
+              <header className="address-services-editor__head">
+                <h3>{selectedAddress.full_address}</h3>
+                <span>{services.filter((s) => s.is_active).length} активных услуг</span>
+              </header>
+
+              {(["doc", "extra"] as const).map((group) => (
+                <div key={group} className="address-services-group">
+                  <h4>{group === "doc" ? "Юр. документы" : "Платный сервис"}</h4>
+                  <div className="address-services-rows">
+                    {ADDRESS_SERVICE_CATALOG.filter((c) => c.group === group).map((cat) => {
+                      const draft = drafts[cat.kind];
+                      if (!draft) return null;
+                      const existing = services.find((s) => s.kind === cat.kind);
+                      return (
+                        <div key={cat.kind} className="address-services-row">
+                          <div className="address-services-row__label">
+                            <strong>{cat.label}</strong>
+                            <span className="hint">{cat.kind}</span>
+                          </div>
+                          <label className="address-services-row__price">
+                            <span>Цена, ₽</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={100}
+                              value={draft.price}
+                              placeholder="0"
+                              onChange={(e) =>
+                                setDrafts((prev) => ({
+                                  ...prev,
+                                  [cat.kind]: { ...draft, price: e.target.value }
+                                }))
+                              }
+                            />
+                          </label>
+                          <label className="address-services-row__active">
+                            <input
+                              type="checkbox"
+                              checked={draft.is_active}
+                              onChange={(e) =>
+                                setDrafts((prev) => ({
+                                  ...prev,
+                                  [cat.kind]: { ...draft, is_active: e.target.checked }
+                                }))
+                              }
+                            />
+                            <span>Активна</span>
+                          </label>
+                          <div className="row-actions">
+                            <Button
+                              disabled={draft.saving}
+                              onClick={() => save(cat.kind)}
+                            >
+                              {draft.saving ? "Сохраняем…" : existing ? "Сохранить" : "Добавить"}
+                            </Button>
+                            {existing && (
+                              <Button
+                                variant="secondary"
+                                onClick={() => removeService(cat.kind)}
+                              >
+                                Удалить
+                              </Button>
+                            )}
+                          </div>
+                          {draft.error && (
+                            <div className="address-services-row__err">{draft.error}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function TemplatesView() {
   return (
