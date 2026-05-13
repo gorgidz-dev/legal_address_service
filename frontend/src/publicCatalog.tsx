@@ -36,17 +36,16 @@ type CatalogFilters = {
   query: string;
   city: string;
   fnsNumber: string;
-  termMonths: 6 | 11;
-  correspondence: boolean;
 };
 
 const initialFilters: CatalogFilters = {
   query: "",
   city: "Москва",
   fnsNumber: "",
-  termMonths: 11,
-  correspondence: false,
 };
+
+type CardOptions = { term: 6 | 11; corr: boolean };
+const defaultCardOptions: CardOptions = { term: 11, corr: false };
 
 type OwnerRequestForm = {
   company_name: string;
@@ -172,6 +171,17 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
   const [applicationBusy, setApplicationBusy] = useState(false);
   const [applicationError, setApplicationError] = useState<string | null>(null);
 
+  // Per-card user choices: срок (6/11) и подключение корреспонденции.
+  // Применяются при клике "Подробнее" → пробрасываются в форму заявки.
+  const [cardOptions, setCardOptions] = useState<Record<string, CardOptions>>({});
+  const getCardOption = (id: string): CardOptions =>
+    cardOptions[id] ?? defaultCardOptions;
+  const updateCardOption = (id: string, patch: Partial<CardOptions>) =>
+    setCardOptions((prev) => ({ ...prev, [id]: { ...getCardOption(id), ...patch } }));
+
+  // Расширенный поиск — модалка с фильтрами (город + ИФНС).
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -180,8 +190,6 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
       .publicAddresses({
         city: filters.city.trim(),
         fns_number: filters.fnsNumber ? Number(filters.fnsNumber) : "",
-        term_months: filters.termMonths,
-        correspondence: filters.correspondence,
       })
       .then((result) => {
         if (alive) setAddresses(result);
@@ -195,7 +203,7 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
     return () => {
       alive = false;
     };
-  }, [filters.city, filters.fnsNumber, filters.termMonths, filters.correspondence, reloadKey]);
+  }, [filters.city, filters.fnsNumber, reloadKey]);
 
   const filteredAddresses = useMemo(() => {
     const q = filters.query.trim().toLowerCase();
@@ -226,8 +234,6 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
   const hasActiveFilters = Boolean(
     filters.query.trim() ||
       filters.fnsNumber ||
-      filters.correspondence ||
-      filters.termMonths !== initialFilters.termMonths ||
       filters.city !== initialFilters.city,
   );
 
@@ -261,12 +267,13 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
   }
 
   function openApplicationForm(address: PublicAddress) {
+    const options = getCardOption(address.id);
     setSelectedAddress(address);
     setApplicationError(null);
     setApplicationForm({
       ...initialClientApplicationForm,
-      term_months: filters.termMonths,
-      has_correspondence_service: filters.correspondence && Boolean(address.correspondence_price),
+      term_months: options.term,
+      has_correspondence_service: options.corr && Boolean(address.correspondence_price),
     });
   }
 
@@ -339,10 +346,7 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
           <button
             className="ds-btn ds-btn--primary ds-btn--md"
             type="button"
-            onClick={() => {
-              const grid = document.getElementById("catalog-grid");
-              grid?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
+            onClick={() => setAdvancedOpen(true)}
           >
             Подобрать адрес
             <ArrowRight size={14} />
@@ -358,7 +362,7 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
         variants={motionVariants}
       >
         <motion.h1 className="ds-hero__h1" variants={childMotion}>
-          Юридический адрес для бизнеса.<br />
+          Маркетплейс юридических адресов.<br />
           <em>За 1 день.</em>
         </motion.h1>
         <motion.p className="ds-hero__sub" variants={childMotion}>
@@ -392,7 +396,7 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
           </span>
           <input
             list="ds-public-cities"
-            placeholder="Найти адрес, ИФНС или собственника"
+            placeholder="Найти адрес или ИФНС"
             value={filters.query}
             onChange={(event) => setFilters({ ...filters, query: event.target.value })}
           />
@@ -412,15 +416,6 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
           Москва
           {filters.city === "Москва" && <span className="ds-chip__x" aria-hidden>×</span>}
         </button>
-        <select
-          className="ds-select"
-          value={filters.termMonths}
-          onChange={(event) => setFilters({ ...filters, termMonths: Number(event.target.value) as 6 | 11 })}
-          aria-label="Срок"
-        >
-          <option value={6}>Срок: 6 мес.</option>
-          <option value={11}>Срок: 11 мес.</option>
-        </select>
         <label className="ds-input" style={{ minWidth: 160, flex: "0 0 auto" }}>
           <span className="ds-input__icon">№</span>
           <input
@@ -433,11 +428,10 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
         </label>
         <button
           type="button"
-          className={`ds-chip${filters.correspondence ? " ds-chip--active" : ""}`}
-          onClick={() => setFilters({ ...filters, correspondence: !filters.correspondence })}
+          className="ds-btn ds-btn--secondary ds-btn--sm"
+          onClick={() => setAdvancedOpen(true)}
         >
-          + корреспонденция
-          {filters.correspondence && <span className="ds-chip__x" aria-hidden>×</span>}
+          Расширенный поиск
         </button>
         {hasActiveFilters && (
           <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm ds-filterbar__reset" onClick={resetFilters}>
@@ -522,20 +516,20 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
             initial={reduceMotion ? false : "hidden"}
             animate="visible"
             variants={gridMotion}
-            key={`${filters.city}-${filters.termMonths}-${filters.correspondence}-${filteredAddresses.length}`}
+            key={`${filters.city}-${filteredAddresses.length}`}
           >
             {filteredAddresses.map((address) => {
               const initials = streetInitials(address.full_address);
               const fresh = isRecent(address.created_at);
-              const price = filters.termMonths === 6 ? address.price_6m : address.price_11m;
+              const options = getCardOption(address.id);
+              const base = options.term === 6 ? address.price_6m : address.price_11m;
+              const total =
+                options.corr && address.correspondence_price
+                  ? Number(base) + Number(address.correspondence_price)
+                  : base;
+              const hasCorr = address.correspondence_price !== null && address.correspondence_price !== undefined;
               return (
-                <motion.button
-                  type="button"
-                  className="ds-card"
-                  variants={cardMotion}
-                  onClick={() => openApplicationForm(address)}
-                  key={address.id}
-                >
+                <motion.div className="ds-card" variants={cardMotion} key={address.id}>
                   <div className="ds-card__media">
                     {fresh && (
                       <span className="ds-card__media-overlay ds-badge ds-badge--new">
@@ -557,21 +551,53 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
                     <div className="ds-card__sub">
                       {address.room_number ? `${address.room_number} · ` : ""}
                       {address.fns_number ? `ИФНС № ${address.fns_number}` : ""}
-                      {address.fns_number && filters.termMonths ? " · " : ""}
-                      {filters.termMonths} мес
+                    </div>
+                    <div className="ds-card__options">
+                      <div className="ds-segmented" role="group" aria-label="Срок">
+                        <button
+                          type="button"
+                          className={options.term === 6 ? "selected" : ""}
+                          onClick={() => updateCardOption(address.id, { term: 6 })}
+                        >
+                          6 мес.
+                        </button>
+                        <button
+                          type="button"
+                          className={options.term === 11 ? "selected" : ""}
+                          onClick={() => updateCardOption(address.id, { term: 11 })}
+                        >
+                          11 мес.
+                        </button>
+                      </div>
+                      {hasCorr && (
+                        <label className="ds-corr-toggle">
+                          <input
+                            type="checkbox"
+                            checked={options.corr}
+                            onChange={(event) =>
+                              updateCardOption(address.id, { corr: event.target.checked })
+                            }
+                          />
+                          <span>+ корреспонденция {formatMoney(address.correspondence_price)}</span>
+                        </label>
+                      )}
                     </div>
                     <div className="ds-card__row">
                       <div className="ds-card__price">
                         <span className="ds-card__price-from">от</span>
-                        {formatMoney(price)}
+                        {formatMoney(total)}
                       </div>
-                      <span className="ds-btn ds-btn--ghost ds-btn--sm" aria-hidden>
+                      <button
+                        type="button"
+                        className="ds-btn ds-btn--primary ds-btn--sm"
+                        onClick={() => openApplicationForm(address)}
+                      >
                         Подробнее
                         <ChevronRight size={14} />
-                      </span>
+                      </button>
                     </div>
                   </div>
-                </motion.button>
+                </motion.div>
               );
             })}
           </motion.div>
@@ -741,6 +767,88 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {advancedOpen && (
+        <div className="modal-backdrop" onClick={() => setAdvancedOpen(false)}>
+          <div
+            className="modal-panel public-application-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span className="eyebrow">Подбор адреса</span>
+                <h2>Расширенный поиск</h2>
+              </div>
+              <button className="text-action" onClick={() => setAdvancedOpen(false)} type="button">
+                <X size={16} /> Закрыть
+              </button>
+            </header>
+            <p style={{ fontSize: 13, color: "var(--ds-slate-500)", marginTop: 0 }}>
+              Срок и подключение корреспонденции выбираются прямо в карточке адреса —
+              цена обновится автоматически.
+            </p>
+            <div className="form-grid">
+              <label className="field">
+                <span>Город</span>
+                <input
+                  list="ds-public-cities-modal"
+                  value={filters.city}
+                  onChange={(event) => setFilters({ ...filters, city: event.target.value })}
+                  placeholder="Москва"
+                />
+                <datalist id="ds-public-cities-modal">
+                  {cities.map((city) => (
+                    <option key={city} value={city} />
+                  ))}
+                </datalist>
+              </label>
+              <label className="field">
+                <span>ИФНС</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={filters.fnsNumber}
+                  onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
+                  placeholder="например, 46"
+                />
+              </label>
+              <label className="field" style={{ gridColumn: "1 / -1" }}>
+                <span>Поиск по адресу или номеру ИФНС</span>
+                <input
+                  value={filters.query}
+                  onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+                  placeholder="часть адреса, например «Тверская»"
+                />
+              </label>
+            </div>
+            <div
+              className="row-actions"
+              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
+            >
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn--ghost ds-btn--md"
+                  onClick={resetFilters}
+                >
+                  Сбросить
+                </button>
+              )}
+              <button
+                type="button"
+                className="ds-btn ds-btn--primary ds-btn--md"
+                onClick={() => {
+                  setAdvancedOpen(false);
+                  const grid = document.getElementById("catalog-grid");
+                  grid?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              >
+                Применить
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

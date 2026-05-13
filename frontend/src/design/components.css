@@ -402,6 +402,56 @@
   color: var(--ds-slate-500);
   margin-top: 3px;
 }
+.ds-card__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ds-segmented {
+  display: inline-flex;
+  background: var(--ds-slate-100);
+  border-radius: var(--ds-radius-md);
+  padding: 3px;
+  width: max-content;
+}
+
+.ds-segmented button {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ds-slate-600);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background var(--ds-motion-fast) var(--ds-ease-snappy),
+    color var(--ds-motion-fast) var(--ds-ease-snappy);
+}
+
+.ds-segmented button.selected {
+  background: #ffffff;
+  color: var(--ds-indigo-700);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.ds-corr-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ds-slate-600);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ds-corr-toggle input {
+  accent-color: var(--ds-indigo-600);
+  width: 16px;
+  height: 16px;
+}
+
 .ds-card__row {
   display: flex;
   justify-content: space-between;
