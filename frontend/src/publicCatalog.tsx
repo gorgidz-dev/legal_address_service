@@ -33,6 +33,8 @@ type PublicCatalogProps = {
   currentUser: CurrentUser | null;
   onAuthenticated: (user: CurrentUser) => void;
   onLoginClick: () => void;
+  /** Открыт ли каталог из кабинета — возврат назад. */
+  onOpenDashboard?: () => void;
 };
 
 type CatalogSort = "default" | "price_asc" | "price_desc" | "newest";
@@ -187,7 +189,7 @@ const cardVariants: Variants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" } },
 };
 
-export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticated, onLoginClick }: PublicCatalogProps) {
+export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticated, onLoginClick, onOpenDashboard }: PublicCatalogProps) {
   const reduceMotion = useReducedMotion();
   const motionVariants = reduceMotion ? undefined : heroStaggerVariants;
   const childMotion = reduceMotion ? undefined : heroChildVariants;
@@ -226,13 +228,30 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
   const [detailAddress, setDetailAddress] = useState<PublicAddress | null>(null);
   const [detailPhotoIdx, setDetailPhotoIdx] = useState(0);
 
-  // Чат с собственником: открытый чат + indicator "ожидание входа".
+  // Чат с собственником: открытый чат + indicator "ожидание входа" +
+  // "запомнить адрес для чата на момент логина".
   const [activeChat, setActiveChat] = useState<AddressChat | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [chatAuthPrompt, setChatAuthPrompt] = useState(false);
+  // Если клиент кликнул "Задать вопрос" неавторизованным — запоминаем id адреса.
+  // sessionStorage переживёт unmount каталога во время логина (AuthView рендерится
+  // вместо каталога), а useEffect ниже подберёт его обратно.
+  const PENDING_KEY = "ds:pending-chat-address-id";
+  const [pendingChatAddressId, setPendingChatAddressIdState] = useState<string | null>(
+    () => (typeof window !== "undefined" ? window.sessionStorage.getItem(PENDING_KEY) : null),
+  );
+  function setPendingChatAddressId(id: string | null) {
+    setPendingChatAddressIdState(id);
+    if (typeof window === "undefined") return;
+    if (id) window.sessionStorage.setItem(PENDING_KEY, id);
+    else window.sessionStorage.removeItem(PENDING_KEY);
+  }
 
   async function startChatWithOwner(address: PublicAddress) {
+    setChatError(null);
     if (!currentUser) {
+      setPendingChatAddressId(address.id);
       setChatAuthPrompt(true);
       return;
     }
@@ -242,11 +261,39 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
       setActiveChat(chat);
       setDetailAddress(null);
     } catch (err) {
-      setApplicationError((err as Error).message);
+      setChatError((err as Error).message);
     } finally {
       setChatBusy(false);
     }
   }
+
+  // Авто-открытие чата после логина / регистрации.
+  // Сработает один раз: currentUser появился И pendingChatAddressId есть.
+  useEffect(() => {
+    if (!currentUser || !pendingChatAddressId || activeChat || chatBusy) return;
+    let cancelled = false;
+    setChatBusy(true);
+    api
+      .openChatForAddress(pendingChatAddressId)
+      .then((chat) => {
+        if (cancelled) return;
+        setActiveChat(chat);
+        setDetailAddress(null);
+        setChatAuthPrompt(false);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setChatError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setChatBusy(false);
+          setPendingChatAddressId(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, pendingChatAddressId, activeChat, chatBusy]);
 
   useEffect(() => {
     let alive = true;
@@ -458,10 +505,17 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
           </a>
         </nav>
         <div className="ds-topnav__actions">
-          <button className="ds-btn ds-btn--ghost ds-btn--md" onClick={onLoginClick} type="button">
-            <KeyRound size={14} />
-            {canBootstrap ? "Первый вход" : "Войти"}
-          </button>
+          {currentUser && onOpenDashboard ? (
+            <button className="ds-btn ds-btn--ghost ds-btn--md" onClick={onOpenDashboard} type="button">
+              <KeyRound size={14} />
+              Кабинет
+            </button>
+          ) : (
+            <button className="ds-btn ds-btn--ghost ds-btn--md" onClick={onLoginClick} type="button">
+              <KeyRound size={14} />
+              {canBootstrap ? "Первый вход" : "Войти"}
+            </button>
+          )}
           <button
             className="ds-btn ds-btn--primary ds-btn--md"
             type="button"
@@ -1203,6 +1257,11 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                   >
                     {chatBusy ? "Открываем…" : "Задать вопрос"}
                   </button>
+                  {chatError && (
+                    <div className="ds-input-error-text" style={{ marginTop: 4 }}>
+                      {chatError}
+                    </div>
+                  )}
                 </div>
               </aside>
             </div>
@@ -1390,14 +1449,27 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
       )}
 
       {chatAuthPrompt && (
-        <div className="modal-backdrop" onClick={() => setChatAuthPrompt(false)}>
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            setChatAuthPrompt(false);
+            setPendingChatAddressId(null);
+          }}
+        >
           <div className="modal-panel" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
             <header>
               <div>
                 <span className="eyebrow">Регистрация</span>
                 <h2>Чтобы написать собственнику — войдите</h2>
               </div>
-              <button className="text-action" type="button" onClick={() => setChatAuthPrompt(false)}>
+              <button
+                className="text-action"
+                type="button"
+                onClick={() => {
+                  setChatAuthPrompt(false);
+                  setPendingChatAddressId(null);
+                }}
+              >
                 <X size={16} /> Закрыть
               </button>
             </header>

@@ -599,6 +599,191 @@ h1 {
   z-index: 80;
 }
 
+/* Унифицированный padding контента раздела во всех кабинетах:
+   client-shell / owner-shell — выровнять верхний/нижний/боковой отступы
+   относительно sidebar. */
+.app-shell .client-shell,
+.app-shell .owner-shell {
+  padding: 24px 28px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.app-shell .client-topbar,
+.app-shell .owner-topbar {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+.app-shell .client-heading,
+.app-shell .owner-heading {
+  margin: 0;
+  padding: 0;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+/* Базовый styles.css центрирует owner-layout (margin: auto). В sidebar-режиме
+   нам нужно прижать его к левому краю и использовать всю доступную ширину
+   контентной зоны. */
+.app-shell .owner-layout {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+  width: 100%;
+}
+.app-shell .owner-topbar {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+/* Если в Owner-разделе только один из owner-side/owner-main —
+   гридом из 1 колонки без второй. */
+.owner-layout--single {
+  grid-template-columns: 1fr !important;
+}
+
+/* Полноширинный раздел "Адреса": provider-card + метрики бок-о-бок сверху,
+   список адресов — авто-grid карточек ниже. Всё прижато к левому краю. */
+.owner-layout--single .owner-side {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  max-width: none;
+}
+.owner-layout--single .owner-side > .owner-provider-card {
+  grid-column: 1;
+  grid-row: 1;
+}
+.owner-layout--single .owner-side > .owner-metrics {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: stretch;
+}
+.owner-layout--single .owner-side > .owner-addresses {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.owner-layout--single .owner-addresses {
+  /* список → grid карточек, авто-fill по ширине, выравнивание влево. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-content: start;
+  justify-items: stretch;
+}
+/* .timeline-title — заголовок «Мои адреса» — занимает полную строку. */
+.owner-layout--single .owner-addresses .timeline-title {
+  grid-column: 1 / -1;
+}
+@media (max-width: 760px) {
+  .owner-layout--single .owner-side {
+    grid-template-columns: 1fr;
+  }
+  .owner-layout--single .owner-side > .owner-provider-card,
+  .owner-layout--single .owner-side > .owner-metrics {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
+/* ===================== Chats list panel ===================== */
+.ds-chatlist {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  background: #fff;
+}
+.ds-chatlist__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+.ds-chatlist__head .eyebrow {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ds-slate-500);
+  margin-bottom: 2px;
+}
+.ds-chatlist__count {
+  font-size: 12px;
+  color: var(--ds-slate-500);
+}
+.ds-chatlist__loading,
+.ds-chatlist__empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ds-slate-500);
+  padding: 14px;
+}
+.ds-chatlist__rows {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ds-chatlist__row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--ds-slate-50);
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  transition: border-color var(--ds-motion-fast) var(--ds-ease-snappy),
+    background var(--ds-motion-fast) var(--ds-ease-snappy);
+}
+.ds-chatlist__row:hover {
+  background: var(--ds-indigo-50);
+  border-color: var(--ds-indigo-200);
+}
+.ds-chatlist__row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ds-chatlist__row-main strong {
+  font-size: 13px;
+  color: var(--ds-indigo-950);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ds-chatlist__row-main span {
+  font-size: 12px;
+  color: var(--ds-slate-500);
+}
+.ds-chatlist__row-meta {
+  font-size: 11px;
+  color: var(--ds-slate-500);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ===================== Address services admin ===================== */
 .address-services-layout {
   display: grid;

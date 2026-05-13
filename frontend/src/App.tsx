@@ -14,6 +14,7 @@ import {
   Home,
   Image as ImageIcon,
   KeyRound,
+  MessageSquare,
   Loader2,
   LogOut,
   Monitor,
@@ -35,6 +36,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ApiError, api, packageDownloadUrl, paymentDocumentDownloadUrl } from "./api";
 import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
+import { ChatsListPanel } from "./ChatsListPanel";
 import type {
   ActiveClientRegistryItem,
   Address,
@@ -77,7 +79,8 @@ type View =
   | "photos"
   | "provider-requests"
   | "address-moderation"
-  | "address-services";
+  | "address-services"
+  | "address-chats";
 
 const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "applications", label: "Заявки", icon: FolderOpen },
@@ -116,6 +119,12 @@ const adminAddressServicesNavItem: { id: View; label: string; icon: typeof Home 
   id: "address-services",
   label: "Услуги адресов",
   icon: Settings
+};
+
+const adminAddressChatsNavItem: { id: View; label: string; icon: typeof Home } = {
+  id: "address-chats",
+  label: "Чаты",
+  icon: MessageSquare
 };
 
 const ownerRequestStatusLabels: Record<string, string> = {
@@ -1028,6 +1037,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [canBootstrap, setCanBootstrap] = useState(false);
+  // viewMode = "catalog" → залогиненный юзер открыл публичный каталог из кабинета.
+  // По умолчанию "dashboard" — после логина показываем кабинет.
+  const [viewMode, setViewMode] = useState<"dashboard" | "catalog">("dashboard");
   const [providers, setProviders] = useState<Provider[]>([]);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -1101,6 +1113,7 @@ export default function App() {
           adminProviderRequestsNavItem,
           adminAddressModerationNavItem,
           adminAddressServicesNavItem,
+          adminAddressChatsNavItem,
           adminPhotosNavItem,
           adminNavItem
         ]
@@ -1111,6 +1124,7 @@ export default function App() {
     await api.logout().catch(() => undefined);
     setCurrentUser(null);
     setShowAuth(false);
+    setViewMode("dashboard");
     setProviders([]);
     setAddresses([]);
     setApplications([]);
@@ -1143,17 +1157,48 @@ export default function App() {
         canBootstrap={canBootstrap}
         currentUser={currentUser}
         onAuthenticated={(user) => setCurrentUser(user)}
+        onLoginClick={() => {
+          // Запомнить, что юзер был на каталоге, — чтобы после логина
+          // вернуться сюда (а не в кабинет). Используется auto-open чата.
+          setViewMode("catalog");
+          setShowAuth(true);
+        }}
+        onOpenDashboard={() => setViewMode("dashboard")}
+      />
+    );
+  }
+
+  // Авторизованный пользователь явно открыл публичный каталог.
+  if (viewMode === "catalog") {
+    return (
+      <PublicCatalog
+        canBootstrap={canBootstrap}
+        currentUser={currentUser}
+        onAuthenticated={(user) => setCurrentUser(user)}
         onLoginClick={() => setShowAuth(true)}
+        onOpenDashboard={() => setViewMode("dashboard")}
       />
     );
   }
 
   if (currentUser.role === "client") {
-    return <ClientDashboardView user={currentUser} onLogout={handleLogout} />;
+    return (
+      <ClientDashboardView
+        user={currentUser}
+        onLogout={handleLogout}
+        onOpenCatalog={() => setViewMode("catalog")}
+      />
+    );
   }
 
   if (currentUser.role === "owner") {
-    return <OwnerDashboardView user={currentUser} onLogout={handleLogout} />;
+    return (
+      <OwnerDashboardView
+        user={currentUser}
+        onLogout={handleLogout}
+        onOpenCatalog={() => setViewMode("catalog")}
+      />
+    );
   }
 
   return (
@@ -1168,6 +1213,15 @@ export default function App() {
         </div>
 
         <nav className="nav">
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() => setViewMode("catalog")}
+            title="Открыть публичный каталог"
+          >
+            <Home size={18} strokeWidth={1.8} />
+            <span>Каталог</span>
+          </button>
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -1251,6 +1305,9 @@ export default function App() {
             )}
             {view === "address-services" && currentUser.role === "admin" && (
               <AdminAddressServicesView />
+            )}
+            {view === "address-chats" && currentUser.role === "admin" && (
+              <ChatsListPanel currentUser={currentUser} />
             )}
             {view === "access" && currentUser.role === "admin" && (
               <>
@@ -1406,7 +1463,18 @@ const paymentStatusLabels: Record<string, string> = {
   refunded: "возвращён"
 };
 
-function ClientDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) {
+type ClientCabinetView = "applications" | "chats";
+
+function ClientDashboardView({
+  user,
+  onLogout,
+  onOpenCatalog,
+}: {
+  user: CurrentUser;
+  onLogout: () => void;
+  onOpenCatalog: () => void;
+}) {
+  const [view, setView] = useState<ClientCabinetView>("applications");
   const [applications, setApplications] = useState<ClientApplication[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1442,34 +1510,71 @@ function ClientDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: 
   );
 
   return (
-    <main className="client-shell">
-      <header className="client-topbar">
+    <div className="app-shell">
+      <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">ЮА</div>
           <div>
-            <strong>Личный кабинет клиента</strong>
-            <span>{user.email}</span>
+            <strong>Личный кабинет</strong>
+            <span>клиент</span>
           </div>
         </div>
-        <div className="actions">
-          <NotificationCenter refreshKey={refreshKey} />
-          <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-            <RefreshCw size={16} /> Обновить
-          </Button>
-          <Button variant="secondary" onClick={onLogout}>
-            <LogOut size={16} /> Выйти
-          </Button>
+        <nav className="nav">
+          <button type="button" className="nav-item" onClick={onOpenCatalog} title="Открыть публичный каталог">
+            <Home size={18} strokeWidth={1.8} />
+            <span>Каталог</span>
+          </button>
+          <button
+            type="button"
+            className={view === "applications" ? "nav-item active" : "nav-item"}
+            onClick={() => setView("applications")}
+          >
+            <FolderOpen size={18} strokeWidth={1.8} />
+            <span>Заявки</span>
+          </button>
+          <button
+            type="button"
+            className={view === "chats" ? "nav-item active" : "nav-item"}
+            onClick={() => setView("chats")}
+          >
+            <MessageSquare size={18} strokeWidth={1.8} />
+            <span>Чаты</span>
+          </button>
+        </nav>
+        <div className="sidebar-footer">
+          <span>Клиент</span>
+          <strong>{user.email}</strong>
+          <button className="text-action" onClick={onLogout} type="button">
+            <LogOut size={15} /> Выйти
+          </button>
         </div>
-      </header>
+      </aside>
 
-      <section className="client-heading">
-        <span className="eyebrow">Мои заявки</span>
-        <h1>Статус и адрес по заявке на юридический адрес</h1>
-      </section>
+      <main className="client-shell">
+        <header className="client-topbar">
+          <div className="brand" style={{ visibility: "hidden" }} />
+          <div className="actions">
+            <NotificationCenter refreshKey={refreshKey} />
+            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
+              <RefreshCw size={16} /> Обновить
+            </Button>
+          </div>
+        </header>
 
-      <InlineError message={error} />
+        <section className="client-heading">
+          <span className="eyebrow">
+            {view === "applications" ? "Мои заявки" : "Сообщения"}
+          </span>
+          <h1>
+            {view === "applications"
+              ? "Статус и адрес по заявке на юридический адрес"
+              : "Чаты с собственниками"}
+          </h1>
+        </section>
 
-      {loading ? (
+        <InlineError message={error} />
+
+      {view === "applications" && (loading ? (
         <LoadingRows />
       ) : applications.length === 0 ? (
         <EmptyState title="Заявок пока нет" text="После отправки заявки она появится в этом кабинете." />
@@ -1574,12 +1679,26 @@ function ClientDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: 
             </div>
           ) : null}
         </section>
-      )}
-    </main>
+      ))}
+
+      {view === "chats" && <ChatsListPanel currentUser={user} />}
+      </main>
+    </div>
   );
 }
 
-function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) {
+type OwnerCabinetView = "applications" | "addresses" | "chats";
+
+function OwnerDashboardView({
+  user,
+  onLogout,
+  onOpenCatalog,
+}: {
+  user: CurrentUser;
+  onLogout: () => void;
+  onOpenCatalog: () => void;
+}) {
+  const [view, setView] = useState<OwnerCabinetView>("applications");
   const [dashboard, setDashboard] = useState<OwnerDashboard | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1695,39 +1814,91 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
   }
 
   return (
-    <main className="owner-shell">
-      <header className="owner-topbar">
+    <div className="app-shell">
+      <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">ЮА</div>
           <div>
-            <strong>Кабинет исполнителя</strong>
-            <span>{user.email}</span>
+            <strong>Кабинет</strong>
+            <span>исполнитель</span>
           </div>
         </div>
-        <div className="actions">
-          <NotificationCenter refreshKey={refreshKey} />
-          <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-            <RefreshCw size={16} /> Обновить
-          </Button>
-          <Button variant="secondary" onClick={onLogout}>
-            <LogOut size={16} /> Выйти
-          </Button>
+        <nav className="nav">
+          <button type="button" className="nav-item" onClick={onOpenCatalog} title="Открыть публичный каталог">
+            <Home size={18} strokeWidth={1.8} />
+            <span>Каталог</span>
+          </button>
+          <button
+            type="button"
+            className={view === "applications" ? "nav-item active" : "nav-item"}
+            onClick={() => setView("applications")}
+          >
+            <FolderOpen size={18} strokeWidth={1.8} />
+            <span>Заявки</span>
+          </button>
+          <button
+            type="button"
+            className={view === "addresses" ? "nav-item active" : "nav-item"}
+            onClick={() => setView("addresses")}
+          >
+            <Home size={18} strokeWidth={1.8} />
+            <span>Адреса</span>
+          </button>
+          <button
+            type="button"
+            className={view === "chats" ? "nav-item active" : "nav-item"}
+            onClick={() => setView("chats")}
+          >
+            <MessageSquare size={18} strokeWidth={1.8} />
+            <span>Чаты</span>
+          </button>
+        </nav>
+        <div className="sidebar-footer">
+          <span>Собственник</span>
+          <strong>{user.email}</strong>
+          <button className="text-action" onClick={onLogout} type="button">
+            <LogOut size={15} /> Выйти
+          </button>
         </div>
-      </header>
+      </aside>
 
-      <section className="owner-heading">
-        <span className="eyebrow">Собственник адреса</span>
-        <h1>Заявки и адреса, назначенные вашей организации</h1>
-      </section>
+      <main className="owner-shell">
+        <header className="owner-topbar">
+          <div className="brand" style={{ visibility: "hidden" }} />
+          <div className="actions">
+            <NotificationCenter refreshKey={refreshKey} />
+            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
+              <RefreshCw size={16} /> Обновить
+            </Button>
+          </div>
+        </header>
 
-      <InlineError message={error} />
+        <section className="owner-heading">
+          <span className="eyebrow">
+            {view === "applications"
+              ? "Заявки"
+              : view === "addresses"
+                ? "Адреса"
+                : "Сообщения"}
+          </span>
+          <h1>
+            {view === "applications"
+              ? "Заявки, назначенные вашей организации"
+              : view === "addresses"
+                ? "Адреса, привязанные к вашей организации"
+                : "Входящие сообщения по адресам"}
+          </h1>
+        </section>
 
-      {loading ? (
-        <LoadingRows />
-      ) : !dashboard ? (
-        <EmptyState title="Кабинет недоступен" text="Проверьте привязку пользователя к организации исполнителя." />
-      ) : (
-        <section className="owner-layout">
+        <InlineError message={error} />
+
+        {(view === "applications" || view === "addresses") && (loading ? (
+          <LoadingRows />
+        ) : !dashboard ? (
+          <EmptyState title="Кабинет недоступен" text="Проверьте привязку пользователя к организации исполнителя." />
+        ) : (
+          <section className={view === "applications" ? "owner-layout owner-layout--single" : "owner-layout owner-layout--single"}>
+          {view === "addresses" && (
           <aside className="owner-side">
             <div className="owner-provider-card">
               <Building2 size={22} />
@@ -1785,7 +1956,9 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
               )}
             </div>
           </aside>
+          )}
 
+          {view === "applications" && (
           <div className="owner-main">
             {applications.length ? (
               <div className="owner-application-list">
@@ -1966,18 +2139,22 @@ function OwnerDashboardView({ user, onLogout }: { user: CurrentUser; onLogout: (
               </div>
             ) : null}
           </div>
+          )}
         </section>
-      )}
+        ))}
 
-      {photoAddressId ? (
-        <AddressPhotosModal
-          addressId={photoAddressId}
-          addressLabel={photoAddressLabel}
-          mode="owner"
-          onClose={() => setPhotoAddressId(null)}
-        />
-      ) : null}
-    </main>
+        {view === "chats" && <ChatsListPanel currentUser={user} />}
+
+        {photoAddressId ? (
+          <AddressPhotosModal
+            addressId={photoAddressId}
+            addressLabel={photoAddressLabel}
+            mode="owner"
+            onClose={() => setPhotoAddressId(null)}
+          />
+        ) : null}
+      </main>
+    </div>
   );
 }
 
