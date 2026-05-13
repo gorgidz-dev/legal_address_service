@@ -1332,6 +1332,29 @@ function SbpPaymentPanel({
 
   const amountRub = (payment.amount_kopeks / 100).toLocaleString("ru-RU");
 
+  if (payment.provider === "manual_invoice") {
+    return (
+      <div style={cardStyle}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <strong>Оплата по счёту от юридического лица</strong>
+          <span>
+            {amountRub} ₽ · статус: <b>{paymentStatusLabels[payment.status]}</b>
+          </span>
+        </div>
+        <p style={{ margin: 0, color: "#596259" }}>
+          Собственник загрузит счёт-фактуру в комплекте документов на адрес. После
+          оплаты по реквизитам администратор подтвердит платёж вручную, и заявка
+          перейдёт в проверку.
+        </p>
+        {payment.status === "failed" ? (
+          <small style={{ color: "#c0392b" }}>
+            Оплата не подтверждена. Свяжитесь с поддержкой.
+          </small>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div style={cardStyle}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

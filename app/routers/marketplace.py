@@ -20,11 +20,15 @@ from app.enums import (
     ApplicationType,
     NotificationAudience,
     OwnerConnectionRequestStatus,
+    PaymentPayerType,
+    PaymentProvider,
+    PaymentStatus,
     UserRole,
 )
 from app.models.address import Address
 from app.models.address_photo import AddressPhoto
 from app.models.application import Application
+from app.models.payment import Payment
 from app.models.provider import Provider
 from app.models.provider_connection_request import ProviderConnectionRequest
 from app.models.user import User
@@ -54,6 +58,22 @@ from app.services.rate_limit import (
 from app.services.notification_events import create_application_event
 
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
+
+
+def _compute_amount_kopeks(address: Address, application: Application) -> int:
+    """Сумма к оплате: цена за выбранный срок + опц. корреспонденция, в копейках."""
+    from decimal import Decimal
+    term = application.term_months or 11
+    base: Decimal = address.price_6m if term == 6 else address.price_11m
+    total = base
+    if application.has_correspondence_service and address.correspondence_price is not None:
+        total += address.correspondence_price
+    return int((total * 100).quantize(Decimal("1")))
+
+
+def _pay_for_label(application: Application) -> str:
+    name = application.company_name or application.planned_client_name or "Юридический адрес"
+    return f"Юр. адрес: {name}"[:100]
 
 
 def public_address_from_row(
@@ -273,13 +293,43 @@ async def create_public_client_application(
     db.add(application)
     try:
         await db.flush()
+
+        # Платёжный flow: для физика — SBP инициируется отдельным /payments/initiate.
+        # Для юр.лица (только в address_change) — создаём manual_invoice плейсхолдер
+        # сразу, чтобы admin/owner видел заявку с ожидающим счётом.
+        is_juridical = (
+            isinstance(payload, PublicClientApplicationCreateAddressChange)
+            and payload.payer_type == PaymentPayerType.JURIDICAL
+        )
+        if is_juridical:
+            amount_kopeks = _compute_amount_kopeks(address, application)
+            invoice_payment = Payment(
+                application_id=application.id,
+                provider=PaymentProvider.MANUAL_INVOICE.value,
+                payer_type=PaymentPayerType.JURIDICAL.value,
+                status=PaymentStatus.AWAITING_USER.value,
+                amount_kopeks=amount_kopeks,
+                currency="RUR",
+                pay_for=_pay_for_label(application),
+                initiated_by=user.id,
+            )
+            db.add(invoice_payment)
+            await db.flush()
+            create_message = (
+                "Собственник загрузит счёт. После оплаты администратор подтвердит платёж вручную."
+            )
+        else:
+            create_message = (
+                "Оплатите заявку через СБП, чтобы передать её администратору на проверку."
+            )
+
         await create_application_event(
             db=db,
             application_id=application.id,
             kind=ApplicationEventKind.CREATED,
             audience=NotificationAudience.CLIENT,
             title="Заявка создана",
-            message="Оплатите заявку через СБП, чтобы передать её администратору на проверку.",
+            message=create_message,
             payload={"status": ApplicationStatus.AWAITING_PAYMENT.value},
             created_by=user.id,
         )

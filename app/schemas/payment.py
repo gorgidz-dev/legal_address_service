@@ -48,6 +48,16 @@ class PaymentRefundRequest(BaseModel):
     reason: str = Field(min_length=2, max_length=500)
 
 
+class PaymentManualConfirmRequest(BaseModel):
+    """Для provider=manual_invoice: админ подтверждает поступление оплаты вручную."""
+    comment: Optional[str] = Field(default=None, max_length=500)
+
+
+class PaymentRejectRequest(BaseModel):
+    """Для provider=manual_invoice: админ помечает платёж как не пришедший."""
+    reason: str = Field(min_length=2, max_length=500)
+
+
 class CdekCallbackPaymentBody(BaseModel):
     """Body, который CDEK Pay шлёт на наш webhook."""
 

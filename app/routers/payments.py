@@ -27,8 +27,10 @@ from app.models.payment import Payment
 from app.models.user import User
 from app.schemas.payment import (
     PaymentInitiateRequest,
+    PaymentManualConfirmRequest,
     PaymentRead,
     PaymentRefundRequest,
+    PaymentRejectRequest,
 )
 from app.services.cdek_pay import (
     CdekPayError,
@@ -95,6 +97,7 @@ async def initiate_payment(
     _assert_can_initiate(application, user)
 
     # Если уже есть активный платёж (pending/awaiting_user) — возвращаем его, не создаём дубль.
+    # Это покрывает и manual_invoice (создан в create) и cdek_pay (повторный клик кнопки).
     existing = await db.execute(
         select(Payment)
         .where(
@@ -108,6 +111,8 @@ async def initiate_payment(
     )
     active = existing.scalar_one_or_none()
     if active is not None:
+        # Для manual_invoice initiate ничего не делает — платёж уже создан,
+        # ждёт счёта от собственника и ручного подтверждения.
         return active
 
     amount_kopeks = await _compute_amount_kopeks(db, application)
@@ -201,6 +206,118 @@ async def cancel_payment(
             # Не валим запрос — просто переводим в cancelled у себя.
             pass
     payment.status = PaymentStatus.CANCELLED.value
+    await db.commit()
+    await db.refresh(payment)
+    return payment
+
+
+@router.post("/{payment_id}/mark-paid", response_model=PaymentRead)
+async def mark_payment_paid(
+    payment_id: UUID,
+    payload: PaymentManualConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> Payment:
+    """Ручное подтверждение оплаты для provider=manual_invoice (юр.лица).
+
+    SBP-платежи (cdek_pay) подтверждаются автоматически через webhook —
+    их сюда пропускать нельзя.
+    """
+    payment = await db.get(Payment, payment_id)
+    if payment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Платёж не найден")
+    if payment.provider != PaymentProvider.MANUAL_INVOICE.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "mark-paid доступен только для manual_invoice; cdek_pay подтверждается callback'ом",
+        )
+    if payment.status not in {
+        PaymentStatus.PENDING.value,
+        PaymentStatus.AWAITING_USER.value,
+    }:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Подтвердить можно только pending/awaiting_user; статус: {payment.status}",
+        )
+
+    payment.status = PaymentStatus.SUCCEEDED.value
+    payment.paid_at = utcnow()
+
+    application = await db.get(Application, payment.application_id)
+    if application is not None and application.status == ApplicationStatus.AWAITING_PAYMENT.value:
+        application.status = ApplicationStatus.PAID.value
+        comment_suffix = f" Комментарий: {payload.comment}" if payload.comment else ""
+        await create_application_event(
+            db=db,
+            application_id=application.id,
+            kind=ApplicationEventKind.STATUS_CHANGED,
+            audience=NotificationAudience.CLIENT,
+            title="Оплата подтверждена",
+            message=(
+                "Администратор подтвердил поступление оплаты по счёту. "
+                "Заявка передана на проверку."
+                + comment_suffix
+            ),
+            payload={
+                "status": ApplicationStatus.PAID.value,
+                "payment_id": str(payment.id),
+                "confirmed_by": str(admin.id),
+            },
+            created_by=admin.id,
+        )
+
+    await db.commit()
+    await db.refresh(payment)
+    return payment
+
+
+@router.post("/{payment_id}/reject-payment", response_model=PaymentRead)
+async def reject_manual_payment(
+    payment_id: UUID,
+    payload: PaymentRejectRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> Payment:
+    """Админ помечает manual_invoice платёж как не оплаченный (failed)."""
+    payment = await db.get(Payment, payment_id)
+    if payment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Платёж не найден")
+    if payment.provider != PaymentProvider.MANUAL_INVOICE.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "reject-payment доступен только для manual_invoice",
+        )
+    if payment.status not in {
+        PaymentStatus.PENDING.value,
+        PaymentStatus.AWAITING_USER.value,
+    }:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Отклонить можно только pending/awaiting_user; статус: {payment.status}",
+        )
+
+    payment.status = PaymentStatus.FAILED.value
+    payment.last_callback_payload = {
+        "rejected_by_admin": str(admin.id),
+        "reason": payload.reason,
+    }
+
+    application = await db.get(Application, payment.application_id)
+    if application is not None and application.status == ApplicationStatus.AWAITING_PAYMENT.value:
+        await create_application_event(
+            db=db,
+            application_id=application.id,
+            kind=ApplicationEventKind.STATUS_CHANGED,
+            audience=NotificationAudience.CLIENT,
+            title="Оплата не подтверждена",
+            message=(
+                "Администратор не подтвердил оплату по счёту. "
+                f"Причина: {payload.reason}. Свяжитесь с поддержкой."
+            ),
+            payload={"payment_id": str(payment.id), "reason": payload.reason},
+            created_by=admin.id,
+        )
+
     await db.commit()
     await db.refresh(payment)
     return payment

@@ -21,7 +21,7 @@ class Payment(UUIDPKMixin, TimestampMixin, Base):
             name="status_valid",
         ),
         CheckConstraint("payer_type IN ('individual','juridical')", name="payer_type_valid"),
-        CheckConstraint("provider IN ('cdek_pay')", name="provider_valid"),
+        CheckConstraint("provider IN ('cdek_pay', 'manual_invoice')", name="provider_valid"),
         CheckConstraint("amount_kopeks > 0", name="amount_positive"),
         Index("ix_payments_application_id", "application_id"),
         Index("ix_payments_status_created", "status", "created_at"),

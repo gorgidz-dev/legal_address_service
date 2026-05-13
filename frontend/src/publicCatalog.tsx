@@ -78,6 +78,7 @@ type ClientApplicationForm = {
   password: string;
   term_months: 6 | 11;
   has_correspondence_service: boolean;
+  payer_type: "individual" | "juridical";
 };
 
 const initialClientApplicationForm: ClientApplicationForm = {
@@ -90,6 +91,7 @@ const initialClientApplicationForm: ClientApplicationForm = {
   password: "",
   term_months: 11,
   has_correspondence_service: false,
+  payer_type: "individual",
 };
 
 const NEW_ADDRESS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -295,6 +297,7 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
             type: "address_change",
             client_inn: applicationForm.client_inn.trim(),
             notice_period: "1m",
+            payer_type: applicationForm.payer_type,
           };
     try {
       const result = await api.createPublicApplication(payload);
@@ -626,16 +629,37 @@ export default function PublicCatalog({ canBootstrap, onAuthenticated, onLoginCl
                 />
               </label>
             ) : (
-              <label className="field">
-                <span>ИНН компании</span>
-                <input
-                  inputMode="numeric"
-                  maxLength={10}
-                  value={applicationForm.client_inn}
-                  onChange={(event) => setApplicationForm({ ...applicationForm, client_inn: event.target.value })}
-                  required
-                />
-              </label>
+              <>
+                <label className="field">
+                  <span>ИНН компании</span>
+                  <input
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={applicationForm.client_inn}
+                    onChange={(event) => setApplicationForm({ ...applicationForm, client_inn: event.target.value })}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Способ оплаты</span>
+                  <div className="segmented public-segmented">
+                    <button
+                      className={applicationForm.payer_type === "individual" ? "selected" : ""}
+                      onClick={() => setApplicationForm({ ...applicationForm, payer_type: "individual" })}
+                      type="button"
+                    >
+                      Я плачу как физлицо (СБП)
+                    </button>
+                    <button
+                      className={applicationForm.payer_type === "juridical" ? "selected" : ""}
+                      onClick={() => setApplicationForm({ ...applicationForm, payer_type: "juridical" })}
+                      type="button"
+                    >
+                      Счёт на юр.лицо
+                    </button>
+                  </div>
+                </label>
+              </>
             )}
 
             <div className="client-application-grid">

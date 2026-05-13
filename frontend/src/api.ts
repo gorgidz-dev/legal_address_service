@@ -212,6 +212,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ value_refund_kopeks: valueRefundKopeks, reason })
     }),
+  adminMarkPaymentPaid: (paymentId: string, comment?: string) =>
+    request<Payment>(`/payments/${paymentId}/mark-paid`, {
+      method: "POST",
+      body: JSON.stringify({ comment: comment ?? null })
+    }),
+  adminRejectPayment: (paymentId: string, reason: string) =>
+    request<Payment>(`/payments/${paymentId}/reject-payment`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
+    }),
 
   adminListProviderRequests: (status?: OwnerConnectionRequestStatus) => {
     const query = status ? `?status=${status}` : "";

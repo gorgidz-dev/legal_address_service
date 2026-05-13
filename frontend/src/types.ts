@@ -137,11 +137,14 @@ export type PaymentStatus =
   | "refund_requested"
   | "refunded";
 
+export type PaymentProvider = "cdek_pay" | "manual_invoice";
+export type PaymentPayerType = "individual" | "juridical";
+
 export interface Payment {
   id: string;
   application_id: string;
-  provider: string;
-  payer_type: "individual" | "juridical";
+  provider: PaymentProvider;
+  payer_type: PaymentPayerType;
   status: PaymentStatus;
   amount_kopeks: number;
   currency: string;
@@ -413,6 +416,7 @@ export type PublicClientApplicationCreate =
       notice_period: NoticePeriod;
       has_correspondence_service: boolean;
       contract_city?: string | null;
+      payer_type?: PaymentPayerType;
     };
 
 export interface PublicClientApplicationResult {

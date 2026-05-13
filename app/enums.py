@@ -91,6 +91,7 @@ class DocumentFileKind(str, Enum):
     OWNER_CONSENT = "owner_consent"
     POSTAL_SERVICE = "postal_service"
     ADMIN_REVIEW_FILE = "admin_review_file"
+    INVOICE = "invoice"  # счёт на оплату для юр.лица — owner-uploaded
 
 
 class ApplicationEventKind(str, Enum):
@@ -127,6 +128,7 @@ class AddressPhotoModerationStatus(str, Enum):
 
 class PaymentProvider(str, Enum):
     CDEK_PAY = "cdek_pay"
+    MANUAL_INVOICE = "manual_invoice"  # юр.лица: счёт от собственника или маркетплейса
 
 
 class PaymentPayerType(str, Enum):

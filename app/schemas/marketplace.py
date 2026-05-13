@@ -8,7 +8,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contacts import ContactName, Email, OptionalPhone
-from app.enums import ApplicationEventKind, ApplicationType, NoticePeriod, NotificationAudience, OwnerConnectionRequestStatus
+from app.enums import (
+    ApplicationEventKind,
+    ApplicationType,
+    NoticePeriod,
+    NotificationAudience,
+    OwnerConnectionRequestStatus,
+    PaymentPayerType,
+)
 from app.schemas.address_photo import AddressPhotoRead
 from app.schemas.application import ApplicationRead
 from app.schemas.auth import CurrentUserRead
@@ -90,6 +97,11 @@ class PublicClientApplicationCreateAddressChange(_PublicClientApplicationCreateB
     type: Literal[ApplicationType.ADDRESS_CHANGE] = ApplicationType.ADDRESS_CHANGE
     client_inn: INNLegal
     notice_period: NoticePeriod = NoticePeriod.ONE_MONTH
+    # Для смены адреса клиент выбирает способ оплаты: СБП от физлица или счёт на ЮЛ.
+    # При INITIAL_REGISTRATION ЮЛ ещё не существует, поэтому payer_type всегда individual.
+    payer_type: Literal[PaymentPayerType.INDIVIDUAL, PaymentPayerType.JURIDICAL] = (
+        PaymentPayerType.INDIVIDUAL
+    )
 
 
 PublicClientApplicationCreate = Annotated[
