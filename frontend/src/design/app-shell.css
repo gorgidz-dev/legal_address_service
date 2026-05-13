@@ -1,0 +1,594 @@
+/*
+ * App-shell skin — приводит admin / client / owner-кабинеты к стилю
+ * публичного каталога (см. design/tokens.css + design/catalog.css).
+ *
+ * Стратегия: оверлей. Подключается после styles.css в main.tsx и точечно
+ * перекрашивает уже существующие классы (.sidebar, .nav-item, .btn,
+ * .workspace, .eyebrow, .status, .client-shell, .owner-application и т.п.)
+ * — старая разметка остаётся, меняется только визуальный язык.
+ *
+ * Не трогает .ds-* (публичный каталог уже стилизован) и не переписывает
+ * .address-photo-* / .photo-card-* (WIP пользователя в styles.css).
+ */
+
+/* === Базовая типографика + фон === */
+:root {
+  font-family: var(--ds-font-sans);
+  color: var(--ds-page-fg);
+  background: var(--ds-page-bg);
+}
+
+body {
+  background: var(--ds-page-bg);
+  /* убираем "клетчатый" фон — переход на чистый off-white как у каталога */
+}
+
+/* Жирные заголовки в стиле каталога */
+h1,
+h2,
+h3 {
+  font-family: var(--ds-font-sans);
+  color: var(--ds-page-fg);
+  letter-spacing: var(--ds-tracking-tight);
+}
+
+h1 {
+  color: var(--ds-indigo-950);
+  font-size: var(--ds-text-display-lg);
+  font-weight: 700;
+  letter-spacing: var(--ds-tracking-tighter);
+  line-height: 1.05;
+}
+
+/* === Sidebar — фирменный индиго-акцент === */
+.sidebar {
+  background: #ffffff;
+  border-right: 1px solid var(--ds-border-soft);
+  padding: 24px 18px;
+  gap: 22px;
+}
+
+.brand {
+  min-height: auto;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  background: var(--ds-indigo-600);
+  border: none;
+  border-radius: var(--ds-radius-md);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.brand strong {
+  color: var(--ds-indigo-950);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: var(--ds-tracking-snug);
+}
+
+.brand span {
+  color: var(--ds-slate-500);
+  font-size: 12px;
+}
+
+.nav {
+  gap: 4px;
+}
+
+.nav-item {
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-slate-600);
+  font-size: 14px;
+  font-weight: 500;
+  transition:
+    background var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.nav-item:hover {
+  background: var(--ds-slate-100);
+  color: var(--ds-indigo-700);
+}
+
+.nav-item.active {
+  background: var(--ds-indigo-50);
+  border-color: var(--ds-indigo-100);
+  color: var(--ds-indigo-700);
+  font-weight: 600;
+}
+
+.nav-item svg {
+  color: currentColor;
+}
+
+.sidebar-footer {
+  border-top: 1px solid var(--ds-border-soft);
+  color: var(--ds-slate-500);
+  font-size: 12px;
+}
+
+.sidebar-footer strong {
+  color: var(--ds-indigo-950);
+  font-family: var(--ds-font-mono);
+}
+
+/* === Workspace заголовок === */
+.workspace {
+  padding: 32px 36px;
+}
+
+.topbar {
+  margin-bottom: 28px;
+  max-width: 1280px;
+}
+
+.eyebrow {
+  color: var(--ds-slate-500);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: var(--ds-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* === Кнопки === */
+.btn {
+  border-radius: var(--ds-radius-md);
+  font-weight: 600;
+  font-size: 14px;
+  min-height: 38px;
+  padding: 9px 16px;
+  letter-spacing: var(--ds-tracking-snug);
+  box-shadow: var(--ds-shadow-sm);
+  transition:
+    background var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.btn.primary {
+  background: var(--ds-indigo-600);
+  color: #ffffff;
+  border: 1px solid var(--ds-indigo-600);
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--ds-indigo-700);
+  border-color: var(--ds-indigo-700);
+  box-shadow: var(--ds-shadow-md);
+}
+
+.btn.secondary {
+  background: #ffffff;
+  border: 1px solid var(--ds-slate-200);
+  color: var(--ds-slate-700);
+}
+
+.btn.secondary:hover:not(:disabled) {
+  background: var(--ds-slate-50);
+  border-color: var(--ds-slate-300);
+  color: var(--ds-indigo-700);
+}
+
+.btn.ghost {
+  color: var(--ds-slate-600);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  color: var(--ds-indigo-700);
+  background: var(--ds-slate-100);
+}
+
+/* === Generic карточки (table-panel, .modal-panel, .stack-* и т.п.) === */
+.table-panel,
+.metric-line div,
+.registry-filter,
+.registry-table,
+.owner-documents-panel,
+.demo-seed-panel,
+.public-login-panel,
+.owner-request-panel,
+.timeline-panel,
+.payment-panel,
+.simple-list .simple-item {
+  background: #ffffff;
+  border-color: var(--ds-border-soft) !important;
+  border-radius: var(--ds-radius-lg);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+/* === Notification button (header bell) === */
+.notification-button {
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-md);
+  background: #ffffff;
+  color: var(--ds-slate-700);
+  width: 38px;
+  height: 38px;
+}
+
+.notification-button:hover,
+.notification-button.active {
+  border-color: var(--ds-indigo-200);
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-700);
+}
+
+.notification-badge {
+  background: var(--ds-indigo-600);
+  border-color: #ffffff;
+}
+
+.notification-popover {
+  border-color: var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  box-shadow: var(--ds-shadow-xl);
+  background: #ffffff;
+}
+
+.notification-item {
+  border-color: var(--ds-border-soft);
+  border-radius: var(--ds-radius-md);
+}
+
+.notification-item.unread {
+  border-color: var(--ds-indigo-200);
+  background: var(--ds-indigo-50);
+}
+
+/* === Поля формы (Field label + input + select + textarea) === */
+.field input,
+.field select,
+.field textarea,
+.compact-form input,
+.compact-form select,
+.compact-form textarea {
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-md);
+  background: #ffffff;
+  color: var(--ds-indigo-950);
+  font-size: 14px;
+  padding: 9px 12px;
+  transition:
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.compact-form input:focus,
+.compact-form select:focus,
+.compact-form textarea:focus {
+  outline: none;
+  border-color: var(--ds-indigo-500);
+  box-shadow: 0 0 0 3px var(--ds-indigo-100);
+}
+
+/* === Status badges — семантические цвета === */
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--ds-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  background: var(--ds-neutral-bg);
+  color: var(--ds-neutral-fg);
+  border: 1px solid transparent;
+}
+
+/* Финальные позитивные */
+.status.completed,
+.status.paid,
+.status.contract_signed,
+.status.ready_for_client {
+  background: var(--ds-success-bg);
+  color: var(--ds-success-fg);
+}
+
+/* В работе / нейтральные */
+.status.admin_review,
+.status.documents_review,
+.status.documents_preparing,
+.status.documents_uploaded,
+.status.assigned_to_owner,
+.status.accepted_by_owner,
+.status.guarantee_issued,
+.status.awaiting_contract,
+.status.active {
+  background: var(--ds-info-bg);
+  color: var(--ds-info-fg);
+}
+
+/* Ожидание оплаты — индиго brand */
+.status.awaiting_payment,
+.status.draft {
+  background: var(--ds-brand-bg);
+  color: var(--ds-brand-fg);
+}
+
+/* Внимание */
+.status.needs_client_fix,
+.status.documents_revision,
+.status.dispute {
+  background: var(--ds-warning-bg);
+  color: var(--ds-warning-fg);
+}
+
+/* Отрицательные */
+.status.cancelled,
+.status.rejected_by_owner,
+.status.refunded,
+.status.refund_pending,
+.status.expired,
+.status.terminated {
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger-fg);
+}
+
+/* === Client dashboard === */
+.client-shell {
+  background: var(--ds-page-bg);
+}
+
+.client-topbar {
+  background: #ffffff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  padding: 14px 22px;
+  margin-bottom: 22px;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.client-topbar .brand strong {
+  color: var(--ds-indigo-950);
+}
+
+.client-heading h1 {
+  color: var(--ds-indigo-950);
+  font-size: clamp(28px, 3vw, 38px);
+}
+
+.client-application {
+  border: 1px solid var(--ds-border-soft);
+  background: #ffffff;
+  border-radius: var(--ds-radius-lg);
+  padding: 14px 16px;
+  transition:
+    border-color var(--ds-motion-fast) var(--ds-ease-out),
+    background var(--ds-motion-fast) var(--ds-ease-out),
+    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
+}
+
+.client-application:hover {
+  border-color: var(--ds-indigo-200);
+  background: var(--ds-indigo-50);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.client-application.active {
+  border-color: var(--ds-indigo-300);
+  background: var(--ds-indigo-50);
+  box-shadow: var(--ds-shadow-md);
+}
+
+.client-detail {
+  background: #ffffff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-xl);
+  padding: 22px;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.client-detail-header h2 {
+  color: var(--ds-indigo-950);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: var(--ds-tracking-tighter);
+}
+
+.client-metrics div,
+.client-info-grid div {
+  background: var(--ds-slate-50);
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-md);
+}
+
+.client-metrics svg {
+  color: var(--ds-indigo-500);
+}
+
+/* === Owner dashboard === */
+.owner-application {
+  background: #ffffff;
+  border-color: var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.owner-application:hover {
+  border-color: var(--ds-indigo-200);
+  background: var(--ds-indigo-50);
+}
+
+.owner-application.active {
+  background: var(--ds-indigo-50);
+  border-color: var(--ds-indigo-300);
+}
+
+.owner-application strong {
+  color: var(--ds-indigo-950);
+}
+
+.owner-application b {
+  color: var(--ds-indigo-700);
+}
+
+.owner-document-item {
+  border-color: var(--ds-border-soft);
+  border-radius: var(--ds-radius-md);
+  background: #ffffff;
+}
+
+.owner-document-item:hover {
+  border-color: var(--ds-indigo-200);
+  background: var(--ds-indigo-50);
+}
+
+.owner-document-item svg {
+  color: var(--ds-indigo-500);
+}
+
+.owner-documents-panel {
+  background: #ffffff;
+}
+
+/* === Registry table === */
+.registry-header {
+  background: var(--ds-slate-50);
+  color: var(--ds-slate-500);
+  letter-spacing: var(--ds-tracking-wide);
+}
+
+.registry-row {
+  border-top: 1px solid var(--ds-border-soft);
+}
+
+.registry-row:hover {
+  background: var(--ds-indigo-50);
+}
+
+.registry-row b {
+  color: var(--ds-indigo-950);
+}
+
+/* === Metric line === */
+.metric-line div {
+  background: #ffffff;
+}
+
+.metric-line strong {
+  color: var(--ds-indigo-950);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: var(--ds-tracking-tighter);
+}
+
+.metric-line span {
+  color: var(--ds-slate-500);
+  letter-spacing: var(--ds-tracking-wide);
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* === Modal panel === */
+.modal-panel {
+  border-color: var(--ds-border-soft);
+  border-radius: var(--ds-radius-xl);
+  box-shadow: var(--ds-shadow-xl);
+  background: #ffffff;
+}
+
+.modal-panel h2,
+.modal-panel h3 {
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-tighter);
+}
+
+/* === Simple list rows === */
+.simple-list {
+  display: grid;
+  gap: 10px;
+}
+
+.simple-item {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-md);
+  background: #ffffff;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.simple-item strong {
+  color: var(--ds-indigo-950);
+  font-size: 15px;
+}
+
+.simple-item span,
+.simple-item small {
+  color: var(--ds-slate-600);
+  font-size: 13px;
+}
+
+/* === Topbar buttons (Обновить, Выйти, Уведомления) === */
+.client-topbar .actions .btn,
+.topbar .topbar-actions .btn {
+  box-shadow: var(--ds-shadow-sm);
+}
+
+/* === Address card в каталоге admin/owner (помещения) - убираем зелёный === */
+.address-card-icon {
+  background: var(--ds-indigo-50);
+  border-color: var(--ds-indigo-100);
+  color: var(--ds-indigo-600);
+}
+
+.address-price-row b {
+  color: var(--ds-indigo-700);
+}
+
+/* === Inline error === */
+.inline-error {
+  background: var(--ds-danger-bg);
+  border-color: #fca5a5;
+  color: var(--ds-danger-fg);
+  border-radius: var(--ds-radius-md);
+}
+
+/* === Empty state === */
+.empty-state,
+.public-empty,
+.notification-empty {
+  border-color: var(--ds-border-soft);
+  background: var(--ds-slate-50);
+  color: var(--ds-slate-500);
+  border-radius: var(--ds-radius-md);
+}
+
+/* === Templates panel (placeholder) === */
+.templates-panel {
+  background: #ffffff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  padding: 22px;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.templates-panel svg {
+  color: var(--ds-indigo-500);
+}
+
+/* === Sidebar logout link === */
+.sidebar-footer button {
+  color: var(--ds-slate-500);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.sidebar-footer button:hover {
+  color: var(--ds-indigo-700);
+}
