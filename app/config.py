@@ -9,6 +9,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # APP_ENV определяет «строгий режим» проверок безопасности.
+    # production → запрещаем выкатывать кабинет с дефолтными значениями
+    # (cookie без secure, дефолтный VAPID_SUBJECT, открытый webhook без secret и т.п.).
+    # staging → те же проверки, но менее строгие (предупреждения через лог).
+    # development (default) → без проверок, всё разрешено локально.
+    app_env: Literal["development", "staging", "production"] = "development"
+
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/legal_address"
 
     # SQLAlchemy / asyncpg connection pool.
@@ -85,6 +92,55 @@ class Settings(BaseSettings):
         if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
             raise ValueError(
                 "SESSION_COOKIE_SAMESITE=none requires SESSION_COOKIE_SECURE=true"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _enforce_production_hardening(self) -> "Settings":
+        """В app_env=production не даём стартовать с небезопасными дефолтами.
+
+        Список проверок и причина каждой — в docs/security-checklist.md.
+        Чтобы временно ослабить — выставляй APP_ENV=staging (warning) или
+        APP_ENV=development (без проверок).
+        """
+        if self.app_env != "production":
+            return self
+
+        problems: list[str] = []
+
+        # 1) Куки сессии: production = только secure + lax/strict (никаких 'none').
+        if not self.session_cookie_secure:
+            problems.append("SESSION_COOKIE_SECURE=true обязателен в production")
+        if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
+            problems.append("SESSION_COOKIE_SAMESITE=none без SECURE=true запрещён")
+
+        # 2) Webhook от платёжки — без секрета любой может слать события.
+        if not self.payment_webhook_secret:
+            problems.append("PAYMENT_WEBHOOK_SECRET пустой — webhook не подписан")
+
+        # 3) DaData креды — без них регистрация контрагента не отработает,
+        #    но в production это явный показатель забытого .env.
+        if not (self.dadata_token and self.dadata_secret):
+            problems.append("DADATA_TOKEN / DADATA_SECRET пустые в production")
+
+        # 4) Storage backend: local небезопасно расшариваем за NGINX'ом — обычно
+        #    нужен S3 в проде.
+        if self.storage_backend == "local":
+            problems.append(
+                "STORAGE_BACKEND=local в production: лучше s3 (см. checklist)"
+            )
+
+        # 5) VAPID-subject должен указывать на реальный почтовый ящик.
+        if self.vapid_subject.endswith("@uradres.example"):
+            problems.append("VAPID_SUBJECT остался дефолтным mailto: example")
+
+        # 6) Сессия БД не должна писать SQL в stdout.
+        if self.db_echo:
+            problems.append("DB_ECHO=true в production — утечёт SQL в логи")
+
+        if problems:
+            raise ValueError(
+                "Production hardening failed:\n  - " + "\n  - ".join(problems)
             )
         return self
 
