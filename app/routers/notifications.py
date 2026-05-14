@@ -34,9 +34,10 @@ async def get_notification_inbox(
 @router.post("/{event_id}/read", response_model=NotificationRead)
 async def mark_notification_as_read(
     event_id: UUID,
+    source: Annotated[str, Query(pattern="^(application_event|user_notification)$")] = "application_event",
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> NotificationRead:
-    notification = await mark_notification_read(db=db, event_id=event_id, user=user)
+    notification = await mark_notification_read(db=db, event_id=event_id, user=user, source=source)
     await db.commit()
     return notification

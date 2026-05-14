@@ -22,6 +22,7 @@ from app.models.provider import Provider
 from app.models.provider_connection_request import ProviderConnectionRequest
 from app.models.stored_file import StoredFile
 from app.models.user import User
+from app.models.user_notification import UserNotification
 from app.models.user_session import UserSession
 from app.models.webhook_delivery import WebhookDelivery
 from app.models.webhook_subscription import WebhookSubscription
@@ -50,6 +51,7 @@ __all__ = [
     "ProviderConnectionRequest",
     "StoredFile",
     "User",
+    "UserNotification",
     "UserSession",
     "WebhookDelivery",
     "WebhookSubscription",

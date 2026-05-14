@@ -18,6 +18,10 @@ type Props = {
   currentUser: CurrentUser;
   /** Опционально — сколько последних чатов показать; null = всё. */
   limit?: number | null;
+  /** Если задано — автоматически открыть указанный chat_id при появлении в списке. */
+  autoOpenChatId?: string | null;
+  /** Колбэк после авто-открытия (родитель сбрасывает pending). */
+  onChatOpened?: () => void;
 };
 
 function formatTime(value: string | null): string {
@@ -33,7 +37,7 @@ function formatTime(value: string | null): string {
   });
 }
 
-export function ChatsListPanel({ currentUser, limit = null }: Props) {
+export function ChatsListPanel({ currentUser, limit = null, autoOpenChatId, onChatOpened }: Props) {
   const [items, setItems] = useState<AddressChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +64,16 @@ export function ChatsListPanel({ currentUser, limit = null }: Props) {
       alive = false;
     };
   }, [refreshKey, limit]);
+
+  // Авто-открытие чата по id из уведомления.
+  useEffect(() => {
+    if (!autoOpenChatId || loading) return;
+    const target = items.find((c) => c.id === autoOpenChatId);
+    if (target) {
+      setSelected(target);
+      onChatOpened?.();
+    }
+  }, [autoOpenChatId, items, loading, onChatOpened]);
 
   return (
     <section className="ds-chatlist">

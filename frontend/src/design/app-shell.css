@@ -694,6 +694,13 @@ h1 {
   }
 }
 
+/* ===================== Notifications ===================== */
+.notification-item .status.chat {
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-700);
+  border-color: var(--ds-indigo-200);
+}
+
 /* ===================== Chats list panel ===================== */
 .ds-chatlist {
   margin-top: 18px;

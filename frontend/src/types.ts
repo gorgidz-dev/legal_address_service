@@ -523,9 +523,23 @@ export interface ClientApplicationEvent {
   read_at: string | null;
 }
 
-export interface AppNotification extends ClientApplicationEvent {
-  application_status: ApplicationStatus;
-  application_title: string;
+export type NotificationLinkType = "application" | "chat";
+export type NotificationSource = "application_event" | "user_notification";
+
+export interface AppNotification {
+  id: string;
+  kind: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  read_at: string | null;
+  link_type: NotificationLinkType | null;
+  link_id: string | null;
+  application_id: string | null;
+  application_status: ApplicationStatus | null;
+  application_title: string | null;
+  source: NotificationSource;
 }
 
 export interface NotificationInbox {

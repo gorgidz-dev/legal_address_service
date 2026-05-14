@@ -332,7 +332,14 @@ function LoadingRows() {
   );
 }
 
-function NotificationCenter({ refreshKey = 0 }: { refreshKey?: number }) {
+function NotificationCenter({
+  refreshKey = 0,
+  onNavigate,
+}: {
+  refreshKey?: number;
+  /** Куда вести при клике. UI-роутинг наружу. */
+  onNavigate?: (notification: AppNotification) => void;
+}) {
   const [inbox, setInbox] = useState<NotificationInbox | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -352,10 +359,16 @@ function NotificationCenter({ refreshKey = 0 }: { refreshKey?: number }) {
 
   useEffect(load, [refreshKey]);
 
+  // Лёгкий полл — раз в 30 сек подтянуть новые.
+  useEffect(() => {
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, []);
+
   async function markRead(notification: AppNotification) {
-    if (notification.is_read) return;
+    if (notification.is_read) return notification;
     try {
-      const updated = await api.markNotificationRead(notification.id);
+      const updated = await api.markNotificationRead(notification.id, notification.source);
       setInbox((current) => {
         if (!current) return current;
         return {
@@ -363,8 +376,18 @@ function NotificationCenter({ refreshKey = 0 }: { refreshKey?: number }) {
           items: current.items.map((item) => (item.id === updated.id ? updated : item))
         };
       });
+      return updated;
     } catch (err) {
       setError((err as Error).message);
+      return notification;
+    }
+  }
+
+  async function handleClick(notification: AppNotification) {
+    await markRead(notification);
+    if (notification.link_type && onNavigate) {
+      onNavigate(notification);
+      setOpen(false);
     }
   }
 
@@ -402,23 +425,30 @@ function NotificationCenter({ refreshKey = 0 }: { refreshKey?: number }) {
             </div>
           ) : items.length ? (
             <div className="notification-list">
-              {items.map((notification) => (
-                <button
-                  className={notification.is_read ? "notification-item" : "notification-item unread"}
-                  key={notification.id}
-                  onClick={() => markRead(notification)}
-                  type="button"
-                >
-                  <span className={`status ${notification.application_status}`}>
-                    {statusLabels[notification.application_status] || notification.application_status}
-                  </span>
-                  <strong>{notification.title}</strong>
-                  <small>
-                    {notification.application_title} · {formatDateTime(notification.created_at)}
-                  </small>
-                  <p>{notification.message}</p>
-                </button>
-              ))}
+              {items.map((notification) => {
+                const isChat = notification.link_type === "chat";
+                const statusLabel = notification.application_status
+                  ? statusLabels[notification.application_status] || notification.application_status
+                  : isChat ? "Чат" : "Уведомление";
+                const subtitle = notification.application_title
+                  ? `${notification.application_title} · ${formatDateTime(notification.created_at)}`
+                  : formatDateTime(notification.created_at);
+                return (
+                  <button
+                    className={notification.is_read ? "notification-item" : "notification-item unread"}
+                    key={`${notification.source}-${notification.id}`}
+                    onClick={() => handleClick(notification)}
+                    type="button"
+                  >
+                    <span className={`status ${isChat ? "chat" : notification.application_status || ""}`}>
+                      {statusLabel}
+                    </span>
+                    <strong>{notification.title}</strong>
+                    <small>{subtitle}</small>
+                    <p>{notification.message}</p>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div className="notification-empty">Новых уведомлений нет</div>
@@ -1253,7 +1283,19 @@ export default function App() {
             <h1>{selectedTitle}</h1>
           </div>
           <div className="topbar-actions">
-            <NotificationCenter refreshKey={refreshKey} />
+            <NotificationCenter
+              refreshKey={refreshKey}
+              onNavigate={(n) => {
+                if (n.link_type === "application" && n.link_id) {
+                  setView("applications");
+                  // Админский список заявок сам управляет selected — внешнего
+                  // пробрасывания selected пока нет; пользователь увидит список
+                  // и сможет найти нужную. Линк хотя бы переключит раздел.
+                } else if (n.link_type === "chat") {
+                  setView("address-chats");
+                }
+              }}
+            />
             <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
               <RefreshCw size={16} /> Обновить
             </Button>
@@ -1477,6 +1519,7 @@ function ClientDashboardView({
   const [view, setView] = useState<ClientCabinetView>("applications");
   const [applications, setApplications] = useState<ClientApplication[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -1554,7 +1597,18 @@ function ClientDashboardView({
         <header className="client-topbar">
           <div className="brand" style={{ visibility: "hidden" }} />
           <div className="actions">
-            <NotificationCenter refreshKey={refreshKey} />
+            <NotificationCenter
+              refreshKey={refreshKey}
+              onNavigate={(n) => {
+                if (n.link_type === "application" && n.link_id) {
+                  setView("applications");
+                  setSelectedId(n.link_id);
+                } else if (n.link_type === "chat" && n.link_id) {
+                  setView("chats");
+                  setPendingChatId(n.link_id);
+                }
+              }}
+            />
             <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
               <RefreshCw size={16} /> Обновить
             </Button>
@@ -1681,7 +1735,13 @@ function ClientDashboardView({
         </section>
       ))}
 
-      {view === "chats" && <ChatsListPanel currentUser={user} />}
+      {view === "chats" && (
+        <ChatsListPanel
+          currentUser={user}
+          autoOpenChatId={pendingChatId}
+          onChatOpened={() => setPendingChatId(null)}
+        />
+      )}
       </main>
     </div>
   );
@@ -1699,6 +1759,7 @@ function OwnerDashboardView({
   onOpenCatalog: () => void;
 }) {
   const [view, setView] = useState<OwnerCabinetView>("applications");
+  const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<OwnerDashboard | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1866,7 +1927,18 @@ function OwnerDashboardView({
         <header className="owner-topbar">
           <div className="brand" style={{ visibility: "hidden" }} />
           <div className="actions">
-            <NotificationCenter refreshKey={refreshKey} />
+            <NotificationCenter
+              refreshKey={refreshKey}
+              onNavigate={(n) => {
+                if (n.link_type === "application" && n.link_id) {
+                  setView("applications");
+                  setSelectedId(n.link_id);
+                } else if (n.link_type === "chat" && n.link_id) {
+                  setView("chats");
+                  setPendingChatId(n.link_id);
+                }
+              }}
+            />
             <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
               <RefreshCw size={16} /> Обновить
             </Button>
@@ -2143,7 +2215,13 @@ function OwnerDashboardView({
         </section>
         ))}
 
-        {view === "chats" && <ChatsListPanel currentUser={user} />}
+        {view === "chats" && (
+          <ChatsListPanel
+            currentUser={user}
+            autoOpenChatId={pendingChatId}
+            onChatOpened={() => setPendingChatId(null)}
+          />
+        )}
 
         {photoAddressId ? (
           <AddressPhotosModal

@@ -154,8 +154,14 @@ export const api = {
     const query = params.toString();
     return request<NotificationInbox>(`/notifications${query ? `?${query}` : ""}`);
   },
-  markNotificationRead: (notificationId: string) =>
-    request<AppNotification>(`/notifications/${notificationId}/read`, { method: "POST" }),
+  markNotificationRead: (
+    notificationId: string,
+    source: "application_event" | "user_notification" = "application_event"
+  ) =>
+    request<AppNotification>(
+      `/notifications/${notificationId}/read?source=${source}`,
+      { method: "POST" }
+    ),
 
   publicAddresses: (filters?: {
     city?: string;

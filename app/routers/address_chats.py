@@ -48,6 +48,7 @@ from app.models.user import User
 from app.models.user_session import UserSession
 from app.services.auth_security import hash_token
 from app.services.email_outbox import send_email
+from app.services.notification_events import write_user_notification
 
 logger = logging.getLogger("address_chats")
 router = APIRouter(prefix="/chats", tags=["address-chats"])
@@ -203,17 +204,30 @@ async def _notify_offline(
     message: AddressChatMessage,
     author: User,
 ) -> None:
-    """Шлёт email тем участникам, кто не подключён к ws-каналу.
+    """Шлёт email + создаёт in-app уведомление участникам, кто не онлайн в этом чате.
 
-    In-app уведомления для чата пока не реализуем (notifications-таблица
-    привязана к application_events; см. TODO в notification_events.py).
-    Когда появится generic-нотификация — дублируем сюда.
+    Запись попадёт в `user_notifications` и появится в шторке уведомлений
+    с link → конкретный чат.
     """
     online = await hub.connected_user_ids(chat.id)
     participants = await _participants_of(db, chat, address)
+    short_body = (message.body[:140] + "…") if len(message.body) > 140 else message.body
+    address_short = address.full_address[:80]
     for user in participants:
         if user.id == author.id or user.id in online:
             continue
+        try:
+            await write_user_notification(
+                db,
+                user_id=user.id,
+                kind="chat_message",
+                title=f"Новое сообщение по адресу {address_short}",
+                body=short_body,
+                link_type="chat",
+                link_id=chat.id,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("notif write failed for user=%s", user.id, exc_info=True)
         try:
             await send_email(
                 to=user.email,
@@ -227,6 +241,11 @@ async def _notify_offline(
             )
         except Exception:  # noqa: BLE001
             logger.warning("email send failed for user=%s", user.id, exc_info=True)
+    # commit нотификаций сразу (одна транзакция с message commit'ом уже закрылась)
+    try:
+        await db.commit()
+    except Exception:  # noqa: BLE001
+        await db.rollback()
 
 
 # ============================== REST endpoints ==============================
