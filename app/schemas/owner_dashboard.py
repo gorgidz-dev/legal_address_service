@@ -20,6 +20,7 @@ class OwnerAddressRead(BaseModel):
     full_address: str
     room_number: Optional[str]
     cadastral_number: str
+    description: Optional[str] = None
     price_6m: Decimal
     price_11m: Decimal
     correspondence_price: Optional[Decimal]

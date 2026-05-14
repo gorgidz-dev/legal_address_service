@@ -127,9 +127,10 @@ async def test_notifications_router_lists_inbox_and_marks_read(monkeypatch) -> N
         assert db is fake_db
         return 1
 
-    async def fake_mark_notification_read(*, db, event_id, user):
+    async def fake_mark_notification_read(*, db, event_id, user, source="application_event"):
         assert db is fake_db
         assert event_id == notification.id
+        assert source == "application_event"
         return notification.model_copy(update={"is_read": True})
 
     monkeypatch.setattr(notifications, "list_user_notifications", fake_list_user_notifications)

@@ -37,11 +37,13 @@ import { ApiError, api, packageDownloadUrl, paymentDocumentDownloadUrl } from ".
 import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
 import { ChatsListPanel } from "./ChatsListPanel";
+import { OwnerAddressEditor } from "./OwnerAddressEditor";
 import type {
   ActiveClientRegistryItem,
   Address,
   AddressPhotoAdmin,
   AddressServiceAdmin,
+  OwnerAddress,
   AddressPublicationStatus,
   Application,
   ApplicationDocumentModeration,
@@ -1778,6 +1780,7 @@ function OwnerDashboardView({
   const [refreshKey, setRefreshKey] = useState(0);
   const [photoAddressId, setPhotoAddressId] = useState<string | null>(null);
   const [photoAddressLabel, setPhotoAddressLabel] = useState<string>("");
+  const [editorAddress, setEditorAddress] = useState<OwnerAddress | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -2011,16 +2014,25 @@ function OwnerDashboardView({
                       {address.is_available ? "доступен" : "недоступен"}
                     </span>
                     <small>{formatMoney(address.price_11m)} за 11 мес.</small>
-                    <button
-                      className="text-action owner-address-photos-link"
-                      onClick={() => {
-                        setPhotoAddressId(address.id);
-                        setPhotoAddressLabel(address.full_address);
-                      }}
-                      type="button"
-                    >
-                      <Camera size={14} /> Фотографии адреса
-                    </button>
+                    <div className="row-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="text-action owner-address-photos-link"
+                        onClick={() => {
+                          setPhotoAddressId(address.id);
+                          setPhotoAddressLabel(address.full_address);
+                        }}
+                        type="button"
+                      >
+                        <Camera size={14} /> Фотографии
+                      </button>
+                      <button
+                        className="text-action owner-address-photos-link"
+                        onClick={() => setEditorAddress(address)}
+                        type="button"
+                      >
+                        <FileText size={14} /> Описание и услуги
+                      </button>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -2229,6 +2241,16 @@ function OwnerDashboardView({
             addressLabel={photoAddressLabel}
             mode="owner"
             onClose={() => setPhotoAddressId(null)}
+          />
+        ) : null}
+
+        {editorAddress ? (
+          <OwnerAddressEditor
+            addressId={editorAddress.id}
+            addressLabel={editorAddress.full_address}
+            initialDescription={editorAddress.description ?? null}
+            onClose={() => setEditorAddress(null)}
+            onSaved={() => setRefreshKey((value) => value + 1)}
           />
         ) : null}
       </main>

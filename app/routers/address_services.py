@@ -20,8 +20,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, require_owner
 from app.database import get_db
+from app.models.user import User
 from app.enums import ADDRESS_SERVICE_KIND_VALUES, AddressServiceKind
 from app.models.address import Address
 from app.models.address_service import AddressService
@@ -122,6 +123,101 @@ async def delete_service(
     kind: str,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    valid_kind = _validate_kind(kind)
+    existing = (
+        await db.execute(
+            select(AddressService).where(
+                AddressService.address_id == address_id,
+                AddressService.kind == valid_kind.value,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        await db.delete(existing)
+        await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ==================== Owner CRUD (только свои адреса) ====================
+
+owner_router = APIRouter(
+    prefix="/owner/addresses/{address_id}/services",
+    tags=["owner", "address-services"],
+)
+
+
+async def _ensure_owner_owns_address(
+    db: AsyncSession, address_id: UUID, user: User
+) -> Address:
+    address = await _load_address(db, address_id)
+    if address.provider_id != user.provider_id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Адрес не принадлежит вашей организации",
+        )
+    return address
+
+
+@owner_router.get("", response_model=list[AddressServiceAdminRead])
+async def owner_list_services(
+    address_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> list[AddressService]:
+    await _ensure_owner_owns_address(db, address_id, user)
+    result = await db.execute(
+        select(AddressService)
+        .where(AddressService.address_id == address_id)
+        .order_by(AddressService.kind)
+    )
+    return list(result.scalars().all())
+
+
+@owner_router.put("/{kind}", response_model=AddressServiceAdminRead)
+async def owner_upsert_service(
+    address_id: UUID,
+    kind: str,
+    payload: AddressServiceUpsert,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> AddressService:
+    await _ensure_owner_owns_address(db, address_id, user)
+    valid_kind = _validate_kind(kind)
+    existing = (
+        await db.execute(
+            select(AddressService).where(
+                AddressService.address_id == address_id,
+                AddressService.kind == valid_kind.value,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing is None:
+        record = AddressService(
+            address_id=address_id,
+            kind=valid_kind.value,
+            price=payload.price,
+            is_active=payload.is_active,
+        )
+        db.add(record)
+    else:
+        existing.price = payload.price
+        existing.is_active = payload.is_active
+        record = existing
+
+    await db.commit()
+    await db.refresh(record)
+    return record
+
+
+@owner_router.delete("/{kind}")
+async def owner_delete_service(
+    address_id: UUID,
+    kind: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> Response:
+    await _ensure_owner_owns_address(db, address_id, user)
     valid_kind = _validate_kind(kind)
     existing = (
         await db.execute(

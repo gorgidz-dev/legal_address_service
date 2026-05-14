@@ -202,6 +202,7 @@ api_v1.include_router(addresses.router)
 api_v1.include_router(address_moderation.router)
 api_v1.include_router(address_moderation.admin_router)
 api_v1.include_router(address_services.router)
+api_v1.include_router(address_services.owner_router)
 api_v1.include_router(address_chats.router)
 # WebSocket-роут отдельно — middleware пропускает по public-path рулу ниже.
 api_v1.include_router(address_chats.ws_router)

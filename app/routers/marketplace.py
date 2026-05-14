@@ -103,7 +103,7 @@ def public_address_from_row(
         provider_name=provider.short_name,
         full_address=address.full_address,
         room_number=address.room_number,
-        description=address.description,
+        description=getattr(address, "description", None),
         price_6m=address.price_6m,
         price_11m=address.price_11m,
         selected_price=selected_price,

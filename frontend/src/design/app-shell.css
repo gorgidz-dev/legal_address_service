@@ -701,6 +701,74 @@ h1 {
   border-color: var(--ds-indigo-200);
 }
 
+/* ===================== Owner address editor ===================== */
+.owner-editor__section {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.owner-editor__section + .owner-editor__section {
+  padding-top: 16px;
+  border-top: 1px solid var(--ds-border-soft);
+}
+.owner-editor__section textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-slate-200);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.4;
+  resize: vertical;
+}
+.owner-editor__section textarea:focus {
+  outline: none;
+  border-color: var(--ds-indigo-500);
+  box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.15);
+}
+.owner-editor__group + .owner-editor__group {
+  margin-top: 12px;
+}
+.owner-editor__group h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-indigo-600);
+}
+.owner-editor__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.owner-editor__row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) 120px 110px auto;
+  gap: 10px;
+  align-items: end;
+  padding: 8px 10px;
+  background: var(--ds-slate-50);
+  border-radius: var(--ds-radius-md);
+}
+@media (max-width: 760px) {
+  .owner-editor__row { grid-template-columns: 1fr; }
+}
+.owner-editor__row-lbl { display: flex; flex-direction: column; gap: 2px; }
+.owner-editor__row-lbl strong { font-size: 13px; }
+.owner-editor__row-lbl .hint { font-size: 11px; color: var(--ds-slate-500); }
+.owner-editor__row-price { display: flex; flex-direction: column; font-size: 11px; color: var(--ds-slate-500); }
+.owner-editor__row-price input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-md);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.owner-editor__row-active { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+
 /* ===================== Chats list panel ===================== */
 .ds-chatlist {
   margin-top: 18px;

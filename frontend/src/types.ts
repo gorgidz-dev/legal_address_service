@@ -583,6 +583,7 @@ export interface OwnerAddress {
   full_address: string;
   room_number: string | null;
   cadastral_number: string;
+  description?: string | null;
   price_6m: string;
   price_11m: string;
   correspondence_price: string | null;

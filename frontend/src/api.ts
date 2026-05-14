@@ -309,6 +309,21 @@ export const api = {
       `/owner/addresses/${addressId}/description`,
       { method: "PATCH", body: JSON.stringify({ description }) }
     ),
+  ownerListAddressServices: (addressId: string) =>
+    request<AddressServiceAdmin[]>(`/owner/addresses/${addressId}/services`),
+  ownerUpsertAddressService: (
+    addressId: string,
+    kind: string,
+    payload: { price: string | number; is_active: boolean }
+  ) =>
+    request<AddressServiceAdmin>(
+      `/owner/addresses/${addressId}/services/${kind}`,
+      { method: "PUT", body: JSON.stringify(payload) }
+    ),
+  ownerDeleteAddressService: (addressId: string, kind: string) =>
+    request<void>(`/owner/addresses/${addressId}/services/${kind}`, {
+      method: "DELETE"
+    }),
 
   applications: () => request<Application[]>("/applications"),
   createApplication: (payload: unknown) =>
