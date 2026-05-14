@@ -38,6 +38,7 @@ from fastapi import (
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth import get_current_user, utcnow
 from app.database import AsyncSessionLocal, get_db
@@ -275,15 +276,26 @@ async def open_chat_for_address(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ChatRead:
-    address = await db.get(Address, address_id)
+    # Открывать чат может ТОЛЬКО клиент. Собственник видит входящие чаты в
+    # своём кабинете (без явного create). Админ/manager/lawyer — не создают
+    # чат под своим логином (это путаница: чат — pair (адрес × клиент)).
+    if user.role != UserRole.CLIENT.value:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Открыть чат с собственником может только клиент",
+        )
+
+    # Подгружаем provider сразу — иначе address.provider лениво обратится в
+    # БД из async-сессии и упадёт MissingGreenlet'ом.
+    address = (
+        await db.execute(
+            select(Address)
+            .options(selectinload(Address.provider))
+            .where(Address.id == address_id)
+        )
+    ).scalar_one_or_none()
     if address is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес не найден")
-    # клиент / админ — могут открывать; собственник не открывает чат к своему адресу
-    if user.role == UserRole.OWNER.value and user.provider_id == address.provider_id:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Собственник видит чаты в кабинете, отдельно открывать не нужно",
-        )
 
     chat = (
         await db.execute(
@@ -313,6 +325,8 @@ async def list_my_chats(
         select(AddressChat, Address, User)
         .join(Address, Address.id == AddressChat.address_id)
         .join(User, User.id == AddressChat.client_user_id)
+        # selectinload provider — иначе в async-сессии будет MissingGreenlet.
+        .options(selectinload(Address.provider))
         .order_by(desc(AddressChat.last_message_at.nullslast()), desc(AddressChat.created_at))
     )
     if user.role == UserRole.CLIENT.value:
@@ -329,16 +343,7 @@ async def list_my_chats(
     rows = (await db.execute(stmt)).all()
     result: list[ChatRead] = []
     for chat, address, client in rows:
-        provider = address.provider if hasattr(address, "provider") else None
-        # provider может не быть загружен (без selectinload) — догружаем
-        provider_name = ""
-        if provider is None:
-            from app.models.provider import Provider
-
-            p = await db.get(Provider, address.provider_id)
-            provider_name = p.short_name if p else ""
-        else:
-            provider_name = provider.short_name
+        provider_name = address.provider.short_name if address.provider else ""
         result.append(_build_chat_read(chat, address, provider_name, client.email))
     return result
 
@@ -352,15 +357,17 @@ async def get_chat_messages(
     chat, address = await _load_chat_with_address(db, chat_id)
     if not _user_is_chat_participant(user, chat, address):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к чату")
+    # DESC + limit → берём свежие N; затем переворачиваем в ASC чтобы UI рисовал
+    # «снизу вверх по времени» без дополнительной сортировки.
     rows = (
         await db.execute(
             select(AddressChatMessage)
             .where(AddressChatMessage.chat_id == chat_id)
-            .order_by(AddressChatMessage.created_at)
+            .order_by(desc(AddressChatMessage.created_at))
             .limit(HISTORY_LIMIT)
         )
     ).scalars().all()
-    return list(rows)
+    return list(reversed(rows))
 
 
 @router.post("/{chat_id}/messages", response_model=ChatMessageRead)
