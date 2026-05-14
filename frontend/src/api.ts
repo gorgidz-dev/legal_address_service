@@ -325,6 +325,19 @@ export const api = {
       method: "DELETE"
     }),
 
+  // ===== Web Push =====
+  pushPublicKey: () =>
+    request<{ public_key: string; enabled: boolean }>(`/push/public-key`),
+  pushSubscribe: (payload: { endpoint: string; p256dh: string; auth: string }) =>
+    request<{ ok: boolean }>(`/push/subscribe`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  pushUnsubscribe: (endpoint: string) =>
+    request<void>(`/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`, {
+      method: "DELETE"
+    }),
+
   applications: () => request<Application[]>("/applications"),
   createApplication: (payload: unknown) =>
     request<Application>("/applications", { method: "POST", body: JSON.stringify(payload) }),

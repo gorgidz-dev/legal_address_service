@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     cdek_circuit_failure_threshold: int = 3
     cdek_circuit_recovery_seconds: float = 30.0
 
+    # Web Push (VAPID). Если ключи пустые — push выключен (subscribe возвращает
+    # 503, существующие подписки игнорируются при попытке отправки).
+    # Сгенерировать новые: см. scripts/gen_vapid_keys.py.
+    vapid_public_key: str = ""
+    vapid_private_pem: str = ""
+    vapid_subject: str = "mailto:noreply@uradres.example"
+
     @model_validator(mode="after")
     def _validate_cookie_security(self) -> "Settings":
         if self.session_cookie_samesite == "none" and not self.session_cookie_secure:

@@ -35,6 +35,7 @@ from app.routers import (
     payments,
     provider_requests,
     providers,
+    push,
     registry,
     templates,
     webhooks,
@@ -107,6 +108,8 @@ def _is_public_path(path: str, method: str) -> bool:
     if path.startswith(f"{API_PREFIX}/webhooks/"):
         return True
     if path == f"{API_PREFIX}/marketplace/addresses" and method == "GET":
+        return True
+    if path == f"{API_PREFIX}/push/public-key" and method == "GET":
         return True
     if path == f"{API_PREFIX}/marketplace/provider-requests" and method == "POST":
         return True
@@ -197,6 +200,7 @@ api_v1.include_router(workflow.router)
 api_v1.include_router(application_documents.router)
 api_v1.include_router(address_photos.router)
 api_v1.include_router(providers.router)
+api_v1.include_router(push.router)
 api_v1.include_router(provider_requests.router)
 api_v1.include_router(addresses.router)
 api_v1.include_router(address_moderation.router)

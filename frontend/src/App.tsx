@@ -38,6 +38,7 @@ import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { OwnerAddressEditor } from "./OwnerAddressEditor";
+import { PushToggle } from "./PushToggle";
 import type {
   ActiveClientRegistryItem,
   Address,
@@ -1611,6 +1612,7 @@ function ClientDashboardView({
                 }
               }}
             />
+            <PushToggle />
             <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
               <RefreshCw size={16} /> Обновить
             </Button>
@@ -1942,6 +1944,7 @@ function OwnerDashboardView({
                 }
               }}
             />
+            <PushToggle />
             <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
               <RefreshCw size={16} /> Обновить
             </Button>

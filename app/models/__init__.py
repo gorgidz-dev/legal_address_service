@@ -20,6 +20,7 @@ from app.models.payment import Payment
 from app.models.payment_document import PaymentDocument
 from app.models.provider import Provider
 from app.models.provider_connection_request import ProviderConnectionRequest
+from app.models.push_subscription import PushSubscription
 from app.models.stored_file import StoredFile
 from app.models.user import User
 from app.models.user_notification import UserNotification
@@ -49,6 +50,7 @@ __all__ = [
     "PaymentDocument",
     "Provider",
     "ProviderConnectionRequest",
+    "PushSubscription",
     "StoredFile",
     "User",
     "UserNotification",

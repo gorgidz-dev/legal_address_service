@@ -49,6 +49,7 @@ from app.models.user_session import UserSession
 from app.services.auth_security import hash_token
 from app.services.email_outbox import send_email
 from app.services.notification_events import write_user_notification
+from app.services.web_push import send_push_to_user
 
 logger = logging.getLogger("address_chats")
 router = APIRouter(prefix="/chats", tags=["address-chats"])
@@ -246,6 +247,23 @@ async def _notify_offline(
         await db.commit()
     except Exception:  # noqa: BLE001
         await db.rollback()
+
+    # Web Push поверх — отдельная попытка (не падаем, если push выключен).
+    push_title = f"Сообщение по {address_short}"
+    for user in participants:
+        if user.id == author.id or user.id in online:
+            continue
+        try:
+            await send_push_to_user(
+                db,
+                user_id=user.id,
+                title=push_title,
+                body=short_body,
+                url="/",
+                tag=f"chat:{chat.id}",
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("web push failed for user=%s", user.id, exc_info=True)
 
 
 # ============================== REST endpoints ==============================
