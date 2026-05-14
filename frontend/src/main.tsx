@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import "./design/legacy-tokens.css";
 import "./styles.css";
 import "./design/tokens.css";
 import "./design/components.css";

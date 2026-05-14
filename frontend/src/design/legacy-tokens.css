@@ -1,0 +1,203 @@
+/*
+ * Legacy dashboard design tokens.
+ *
+ * Scope: dashboards in `frontend/src/styles.css` (client / owner / admin кабинеты).
+ * Sibling file `tokens.css` is the NEW catalog system (`--ds-*`, indigo) — оставлен нетронутым.
+ *
+ * Префикс: `--lg-` ("legacy"), чтобы не конфликтовать с `--ds-`.
+ *
+ * Эстетика: тёплый оливковый B2B (Russian legal service). Не flashy.
+ * Светлая тема. Тёмная не нужна на этом этапе.
+ *
+ * Источник значений: фактический инвентарь styles.css (90 уникальных hex,
+ * 8px радиус 51 раз, 160ms transition 24 раза, font-weight 650 как dominant).
+ *
+ * Стратегия миграции: можно подключать постепенно. Сначала заменяем
+ * `border: 1px solid #dfe3dc` → `var(--lg-border)` и т.п. Старые правила
+ * продолжают работать — токены ничего не ломают.
+ */
+
+:root {
+  /* ===================================================================== */
+  /* COLOR — semantic                                                       */
+  /* ===================================================================== */
+
+  /* Backgrounds */
+  --lg-bg-page: #f5f6f3;                              /* основной фон страниц с grid-фоном */
+  --lg-bg-surface: #ffffff;                           /* белые карточки, инпуты */
+  --lg-bg-surface-soft: #fdfdfb;                      /* сайдбар, модалки, popover */
+  --lg-bg-surface-translucent: rgba(255, 255, 253, 0.94);   /* стеклянные панели */
+  --lg-bg-surface-translucent-mid: rgba(255, 255, 253, 0.88);
+  --lg-bg-subtle: #f8faf6;                            /* metric-grid, info-box */
+  --lg-bg-shimmer-start: #ecefea;
+  --lg-bg-shimmer-end: #f7f8f5;
+
+  /* Borders */
+  --lg-border: #dfe3dc;                               /* основной border (был ~24 раза) */
+  --lg-border-soft: #e5e8e1;                          /* divider между строками */
+  --lg-border-strong: #cfd7cc;                        /* кнопки, более контрастные edges */
+  --lg-border-meta: #d8ded5;                          /* мелкие meta-теги, badge */
+  --lg-border-dashed-empty: #ccd4c9;                  /* dashed empty-state */
+
+  /* Text */
+  --lg-text: #1f2428;                                 /* heading-уровень */
+  --lg-text-body: #2c3528;                            /* основной текст */
+  --lg-text-muted: #687167;                           /* second-level подписи */
+  --lg-text-subtle: #788176;                          /* hint, helper */
+  --lg-text-inverse: #fdfdfb;                         /* на тёмном accent-фоне */
+  --lg-text-link: #204f41;                            /* совпадает с accent — это норм */
+  --lg-text-code: #315544;                            /* inline <code> */
+
+  /* Accent (brand olive) */
+  --lg-accent: #204f41;                               /* основной brand-цвет */
+  --lg-accent-hover: #193e33;
+  --lg-accent-active: #122c25;
+  --lg-accent-soft-bg: #eef8ef;                       /* tinted hover/selected */
+  --lg-accent-soft-fg: #24533b;
+  --lg-accent-visited: #4a7a3a;                       /* visited / completed */
+
+  /* Status */
+  --lg-success-bg: #eef8ef;
+  --lg-success-fg: #24533b;
+  --lg-success-border: #b9d6c0;
+
+  --lg-warning-bg: #fff9df;
+  --lg-warning-fg: #755d10;
+  --lg-warning-border: #ddc987;
+
+  --lg-danger-bg: #fff7f4;
+  --lg-danger-fg: #8c2d1f;
+  --lg-danger-border: #e5c1bc;
+
+  --lg-info-bg: #f1f6ea;
+  --lg-info-fg: #4a553f;
+  --lg-info-border: #9db89d;
+
+  /* Focus */
+  --lg-focus-ring-color: rgba(72, 124, 89, 0.16);
+  --lg-focus-ring: 0 0 0 3px var(--lg-focus-ring-color);
+
+  /* Shadow base — текстовый цвет с alpha-вариациями */
+  --lg-shadow-color: 31, 36, 40;                      /* для использования: rgba(var(--lg-shadow-color), 0.x) */
+
+  /* ===================================================================== */
+  /* TYPOGRAPHY                                                             */
+  /* ===================================================================== */
+
+  --lg-font-sans:
+    "Geist", "Satoshi", "Inter", "Segoe UI", system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --lg-font-mono:
+    "SFMono-Regular", "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  /* Type scale.
+     Dominant body — 12px (47% употреблений) и 13px. h1 через clamp(). */
+  --lg-text-xs: 11px;                                 /* мелкие labels */
+  --lg-text-sm: 12px;                                 /* dominant body */
+  --lg-text-md: 13px;                                 /* second body */
+  --lg-text-base: 14px;
+  --lg-text-lg: 16px;
+  --lg-text-xl: 18px;
+  --lg-text-2xl: 20px;
+  --lg-text-3xl: 22px;
+  --lg-text-4xl: 25px;                                /* address-price display */
+  --lg-text-5xl: 28px;                                /* modal titles */
+  --lg-text-display-h2: clamp(24px, 3vw, 34px);
+  --lg-text-display-h1: clamp(30px, 4vw, 46px);
+  --lg-text-display-hero: clamp(34px, 4.4vw, 64px);   /* catalog h1 */
+
+  /* Font weights.
+     Dominant — 650 (semi-bold с характером). Остальные подтянуты к шкале. */
+  --lg-fw-normal: 400;
+  --lg-fw-medium: 500;
+  --lg-fw-semi: 600;
+  --lg-fw-strong: 650;                                /* основной для labels/actions */
+  --lg-fw-bold: 700;
+  --lg-fw-black: 750;                                 /* notification badge */
+
+  /* Line heights */
+  --lg-lh-tight: 1;                                   /* display, metrics */
+  --lg-lh-snug: 1.2;
+  --lg-lh-normal: 1.4;
+  --lg-lh-relaxed: 1.55;
+
+  /* Letter spacing — для display и all-caps labels */
+  --lg-tracking-tight: -0.02em;
+  --lg-tracking-normal: 0;
+  --lg-tracking-wide: 0.06em;                         /* всекапсные eyebrow-метки */
+
+  /* ===================================================================== */
+  /* SPACING — base 4 + допущенные отклонения (14, 22)                      */
+  /* ===================================================================== */
+
+  --lg-space-0: 0;
+  --lg-space-1: 4px;
+  --lg-space-2: 8px;
+  --lg-space-3: 10px;                                 /* частый — list-gap (29 раз) */
+  --lg-space-4: 12px;                                 /* dominant (34 раза) */
+  --lg-space-5: 14px;                                 /* dominant card-padding (29 раз) */
+  --lg-space-6: 16px;
+  --lg-space-7: 18px;
+  --lg-space-8: 20px;
+  --lg-space-9: 22px;                                 /* sidebar/topbar — оставлен как именованный */
+  --lg-space-10: 24px;
+  --lg-space-11: 28px;
+  --lg-space-12: 32px;
+  --lg-space-14: 48px;
+
+  /* Odd values 7/9/11/13/34 px из styles.css — кандидаты на снаппинг
+     к ближайшему шагу при миграции. В токены не выносим. */
+
+  /* ===================================================================== */
+  /* RADII                                                                  */
+  /* ===================================================================== */
+
+  --lg-radius-sm: 4px;
+  --lg-radius-md: 6px;                                /* segmented button */
+  --lg-radius-lg: 8px;                                /* dominant — 97% всех скруглений */
+  --lg-radius-pill: 999px;
+
+  /* ===================================================================== */
+  /* SHADOWS — все на rgba(31, 36, 40, α)                                   */
+  /* ===================================================================== */
+
+  --lg-shadow-sm: 0 14px 34px rgba(31, 36, 40, 0.07); /* light card */
+  --lg-shadow-md: 0 20px 60px rgba(31, 36, 40, 0.10); /* panel */
+  --lg-shadow-lg: 0 20px 60px rgba(31, 36, 40, 0.12); /* auth panel, modal */
+  --lg-shadow-xl: 0 24px 70px rgba(31, 36, 40, 0.18); /* modal popover */
+  --lg-shadow-2xl: 0 24px 70px rgba(31, 36, 40, 0.22);/* heavy modal */
+  --lg-shadow-focus: var(--lg-focus-ring);
+
+  /* ===================================================================== */
+  /* MOTION                                                                 */
+  /* ===================================================================== */
+
+  --lg-duration-fast: 120ms;
+  --lg-duration-base: 160ms;                          /* dominant — transitions transform/border/bg/color */
+  --lg-duration-slow: 240ms;
+  --lg-duration-shimmer: 1.4s;                        /* loading shimmer */
+
+  --lg-ease: ease;                                    /* совпадает с тем что было в styles.css */
+  --lg-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ===================================================================== */
+  /* LAYOUT                                                                 */
+  /* ===================================================================== */
+
+  --lg-page-max-width: 1180px;
+  --lg-page-pad-x: var(--lg-space-12);                /* 32px desktop */
+}
+
+@media (max-width: 640px) {
+  :root {
+    --lg-page-pad-x: var(--lg-space-6);               /* 16px mobile */
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --lg-duration-fast: 0ms;
+    --lg-duration-base: 0ms;
+    --lg-duration-slow: 0ms;
+  }
+}
