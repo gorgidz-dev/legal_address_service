@@ -28,6 +28,7 @@
   --lg-bg-surface-soft: #fdfdfb;                      /* сайдбар, модалки, popover */
   --lg-bg-surface-translucent: rgba(255, 255, 253, 0.94);   /* стеклянные панели */
   --lg-bg-surface-translucent-mid: rgba(255, 255, 253, 0.88);
+  --lg-bg-surface-translucent-faint: rgba(255, 255, 253, 0.74);   /* empty state */
   --lg-bg-subtle: #f8faf6;                            /* metric-grid, info-box */
   --lg-bg-shimmer-start: #ecefea;
   --lg-bg-shimmer-end: #f7f8f5;
