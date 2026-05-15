@@ -192,6 +192,23 @@
   flex: 1;
   min-width: 0;
   background: transparent;
+  /* В legacy styles.css есть глобальное `input:focus { box-shadow: ... }`,
+     которое внутри ds-input создаёт "второе поле" — зелёный фокус-ring у
+     самого input'а накладывается на indigo-ring у label-обёртки (focus-within).
+     Гасим тут. Фокус показывает только .ds-input:focus-within (см. выше). */
+  box-shadow: none;
+}
+.ds-input input:focus,
+.ds-input select:focus {
+  box-shadow: none;
+  border-color: transparent;
+}
+/* Убрать нативную "search cancel" кнопку у type="search" в WebKit:
+   она рисует второй "x" в правом краю поля, конкурируя с нашими чипами. */
+.ds-input input[type="search"]::-webkit-search-cancel-button,
+.ds-input input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
 }
 .ds-input select {
   appearance: none;
