@@ -6,7 +6,7 @@ from typing import Annotated, Literal, Optional
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -194,6 +194,126 @@ async def public_fns_options(
         {"fns_number": row.fns_number, "fns_city": row.fns_city, "count": row.count}
         for row in rows
     ]
+
+
+@router.get("/addresses/search")
+async def public_addresses_search(
+    q: Annotated[Optional[str], Query(max_length=200)] = None,
+    city: Annotated[Optional[str], Query(max_length=120)] = None,
+    fns_number: Annotated[Optional[int], Query(ge=1, le=9999)] = None,
+    correspondence: Annotated[Optional[bool], Query()] = None,
+    price_lt: Annotated[Optional[int], Query(ge=0, le=10_000_000)] = None,
+    price_gte: Annotated[Optional[int], Query(ge=0, le=10_000_000)] = None,
+    sort: Annotated[
+        Literal["relevance", "default", "price_asc", "price_desc", "newest"], Query()
+    ] = "relevance",
+    page: Annotated[int, Query(ge=1, le=10_000)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 24,
+    term_months: Annotated[int, Query()] = 11,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Серверный FTS по каталогу с пагинацией.
+
+    Отличия от `/addresses`:
+    - `q` — полнотекстовый поиск через PG `tsvector(russian)` с нормализацией ё→е.
+      Russian-config делает stemming: "тверская" находит "тверской/тверскую/...".
+    - `sort=relevance` (default) — `ts_rank_cd` если есть `q`, иначе по адресу.
+    - Пагинация: `page` + `page_size`. Возвращает `{items, total, page, page_size}`.
+    - Использует GIN-индекс `ix_addresses_search_tsv` (см. миграцию 0021).
+
+    Старый `GET /addresses` остаётся для back-compat (mobile, тесты).
+    """
+    if term_months not in (6, 11):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="term_months must be 6 or 11",
+        )
+
+    # Базовые фильтры — те же, что в /addresses.
+    base_where = [
+        Provider.is_active.is_(True),
+        Address.is_available.is_(True),
+        Address.publication_status == AddressPublicationStatus.PUBLISHED.value,
+    ]
+    if city:
+        base_where.append(Address.full_address.ilike(f"%{city.strip()}%"))
+    if fns_number is not None:
+        base_where.append(Address.fns_number == fns_number)
+    if correspondence is True:
+        base_where.append(Address.correspondence_price.is_not(None))
+    if price_lt is not None:
+        base_where.append(Address.price_11m < price_lt)
+    if price_gte is not None:
+        base_where.append(Address.price_11m >= price_gte)
+
+    # FTS-запрос. Нормализуем `q` так же, как нормализуется search_tsv в БД —
+    # lower + ё→е. Stemming (тверская → тверск-) делает PG-config russian.
+    normalized_q = (q or "").strip().lower().replace("ё", "е")
+    has_query = bool(normalized_q)
+
+    if has_query:
+        # plainto_tsquery игнорирует пунктуацию и шум — пользователь пишет
+        # "ул. Тверская, д. 7" → ts-query: "ул & тверская & д & 7".
+        ts_query = func.plainto_tsquery("russian", normalized_q)
+        ts_vector = literal_column("search_tsv")
+        base_where.append(ts_vector.op("@@")(ts_query))
+
+    stmt = (
+        select(Address, Provider)
+        .join(Provider, Provider.id == Address.provider_id)
+        .where(*base_where)
+    )
+
+    # Сортировка.
+    if has_query and sort == "relevance":
+        stmt = stmt.order_by(
+            func.ts_rank_cd(literal_column("search_tsv"), ts_query).desc(),
+            Address.full_address.asc(),
+        )
+    elif sort == "price_asc":
+        stmt = stmt.order_by(Address.price_11m.asc())
+    elif sort == "price_desc":
+        stmt = stmt.order_by(Address.price_11m.desc())
+    elif sort == "newest":
+        stmt = stmt.order_by(Address.created_at.desc())
+    else:
+        stmt = stmt.order_by(Address.full_address.asc())
+
+    # Total — отдельный count-query с тем же набором фильтров.
+    count_stmt = (
+        select(func.count())
+        .select_from(Address)
+        .join(Provider, Provider.id == Address.provider_id)
+        .where(*base_where)
+    )
+
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    # Пагинация.
+    offset = (page - 1) * page_size
+    stmt = stmt.limit(page_size).offset(offset)
+    rows = list((await db.execute(stmt)).all())
+
+    address_ids = [a.id for a, _ in rows]
+    photos_by_address = await _load_approved_photos_for(db, address_ids)
+    services_by_address = await _load_active_services_for(db, address_ids)
+
+    items = [
+        public_address_from_row(
+            address=address,
+            provider=provider,
+            term_months=6 if term_months == 6 else 11,
+            photos=photos_by_address.get(address.id),
+            services=services_by_address.get(address.id),
+        )
+        for address, provider in rows
+    ]
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/addresses", response_model=list[PublicAddressRead])

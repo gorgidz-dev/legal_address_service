@@ -299,12 +299,26 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
       : initialFilters,
   );
   const [addresses, setAddresses] = useState<PublicAddress[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(() => {
+    if (typeof window === "undefined") return 1;
+    const p = new URLSearchParams(window.location.search).get("page");
+    return p && /^\d+$/.test(p) ? Math.max(1, parseInt(p, 10)) : 1;
+  });
+  const PAGE_SIZE = 24;
   const [fnsOptions, setFnsOptions] = useState<
     { fns_number: number; fns_city: string | null; count: number }[]
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Дебаунс текстового запроса. UI обновляется мгновенно (filters.query), а на
+  // бэк уходит с задержкой 300ms — чтобы каждое нажатие не дёргало FTS.
+  const [debouncedQuery, setDebouncedQuery] = useState(filters.query);
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(filters.query), 300);
+    return () => clearTimeout(id);
+  }, [filters.query]);
 
   const [ownerOpen, setOwnerOpen] = useState(false);
   const [ownerForm, setOwnerForm] = useState<OwnerRequestForm>(initialOwnerRequestForm);
@@ -404,12 +418,21 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     setLoading(true);
     setError(null);
     api
-      .publicAddresses({
-        city: filters.city.trim(),
+      .publicSearchAddresses({
+        q: debouncedQuery,
+        city: filters.city.trim() || undefined,
         fns_number: filters.fnsNumber ? Number(filters.fnsNumber) : "",
+        correspondence: filters.withCorr || undefined,
+        price_lt: filters.budgetUnder30k ? 30000 : undefined,
+        price_gte: filters.premium11 ? 25000 : undefined,
+        sort: filters.sort === "default" ? "relevance" : filters.sort,
+        page,
+        page_size: PAGE_SIZE,
       })
       .then((result) => {
-        if (alive) setAddresses(result);
+        if (!alive) return;
+        setAddresses(result.items);
+        setTotalCount(result.total);
       })
       .catch((err: Error) => {
         if (alive) setError(err.message);
@@ -420,25 +443,56 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     return () => {
       alive = false;
     };
-  }, [filters.city, filters.fnsNumber, reloadKey]);
+  }, [
+    debouncedQuery,
+    filters.city,
+    filters.fnsNumber,
+    filters.withCorr,
+    filters.budgetUnder30k,
+    filters.premium11,
+    filters.sort,
+    page,
+    reloadKey,
+  ]);
 
-  // Синк filters → query string. replaceState, не push — иначе history засрётся
-  // на каждом нажатии в поле поиска. Сохраняем path + hash (#catalog и пр.).
+  // При смене любого фильтра кроме page — возвращаемся на 1-ю страницу.
+  // (page сам по себе не триггерит этот reset, иначе цикл.)
+  useEffect(() => {
+    setPage(1);
+  }, [
+    debouncedQuery,
+    filters.city,
+    filters.fnsNumber,
+    filters.withCorr,
+    filters.budgetUnder30k,
+    filters.premium11,
+    filters.sort,
+  ]);
+
+  // Синк filters + page → query string. replaceState, не push — иначе history
+  // засрётся на каждом нажатии в поле поиска. Сохраняем path + hash.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const qs = filtersToQueryString(filters);
-    const newSearch = qs ? `?${qs}` : "";
+    const parts: string[] = [];
+    if (qs) parts.push(qs);
+    if (page > 1) parts.push(`page=${page}`);
+    const newSearch = parts.length ? `?${parts.join("&")}` : "";
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const next = `${window.location.pathname}${newSearch}${window.location.hash}`;
     if (next !== current) {
       window.history.replaceState(null, "", next);
     }
-  }, [filters]);
+  }, [filters, page]);
 
-  // Browser back/forward — пересчитать filters из URL.
+  // Browser back/forward — пересчитать filters + page из URL.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = () => setFilters(filtersFromQueryString(window.location.search));
+    const handler = () => {
+      setFilters(filtersFromQueryString(window.location.search));
+      const p = new URLSearchParams(window.location.search).get("page");
+      setPage(p && /^\d+$/.test(p) ? Math.max(1, parseInt(p, 10)) : 1);
+    };
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
   }, []);
@@ -461,44 +515,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     };
   }, [reloadKey]);
 
-  const filteredAddresses = useMemo(() => {
-    const q = normalizeSearchText(filters.query);
-    let list = addresses;
-    if (q) {
-      list = list.filter((address) => {
-        const haystack = normalizeSearchText(
-          `${address.full_address} ${address.fns_number ?? ""} ${address.fns_city ?? ""} ${address.provider_name}`,
-        );
-        return haystack.includes(q);
-      });
-    }
-    if (filters.withCorr) {
-      list = list.filter((a) => a.correspondence_price != null);
-    }
-    if (filters.budgetUnder30k) {
-      list = list.filter((a) => Number(a.price_11m) < 30000);
-    }
-    if (filters.premium11) {
-      list = list.filter((a) => Number(a.price_11m) >= 25000);
-    }
-    if (filters.sort === "price_asc") {
-      list = [...list].sort((a, b) => Number(a.price_11m) - Number(b.price_11m));
-    } else if (filters.sort === "price_desc") {
-      list = [...list].sort((a, b) => Number(b.price_11m) - Number(a.price_11m));
-    } else if (filters.sort === "newest") {
-      list = [...list].sort(
-        (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
-      );
-    }
-    return list;
-  }, [
-    addresses,
-    filters.query,
-    filters.withCorr,
-    filters.budgetUnder30k,
-    filters.premium11,
-    filters.sort,
-  ]);
+  // Бэк делает всю фильтрацию (FTS + city + ifns + corr + price-bands + sort).
+  // Фронт показывает то что пришло. Подсветка совпадений по-прежнему клиентская.
+  const filteredAddresses = addresses;
 
   const ifnsCount = useMemo(() => {
     const set = new Set<number>();
@@ -818,7 +837,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
             "Загружаем каталог…"
           ) : (
             <>
-              Показано <b>{filteredAddresses.length}</b> из <b>{addresses.length}</b> {addresses.length === 1 ? "адреса" : "адресов"}
+              Показано <b>{filteredAddresses.length}</b> из <b>{totalCount}</b> {totalCount === 1 ? "адреса" : "адресов"}
             </>
           )}
         </div>
@@ -1151,6 +1170,31 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
               );
             })}
           </motion.div>
+        )}
+
+        {/* Пагинация. Прячем если total ≤ page_size (одна страница). */}
+        {!loading && totalCount > PAGE_SIZE && (
+          <nav className="ds-pagination" aria-label="Постраничная навигация">
+            <button
+              type="button"
+              className="ds-btn ds-btn--ghost ds-btn--sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              ← Назад
+            </button>
+            <span className="ds-pagination__info">
+              Страница <b>{page}</b> из <b>{Math.ceil(totalCount / PAGE_SIZE)}</b>
+            </span>
+            <button
+              type="button"
+              className="ds-btn ds-btn--ghost ds-btn--sm"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= Math.ceil(totalCount / PAGE_SIZE)}
+            >
+              Вперёд →
+            </button>
+          </nav>
         )}
       </div>
 

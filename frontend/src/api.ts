@@ -168,6 +168,41 @@ export const api = {
       "/marketplace/fns-options"
     ),
 
+  /**
+   * Серверный FTS-поиск по каталогу с пагинацией.
+   * См. бэк: app/routers/marketplace.py::public_addresses_search.
+   */
+  publicSearchAddresses: (params: {
+    q?: string;
+    city?: string;
+    fns_number?: number | "";
+    correspondence?: boolean;
+    price_lt?: number;
+    price_gte?: number;
+    sort?: "relevance" | "default" | "price_asc" | "price_desc" | "newest";
+    page?: number;
+    page_size?: number;
+    term_months?: 6 | 11;
+  }) => {
+    const p = new URLSearchParams();
+    if (params.q?.trim()) p.set("q", params.q.trim());
+    if (params.city) p.set("city", params.city);
+    if (params.fns_number) p.set("fns_number", String(params.fns_number));
+    if (params.correspondence) p.set("correspondence", "true");
+    if (params.price_lt != null) p.set("price_lt", String(params.price_lt));
+    if (params.price_gte != null) p.set("price_gte", String(params.price_gte));
+    if (params.sort) p.set("sort", params.sort);
+    if (params.page) p.set("page", String(params.page));
+    if (params.page_size) p.set("page_size", String(params.page_size));
+    if (params.term_months) p.set("term_months", String(params.term_months));
+    return request<{
+      items: PublicAddress[];
+      total: number;
+      page: number;
+      page_size: number;
+    }>(`/marketplace/addresses/search?${p.toString()}`);
+  },
+
   publicAddresses: (filters?: {
     city?: string;
     fns_number?: number | "";
