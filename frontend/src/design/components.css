@@ -411,6 +411,14 @@
   overflow: hidden;
   min-height: calc(2 * 1.25 * var(--ds-text-heading-md));
 }
+
+/* Подсветка совпадений в поиске каталога (HighlightMatch). */
+.ds-search-hit {
+  background: var(--ds-indigo-100);
+  color: var(--ds-indigo-900);
+  border-radius: var(--ds-radius-sm);
+  padding: 0 2px;
+}
 .ds-card__sub {
   font-size: var(--ds-text-body-sm);
   color: var(--ds-slate-500);

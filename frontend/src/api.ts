@@ -163,6 +163,11 @@ export const api = {
       { method: "POST" }
     ),
 
+  publicFnsOptions: () =>
+    request<{ fns_number: number; fns_city: string | null; count: number }[]>(
+      "/marketplace/fns-options"
+    ),
+
   publicAddresses: (filters?: {
     city?: string;
     fns_number?: number | "";

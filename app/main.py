@@ -109,6 +109,8 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path == f"{API_PREFIX}/marketplace/addresses" and method == "GET":
         return True
+    if path == f"{API_PREFIX}/marketplace/fns-options" and method == "GET":
+        return True
     if path == f"{API_PREFIX}/push/public-key" and method == "GET":
         return True
     if path == f"{API_PREFIX}/marketplace/provider-requests" and method == "POST":

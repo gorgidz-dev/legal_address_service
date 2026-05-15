@@ -62,13 +62,80 @@ const initialFilters: CatalogFilters = {
 type CardOptions = { term: 6 | 11; corr: boolean };
 const defaultCardOptions: CardOptions = { term: 11, corr: false };
 
-// ИФНС Москвы: 1–31, 33–36, 43, 51.
+// Fallback на случай, если /marketplace/fns-options ещё не загрузился
+// или пуст. ИФНС Москвы: 1–31, 33–36, 43, 51.
 const MOSCOW_FNS_NUMBERS: number[] = [
   ...Array.from({ length: 31 }, (_, i) => i + 1),
   33, 34, 35, 36,
   43,
   51,
 ];
+
+// "Шумовые" слова, которые пользователи часто пишут в поиске, но они
+// не несут смысла для матчинга адреса: "ул.", "д.", "г.", "офис" и т.д.
+// Удаляем и из запроса, и из haystack — оба становятся "тверская 7" вместо
+// "ул. Тверская д. 7" → совпадает, даже если пользователь не угадал формат.
+const SEARCH_NOISE_RE =
+  /\b(?:г|город|ул|улица|пер|переулок|пр|пр-т|проспект|просп|пл|площадь|ш|шоссе|наб|набережная|б-р|бульвар|туп|тупик|линия|алл|аллея|тракт|мкр|микрорайон|д|дом|корп|корпус|стр|строение|вл|владение|лит|литера|пом|помещение|оф|офис|комн|комната|кв|квартира|этаж|эт)\.?(?=\s|$|,)/giu;
+
+/**
+ * Нормализация для поискового сопоставления. Не для отображения.
+ *
+ * - lowercase
+ * - ё → е (часто пишут по-разному: "артем"/"артём")
+ * - удаление "ул.", "д.", "г." и пр. (см. SEARCH_NOISE_RE)
+ * - схлопывание пробелов и знаков препинания
+ */
+function normalizeSearchText(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(SEARCH_NOISE_RE, " ")
+    .replace(/[.,;:!?()«»"'–—\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Подсветка вхождений `query` в `text`. Учитывает ё/е (например, запрос
+ * "артем" подсветит "Артём"). Если query пустой — возвращает текст как есть.
+ */
+// Без флага `g` — чтобы `.test()` был stateless при фильтрации слов запроса.
+const SEARCH_NOISE_TEST_RE = new RegExp(SEARCH_NOISE_RE.source, "iu");
+
+function HighlightMatch({ text, query }: { text: string; query: string }) {
+  const q = query.trim();
+  if (!q) return <>{text}</>;
+  // Разбиваем запрос на слова — подсвечиваем каждое (≥2 символа, не "шум").
+  const words = q
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !SEARCH_NOISE_TEST_RE.test(w));
+  if (!words.length) return <>{text}</>;
+  // ё/е тoлерантность: [её] вместо буквы (запрос "артем" → подсветит "Артём").
+  const pattern = words
+    .map((w) => escapeRegExp(w).replace(/[её]/gi, "[её]"))
+    .join("|");
+  const re = new RegExp(`(${pattern})`, "gi");
+  // split с capturing group: odd-индексы = совпадения, even = разделители.
+  const parts = text.split(re);
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <mark key={i} className="ds-search-hit">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 type OwnerRequestForm = {
   company_name: string;
@@ -198,6 +265,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
 
   const [filters, setFilters] = useState<CatalogFilters>(initialFilters);
   const [addresses, setAddresses] = useState<PublicAddress[]>([]);
+  const [fnsOptions, setFnsOptions] = useState<
+    { fns_number: number; fns_city: string | null; count: number }[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -318,12 +388,32 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     };
   }, [filters.city, filters.fnsNumber, reloadKey]);
 
+  // ИФНС-опции грузим один раз — это справочник, при фильтрации не меняется
+  // (содержит ИФНС по всем опубликованным адресам, а не по текущей выборке).
+  useEffect(() => {
+    let alive = true;
+    api
+      .publicFnsOptions()
+      .then((opts) => {
+        if (alive) setFnsOptions(opts);
+      })
+      .catch(() => {
+        // Бэк может быть недоступен / older deployment без endpoint'а — silently
+        // фолбэк на хардкод MOSCOW_FNS_NUMBERS, см. рендер <select> ниже.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [reloadKey]);
+
   const filteredAddresses = useMemo(() => {
-    const q = filters.query.trim().toLowerCase();
+    const q = normalizeSearchText(filters.query);
     let list = addresses;
     if (q) {
       list = list.filter((address) => {
-        const haystack = `${address.full_address} ${address.fns_number ?? ""} ${address.fns_city ?? ""} ${address.provider_name}`.toLowerCase();
+        const haystack = normalizeSearchText(
+          `${address.full_address} ${address.fns_number ?? ""} ${address.fns_city ?? ""} ${address.provider_name}`,
+        );
         return haystack.includes(q);
       });
     }
@@ -569,16 +659,13 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
               <Search size={14} />
             </span>
             <input
-              list="ds-public-cities"
+              type="search"
               placeholder="Найти адрес или ИФНС"
               value={filters.query}
               onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+              autoComplete="off"
+              spellCheck={false}
             />
-            <datalist id="ds-public-cities">
-              {cities.map((city) => (
-                <option key={city} value={city} />
-              ))}
-            </datalist>
           </label>
           <button
             type="button"
@@ -597,11 +684,18 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
               onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
             >
               <option value="">ИФНС: все</option>
-              {MOSCOW_FNS_NUMBERS.map((num) => (
-                <option key={num} value={num}>
-                  ИФНС № {num}
-                </option>
-              ))}
+              {fnsOptions.length > 0
+                ? fnsOptions.map((opt) => (
+                    <option key={opt.fns_number} value={opt.fns_number}>
+                      ИФНС № {opt.fns_number} · {opt.count}
+                      {opt.count === 1 ? " адрес" : " адр."}
+                    </option>
+                  ))
+                : MOSCOW_FNS_NUMBERS.map((num) => (
+                    <option key={num} value={num}>
+                      ИФНС № {num}
+                    </option>
+                  ))}
             </select>
           </label>
           <label className="ds-input" style={{ minWidth: 180, flex: "0 0 auto" }}>
@@ -827,10 +921,19 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                     <span className="ds-card__media-hint">Подробнее →</span>
                   </button>
                   <div className="ds-card__body">
-                    <h3 className="ds-card__title">{address.full_address}</h3>
+                    <h3 className="ds-card__title">
+                      <HighlightMatch text={address.full_address} query={filters.query} />
+                    </h3>
                     <div className="ds-card__sub">
                       {address.room_number ? `${address.room_number} · ` : ""}
-                      {address.fns_number ? `ИФНС № ${address.fns_number}` : ""}
+                      {address.fns_number ? (
+                        <HighlightMatch
+                          text={`ИФНС № ${address.fns_number}`}
+                          query={filters.query}
+                        />
+                      ) : (
+                        ""
+                      )}
                     </div>
                     <div className="ds-card__options">
                       <div className="ds-segmented" role="group" aria-label="Срок">
@@ -1310,11 +1413,18 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                   onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
                 >
                   <option value="">Все ИФНС</option>
-                  {MOSCOW_FNS_NUMBERS.map((num) => (
-                    <option key={num} value={num}>
-                      ИФНС № {num}
-                    </option>
-                  ))}
+                  {fnsOptions.length > 0
+                    ? fnsOptions.map((opt) => (
+                        <option key={opt.fns_number} value={opt.fns_number}>
+                          ИФНС № {opt.fns_number} · {opt.count}
+                          {opt.count === 1 ? " адрес" : " адр."}
+                        </option>
+                      ))
+                    : MOSCOW_FNS_NUMBERS.map((num) => (
+                        <option key={num} value={num}>
+                          ИФНС № {num}
+                        </option>
+                      ))}
                 </select>
               </label>
               <label className="field" style={{ gridColumn: "1 / -1" }}>

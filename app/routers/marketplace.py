@@ -6,7 +6,7 @@ from typing import Annotated, Literal, Optional
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -160,6 +160,40 @@ async def _load_active_services_for(
     for svc in result.scalars().all():
         by_address.setdefault(svc.address_id, []).append(svc)
     return by_address
+
+
+@router.get("/fns-options")
+async def public_fns_options(
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """ИФНС-коды, реально присутствующие в опубликованном каталоге, с количеством адресов.
+
+    Фронт использует это вместо хардкода 37 московских ИФНС в publicCatalog.tsx.
+    Возвращает отсортированный список вида:
+        [{"fns_number": 4, "fns_city": "Москва", "count": 3}, ...]
+    Без счётчика 0 (если по ИФНС нет опубликованных адресов — её просто нет в выдаче).
+    """
+    stmt = (
+        select(
+            Address.fns_number,
+            Address.fns_city,
+            func.count(Address.id).label("count"),
+        )
+        .join(Provider, Provider.id == Address.provider_id)
+        .where(
+            Provider.is_active.is_(True),
+            Address.is_available.is_(True),
+            Address.publication_status == AddressPublicationStatus.PUBLISHED.value,
+            Address.fns_number.is_not(None),
+        )
+        .group_by(Address.fns_number, Address.fns_city)
+        .order_by(func.count(Address.id).desc(), Address.fns_number.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return [
+        {"fns_number": row.fns_number, "fns_city": row.fns_city, "count": row.count}
+        for row in rows
+    ]
 
 
 @router.get("/addresses", response_model=list[PublicAddressRead])
