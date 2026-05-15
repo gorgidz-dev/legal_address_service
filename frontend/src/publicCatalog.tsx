@@ -20,6 +20,10 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AddressChatPanel } from "./AddressChatPanel";
 import { api } from "./api";
 import { PhoneInput } from "./PhoneInput";
+import { HomeConfigurator } from "./sections/HomeConfigurator";
+import { HomeFAQ } from "./sections/HomeFAQ";
+import { HomeForOwners } from "./sections/HomeForOwners";
+import { HomeCases } from "./sections/HomeCases";
 import type {
   AddressChat,
   CurrentUser,
@@ -726,6 +730,29 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
         </motion.div>
       </motion.section>
 
+      <HomeConfigurator
+        filters={{
+          query: filters.query,
+          fnsNumber: filters.fnsNumber,
+          withCorr: filters.withCorr,
+          budgetUnder30k: filters.budgetUnder30k,
+          premium11: filters.premium11,
+        }}
+        onChange={(next) => setFilters({ ...filters, ...next })}
+        termMonths={11}
+        onTermChange={() => {
+          /* MVP: term shown per card; конфигуратор пока не привязывает term глобально */
+        }}
+        fnsOptions={fnsOptions}
+        totalCount={totalCount}
+        loading={loading}
+        onShowResults={() => {
+          document
+            .getElementById("catalog-grid")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+      />
+
       <div className="ds-filterbar-wrap">
         <section className="ds-filterbar" aria-label="Фильтры каталога">
           <label className="ds-input">
@@ -1197,6 +1224,10 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
           </nav>
         )}
       </div>
+
+      <HomeForOwners onCTAClick={() => setOwnerOpen(true)} />
+      <HomeCases />
+      <HomeFAQ />
 
       {selectedAddress && (
         <div className="modal-backdrop">
