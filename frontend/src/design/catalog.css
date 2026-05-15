@@ -447,3 +447,23 @@
   justify-content: center;
   flex-wrap: wrap;
 }
+.ds-emptystate__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+  justify-content: center;
+  margin: 0 0 var(--ds-space-4);
+}
+.ds-emptystate__chips .ds-chip {
+  /* Иконка X в чипе — компактный gap. */
+  gap: var(--ds-space-1);
+}
+.ds-emptystate__suggest {
+  margin: 0 0 var(--ds-space-4);
+}
+.ds-emptystate__suggest-label {
+  display: block;
+  font-size: var(--ds-text-body-sm);
+  color: var(--ds-slate-500);
+  margin: 0 0 var(--ds-space-2);
+}

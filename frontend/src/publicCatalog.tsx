@@ -59,6 +59,36 @@ const initialFilters: CatalogFilters = {
   premium11: false,
 };
 
+const VALID_SORTS: CatalogSort[] = ["default", "price_asc", "price_desc", "newest"];
+
+/** Filters → query string. Записываем только не-дефолтные поля, чтобы URL был чистым. */
+function filtersToQueryString(f: CatalogFilters): string {
+  const p = new URLSearchParams();
+  if (f.query.trim()) p.set("q", f.query.trim());
+  if (f.city !== initialFilters.city) p.set("city", f.city);
+  if (f.fnsNumber) p.set("ifns", f.fnsNumber);
+  if (f.sort !== "default") p.set("sort", f.sort);
+  if (f.withCorr) p.set("corr", "1");
+  if (f.budgetUnder30k) p.set("budget", "lt30");
+  if (f.premium11) p.set("tier", "premium");
+  return p.toString();
+}
+
+/** Query string → filters. Невалидные значения мягко падают к дефолту. */
+function filtersFromQueryString(search: string): CatalogFilters {
+  const p = new URLSearchParams(search);
+  const sort = p.get("sort");
+  return {
+    query: p.get("q") ?? "",
+    city: p.get("city") ?? initialFilters.city,
+    fnsNumber: p.get("ifns") ?? "",
+    sort: sort && (VALID_SORTS as string[]).includes(sort) ? (sort as CatalogSort) : "default",
+    withCorr: p.get("corr") === "1",
+    budgetUnder30k: p.get("budget") === "lt30",
+    premium11: p.get("tier") === "premium",
+  };
+}
+
 type CardOptions = { term: 6 | 11; corr: boolean };
 const defaultCardOptions: CardOptions = { term: 11, corr: false };
 
@@ -263,7 +293,11 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
   const gridMotion = reduceMotion ? undefined : gridStaggerVariants;
   const cardMotion = reduceMotion ? undefined : cardVariants;
 
-  const [filters, setFilters] = useState<CatalogFilters>(initialFilters);
+  const [filters, setFilters] = useState<CatalogFilters>(() =>
+    typeof window !== "undefined"
+      ? filtersFromQueryString(window.location.search)
+      : initialFilters,
+  );
   const [addresses, setAddresses] = useState<PublicAddress[]>([]);
   const [fnsOptions, setFnsOptions] = useState<
     { fns_number: number; fns_city: string | null; count: number }[]
@@ -387,6 +421,27 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
       alive = false;
     };
   }, [filters.city, filters.fnsNumber, reloadKey]);
+
+  // Синк filters → query string. replaceState, не push — иначе history засрётся
+  // на каждом нажатии в поле поиска. Сохраняем path + hash (#catalog и пр.).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const qs = filtersToQueryString(filters);
+    const newSearch = qs ? `?${qs}` : "";
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const next = `${window.location.pathname}${newSearch}${window.location.hash}`;
+    if (next !== current) {
+      window.history.replaceState(null, "", next);
+    }
+  }, [filters]);
+
+  // Browser back/forward — пересчитать filters из URL.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => setFilters(filtersFromQueryString(window.location.search));
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, []);
 
   // ИФНС-опции грузим один раз — это справочник, при фильтрации не меняется
   // (содержит ИФНС по всем опубликованным адресам, а не по текущей выборке).
@@ -827,18 +882,130 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
             <div className="ds-emptystate__icon">
               <Search size={26} strokeWidth={1.8} />
             </div>
-            <h3>{hasActiveFilters ? "По заданным фильтрам адресов нет" : "Опубликованных адресов пока нет"}</h3>
+            <h3>
+              {hasActiveFilters
+                ? "По заданным фильтрам адресов нет"
+                : "Опубликованных адресов пока нет"}
+            </h3>
             <p>
               {hasActiveFilters
-                ? `Попробуй расширить срок или выбрать другую ИФНС. У нас ${addresses.length} адресов в ${ifnsCount} ИФНС.`
+                ? "Сбрось ненужные фильтры или попробуй похожую ИФНС:"
                 : "Скоро появятся первые адреса от верифицированных собственников."}
             </p>
             {hasActiveFilters && (
-              <div className="ds-emptystate__actions">
-                <button className="ds-btn ds-btn--primary ds-btn--md" type="button" onClick={resetFilters}>
-                  Сбросить фильтры
-                </button>
-              </div>
+              <>
+                <div className="ds-emptystate__chips">
+                  {filters.query.trim() && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, query: "" })}
+                    >
+                      Запрос: «{filters.query}» <X size={12} />
+                    </button>
+                  )}
+                  {filters.fnsNumber && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, fnsNumber: "" })}
+                    >
+                      ИФНС № {filters.fnsNumber} <X size={12} />
+                    </button>
+                  )}
+                  {filters.city !== initialFilters.city && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() =>
+                        setFilters({ ...filters, city: initialFilters.city })
+                      }
+                    >
+                      Город: {filters.city || "не указан"} <X size={12} />
+                    </button>
+                  )}
+                  {filters.withCorr && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, withCorr: false })}
+                    >
+                      С корреспонденцией <X size={12} />
+                    </button>
+                  )}
+                  {filters.budgetUnder30k && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, budgetUnder30k: false })}
+                    >
+                      До 30 000 ₽ <X size={12} />
+                    </button>
+                  )}
+                  {filters.premium11 && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, premium11: false })}
+                    >
+                      Премиум от 25 000 ₽ <X size={12} />
+                    </button>
+                  )}
+                  {filters.sort !== "default" && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, sort: "default" })}
+                    >
+                      Сортировка <X size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Похожие ИФНС: если есть текущий фильтр по ИФНС — top-3 других
+                    с самым большим количеством адресов. */}
+                {filters.fnsNumber &&
+                  fnsOptions.filter(
+                    (o) => String(o.fns_number) !== filters.fnsNumber,
+                  ).length > 0 && (
+                    <div className="ds-emptystate__suggest">
+                      <span className="ds-emptystate__suggest-label">
+                        Похожие ИФНС с адресами:
+                      </span>
+                      <div className="ds-emptystate__chips">
+                        {fnsOptions
+                          .filter((o) => String(o.fns_number) !== filters.fnsNumber)
+                          .slice(0, 3)
+                          .map((opt) => (
+                            <button
+                              key={opt.fns_number}
+                              type="button"
+                              className="ds-chip"
+                              onClick={() =>
+                                setFilters({
+                                  ...filters,
+                                  fnsNumber: String(opt.fns_number),
+                                })
+                              }
+                            >
+                              ИФНС № {opt.fns_number} · {opt.count}
+                              {opt.count === 1 ? " адрес" : " адр."}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                <div className="ds-emptystate__actions">
+                  <button
+                    className="ds-btn ds-btn--primary ds-btn--md"
+                    type="button"
+                    onClick={resetFilters}
+                  >
+                    Сбросить все
+                  </button>
+                </div>
+              </>
             )}
           </div>
         ) : (
