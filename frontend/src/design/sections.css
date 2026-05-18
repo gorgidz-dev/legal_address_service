@@ -87,6 +87,11 @@
 .ds-configurator__label {
   min-height: 16px;
 }
+/* <legend> не участвует во flex-gap родителя-fieldset — поэтому метки
+   «Срок аренды»/«Цена…» липли к контролам. Даём явный отступ. */
+legend.ds-configurator__label {
+  margin-bottom: var(--ds-space-2);
+}
 .ds-configurator__label {
   display: inline-flex;
   align-items: center;
