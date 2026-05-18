@@ -9,8 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import utcnow
 from app.enums import ApplicationEventKind, ApplicationStatus, NotificationAudience, UserRole
+from app.models.address import Address
+from app.models.address_chat import AddressChat
 from app.models.application import Application
 from app.models.application_event import ApplicationEvent
+from app.models.user import User
 from app.models.user_notification import UserNotification
 from app.schemas.notification import NotificationRead
 
@@ -160,6 +163,60 @@ def notification_read_from_user_row(n: UserNotification) -> NotificationRead:
     )
 
 
+_STAFF_ROLES = {UserRole.ADMIN, UserRole.MANAGER, UserRole.LAWYER}
+
+
+async def _user_can_access_link(
+    db: AsyncSession, *, user_id: UUID, link_type: str, link_id: UUID
+) -> bool:
+    """Имеет ли user доступ к ресурсу, на который ведёт ссылка уведомления.
+
+    Нужно, чтобы не отправить юзеру уведомление со ссылкой на чужой ресурс:
+    клик дал бы 403, но сам факт видимости карточки уведомления — утечка
+    (юзер узнаёт о существовании заявки/чата, к которым отношения не имеет).
+    """
+    user = await db.get(User, user_id)
+    if user is None or not getattr(user, "is_active", True):
+        return False
+    try:
+        role = UserRole(getattr(user, "role"))
+    except ValueError:
+        return False
+
+    if link_type == "chat":
+        chat = await db.get(AddressChat, link_id)
+        if chat is None:
+            return False
+        if chat.client_user_id == user_id:
+            return True
+        address = await db.get(Address, chat.address_id)
+        if address is None:
+            return False
+        return (
+            role == UserRole.OWNER
+            and getattr(user, "provider_id", None) == address.provider_id
+        )
+
+    if link_type == "application":
+        application = await db.get(Application, link_id)
+        if application is None:
+            return False
+        if role in _STAFF_ROLES:
+            return True
+        if role == UserRole.CLIENT:
+            return getattr(application, "created_by", None) == user_id
+        if role == UserRole.OWNER:
+            return (
+                getattr(user, "provider_id", None) is not None
+                and getattr(application, "provider_id", None)
+                == getattr(user, "provider_id", None)
+            )
+        return False
+
+    # Неизвестный link_type — не пропускаем (defensive default).
+    return False
+
+
 async def write_user_notification(
     db: AsyncSession,
     *,
@@ -170,6 +227,20 @@ async def write_user_notification(
     link_type: str | None = None,
     link_id: UUID | None = None,
 ) -> UserNotification:
+    """Создаёт in-app уведомление.
+
+    Если переданы link_type+link_id — ПРОВЕРЯЕМ, что user_id реально имеет
+    доступ к этому ресурсу. Иначе ссылку отбрасываем (уведомление всё равно
+    доставляется, но без ведущей в чужой ресурс ссылки). Так уведомление не
+    превращается в канал разведки чужих заявок/чатов.
+    """
+    if link_type is not None and link_id is not None:
+        if not await _user_can_access_link(
+            db, user_id=user_id, link_type=link_type, link_id=link_id
+        ):
+            link_type = None
+            link_id = None
+
     record = UserNotification(
         user_id=user_id,
         kind=kind,
