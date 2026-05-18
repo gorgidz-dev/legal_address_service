@@ -170,6 +170,18 @@ class PaymentPayerType(str, Enum):
     JURIDICAL = "juridical"
 
 
+class PaymentAttachmentKind(str, Enum):
+    """Документы платежа (для manual_invoice / юр.лиц).
+
+    invoice       — счёт на оплату, загружает собственник.
+    payment_order — платёжное поручение с отметкой банка, загружает клиент
+                    (действие «я оплатил»).
+    """
+
+    INVOICE = "invoice"
+    PAYMENT_ORDER = "payment_order"
+
+
 class PaymentStatus(str, Enum):
     PENDING = "pending"              # row created, provider not yet called
     AWAITING_USER = "awaiting_user"  # QR/link issued, waiting for payer

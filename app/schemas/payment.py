@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.contacts import OptionalEmail, OptionalPhone
-from app.enums import PaymentPayerType, PaymentStatus
+from app.enums import PaymentAttachmentKind, PaymentPayerType, PaymentStatus
 
 
 class PaymentInitiateRequest(BaseModel):
@@ -56,6 +56,27 @@ class PaymentManualConfirmRequest(BaseModel):
 class PaymentRejectRequest(BaseModel):
     """Для provider=manual_invoice: админ помечает платёж как не пришедший."""
     reason: str = Field(min_length=2, max_length=500)
+
+
+class PaymentAttachmentRead(BaseModel):
+    """Документ платежа (счёт или платёжное поручение) для выдачи в API."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    payment_id: UUID
+    kind: PaymentAttachmentKind
+    original_filename: str
+    size_bytes: int
+    uploaded_by: Optional[UUID] = None
+    created_at: datetime
+    download_url: str
+
+
+class PaymentReceiptConfirm(BaseModel):
+    """Собственник подтверждает поступление средств по счёту."""
+
+    comment: Optional[str] = Field(default=None, max_length=500)
 
 
 class CdekCallbackPaymentBody(BaseModel):

@@ -6,7 +6,17 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,18 +27,24 @@ from app.enums import (
     ApplicationEventKind,
     ApplicationStatus,
     NotificationAudience,
+    PaymentAttachmentKind,
     PaymentPayerType,
     PaymentProvider,
     PaymentStatus,
+    UserRole,
 )
 from app.models.address import Address
 from app.models.application import Application
 from app.models.payment import Payment
+from app.models.payment_attachment import PaymentAttachment
+from app.models.stored_file import StoredFile
 from app.models.user import User
 from app.schemas.payment import (
+    PaymentAttachmentRead,
     PaymentInitiateRequest,
     PaymentManualConfirmRequest,
     PaymentRead,
+    PaymentReceiptConfirm,
     PaymentRefundRequest,
     PaymentRejectRequest,
 )
@@ -38,6 +54,11 @@ from app.services.cdek_pay import (
     get_cdek_pay_service,
 )
 from app.services.notification_events import create_application_event
+from app.services.storage import (
+    create_stored_file_record,
+    local_stored_file_path,
+    read_stored_file_async,
+)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -363,6 +384,260 @@ async def refund_payment(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"CDEK Pay: {e}") from e
 
     payment.status = PaymentStatus.REFUND_REQUESTED.value
+    await db.commit()
+    await db.refresh(payment)
+    return payment
+
+
+# ============================================================
+# Payment attachments — счёт (owner) и платёжка (client)
+# ============================================================
+
+
+async def _load_payment_ctx(
+    db: AsyncSession, payment_id: UUID
+) -> tuple[Payment, Application, Address]:
+    """Грузит payment + application + address. 404 если чего-то нет."""
+    payment = await db.get(Payment, payment_id)
+    if payment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Платёж не найден")
+    application = await db.get(Application, payment.application_id)
+    if application is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка платежа не найдена")
+    address = await db.get(Address, application.address_id)
+    if address is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес заявки не найден")
+    return payment, application, address
+
+
+def _payment_role(
+    user: User, application: Application, address: Address
+) -> str | None:
+    """Роль пользователя относительно платежа: client | owner | staff | None."""
+    role = user.role
+    if role in (UserRole.ADMIN.value, UserRole.MANAGER.value, UserRole.LAWYER.value):
+        return "staff"
+    if role == UserRole.CLIENT.value and application.created_by == user.id:
+        return "client"
+    if (
+        role == UserRole.OWNER.value
+        and user.provider_id is not None
+        and user.provider_id == address.provider_id
+    ):
+        return "owner"
+    return None
+
+
+def _payment_attachment_read(
+    att: PaymentAttachment, file: StoredFile
+) -> PaymentAttachmentRead:
+    return PaymentAttachmentRead(
+        id=att.id,
+        payment_id=att.payment_id,
+        kind=PaymentAttachmentKind(att.kind),
+        original_filename=file.original_filename,
+        size_bytes=file.size_bytes,
+        uploaded_by=att.uploaded_by,
+        created_at=att.created_at,
+        download_url=f"/payments/{att.payment_id}/attachments/{att.id}/download",
+    )
+
+
+@router.post(
+    "/{payment_id}/attachments",
+    response_model=PaymentAttachmentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_payment_attachment(
+    payment_id: UUID,
+    file: UploadFile = File(...),
+    kind: PaymentAttachmentKind = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PaymentAttachmentRead:
+    """Загрузка документа платежа.
+
+    kind=invoice       — счёт; грузит собственник адреса.
+    kind=payment_order — платёжка; грузит клиент (действие «я оплатил»).
+    Только для provider=manual_invoice (cdek_pay подтверждается автоматически).
+    """
+    payment, application, address = await _load_payment_ctx(db, payment_id)
+    if payment.provider != PaymentProvider.MANUAL_INVOICE.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Документы платежа доступны только для оплаты по счёту (manual_invoice)",
+        )
+
+    role = _payment_role(user, application, address)
+    if kind == PaymentAttachmentKind.INVOICE and role != "owner":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Счёт загружает собственник адреса"
+        )
+    if kind == PaymentAttachmentKind.PAYMENT_ORDER and role != "client":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Платёжное поручение загружает клиент по своей заявке",
+        )
+    if role is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к этому платежу")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Файл пустой")
+
+    file_record = await create_stored_file_record(
+        db=db,
+        content=content,
+        kind=f"payment_{kind.value}",
+        original_filename=file.filename or kind.value,
+        content_type=file.content_type or "application/octet-stream",
+        application_id=application.id,
+        uploaded_by=user.id,
+    )
+    attachment = PaymentAttachment(
+        payment_id=payment.id,
+        kind=kind.value,
+        file_id=file_record.id,
+        uploaded_by=user.id,
+    )
+    db.add(attachment)
+
+    # Платёжку загрузил клиент → событие для собственника («я оплатил»).
+    if kind == PaymentAttachmentKind.PAYMENT_ORDER:
+        await create_application_event(
+            db=db,
+            application_id=application.id,
+            kind=ApplicationEventKind.COMMENT_ADDED,
+            audience=NotificationAudience.OWNER,
+            title="Клиент сообщил об оплате",
+            message=(
+                "Клиент загрузил платёжное поручение по счёту. "
+                "Проверьте поступление средств и подтвердите."
+            ),
+            payload={"payment_id": str(payment.id)},
+            created_by=user.id,
+        )
+    await db.commit()
+    await db.refresh(attachment)
+    await db.refresh(file_record)
+    return _payment_attachment_read(attachment, file_record)
+
+
+@router.get(
+    "/{payment_id}/attachments", response_model=list[PaymentAttachmentRead]
+)
+async def list_payment_attachments(
+    payment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[PaymentAttachmentRead]:
+    payment, application, address = await _load_payment_ctx(db, payment_id)
+    if _payment_role(user, application, address) is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к этому платежу")
+    rows = (
+        await db.execute(
+            select(PaymentAttachment, StoredFile)
+            .join(StoredFile, StoredFile.id == PaymentAttachment.file_id)
+            .where(PaymentAttachment.payment_id == payment_id)
+            .order_by(PaymentAttachment.created_at.asc())
+        )
+    ).all()
+    return [_payment_attachment_read(att, file) for att, file in rows]
+
+
+@router.get(
+    "/{payment_id}/attachments/{attachment_id}/download", response_model=None
+)
+async def download_payment_attachment(
+    payment_id: UUID,
+    attachment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    payment, application, address = await _load_payment_ctx(db, payment_id)
+    if _payment_role(user, application, address) is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к этому платежу")
+    attachment = await db.get(PaymentAttachment, attachment_id)
+    if attachment is None or attachment.payment_id != payment_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден")
+    file_record = await db.get(StoredFile, attachment.file_id)
+    if file_record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл не найден")
+    try:
+        local_path = local_stored_file_path(file_record)
+        if local_path is not None:
+            return FileResponse(
+                local_path,
+                filename=file_record.original_filename,
+                media_type=file_record.content_type,
+            )
+        return Response(
+            content=await read_stored_file_async(file_record),
+            media_type=file_record.content_type,
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{file_record.original_filename}"'
+                )
+            },
+        )
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+
+
+@router.post("/{payment_id}/confirm-receipt", response_model=PaymentRead)
+async def confirm_payment_receipt(
+    payment_id: UUID,
+    payload: PaymentReceiptConfirm,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Payment:
+    """Собственник подтверждает поступление средств по счёту.
+
+    Это и есть «момент оплаты» в manual_invoice-флоу: payment → succeeded,
+    заявка awaiting_payment → paid. Дальше собственник готовит документы.
+    """
+    payment, application, address = await _load_payment_ctx(db, payment_id)
+    if payment.provider != PaymentProvider.MANUAL_INVOICE.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "confirm-receipt доступен только для оплаты по счёту (manual_invoice)",
+        )
+    if _payment_role(user, application, address) != "owner":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Подтвердить поступление средств может только собственник адреса",
+        )
+    if payment.status not in {
+        PaymentStatus.PENDING.value,
+        PaymentStatus.AWAITING_USER.value,
+    }:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Подтвердить можно только pending/awaiting_user; статус: {payment.status}",
+        )
+
+    payment.status = PaymentStatus.SUCCEEDED.value
+    payment.paid_at = utcnow()
+    if application.status == ApplicationStatus.AWAITING_PAYMENT.value:
+        application.status = ApplicationStatus.PAID.value
+        comment_suffix = f" Комментарий: {payload.comment}" if payload.comment else ""
+        await create_application_event(
+            db=db,
+            application_id=application.id,
+            kind=ApplicationEventKind.STATUS_CHANGED,
+            audience=NotificationAudience.CLIENT,
+            title="Оплата подтверждена",
+            message=(
+                "Собственник подтвердил поступление средств по счёту. "
+                "Заявка переходит к подготовке документов." + comment_suffix
+            ),
+            payload={
+                "status": ApplicationStatus.PAID.value,
+                "payment_id": str(payment.id),
+                "confirmed_by": str(user.id),
+            },
+            created_by=user.id,
+        )
     await db.commit()
     await db.refresh(payment)
     return payment
