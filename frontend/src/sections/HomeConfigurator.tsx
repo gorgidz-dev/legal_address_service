@@ -1,13 +1,9 @@
 /**
  * Конфигуратор подбора адреса под задачу.
  *
- * Большая карточка под hero. Принимает все ключевые фильтры (ИФНС, бюджет,
- * срок, корреспонденция, премиум) и пишет их в общий `filters`-state главной.
- * Поэтому конфигуратор и filter-бар у грида работают на один state — рассинхрона
- * быть не может.
- *
- * Live-счётчик «N адресов» — это `totalCount`, который дёргается из
- * /marketplace/addresses/search с debounce.
+ * Раскладка: строка общего поиска → ряд Регион/Город/ИФНС → ряд Срок/Цена/Доп.
+ * Пишет фильтры в общий `filters`-state главной (конфигуратор и filter-бар
+ * работают на один state).
  */
 import { ArrowDown, Calendar, Search, Wallet } from "lucide-react";
 import { useMemo } from "react";
@@ -19,9 +15,9 @@ export type ConfiguratorFilters = {
   region: string;
   geoCity: string;
   fnsOfficeId: string;
+  priceFrom: string;
+  priceTo: string;
   withCorr: boolean;
-  budgetUnder30k: boolean;
-  premium11: boolean;
 };
 
 export type ConfiguratorProps = {
@@ -35,6 +31,11 @@ export type ConfiguratorProps = {
   /** Скролл к гриду с результатами. */
   onShowResults: () => void;
 };
+
+/** Оставляет в строке только цифры (для числовых инпутов цены). */
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, "");
+}
 
 export function HomeConfigurator({
   filters,
@@ -50,7 +51,11 @@ export function HomeConfigurator({
     if (loading) return "Считаем подходящие адреса…";
     if (totalCount === 0) return "По заданным параметрам ничего не нашлось";
     if (totalCount === 1) return "Найден 1 адрес";
-    if (totalCount % 10 >= 2 && totalCount % 10 <= 4 && (totalCount % 100 < 12 || totalCount % 100 > 14))
+    if (
+      totalCount % 10 >= 2 &&
+      totalCount % 10 <= 4 &&
+      (totalCount % 100 < 12 || totalCount % 100 > 14)
+    )
       return `Найдено ${totalCount} адреса`;
     return `Найдено ${totalCount} адресов`;
   }, [totalCount, loading]);
@@ -61,15 +66,15 @@ export function HomeConfigurator({
         <div>
           <h2 className="ds-configurator__title">Подберём адрес под задачу</h2>
           <p className="ds-configurator__sub">
-            Расскажи параметры — покажем подходящие. Все адреса с гарантийным письмом и
-            свежей выпиской ЕГРН.
+            Расскажи параметры — покажем подходящие. Все адреса с гарантийным
+            письмом и свежей выпиской ЕГРН.
           </p>
         </div>
       </header>
 
       <div className="ds-configurator__grid">
-        {/* Текстовый поиск */}
-        <label className="ds-configurator__field" data-span="2">
+        {/* Строка общего поиска — на всю ширину */}
+        <label className="ds-configurator__field" data-span="3">
           <span className="ds-configurator__label">
             <Search size={14} /> По адресу или ИФНС
           </span>
@@ -84,7 +89,7 @@ export function HomeConfigurator({
           />
         </label>
 
-        {/* Каскад Регион → Город → ИФНС */}
+        {/* Ряд: Регион → Город → ИФНС */}
         <GeoCascade
           tree={geoTree}
           value={{
@@ -95,7 +100,7 @@ export function HomeConfigurator({
           onChange={(geo: GeoSelection) => onChange({ ...filters, ...geo })}
         />
 
-        {/* Срок */}
+        {/* Ряд: Срок → Цена → Дополнительно */}
         <fieldset className="ds-configurator__field">
           <legend className="ds-configurator__label">
             <Calendar size={14} /> Срок аренды
@@ -118,56 +123,36 @@ export function HomeConfigurator({
           </div>
         </fieldset>
 
-        {/* Бюджет — пресеты */}
-        <fieldset className="ds-configurator__field" data-span="2">
+        <fieldset className="ds-configurator__field">
           <legend className="ds-configurator__label">
-            <Wallet size={14} /> Бюджет на 11 месяцев
+            <Wallet size={14} /> Цена за 11 месяцев, ₽
           </legend>
-          <div className="ds-configurator__budget">
-            <button
-              type="button"
-              className={`ds-chip${
-                filters.budgetUnder30k ? " ds-chip--active" : ""
-              }`}
-              onClick={() =>
-                onChange({
-                  ...filters,
-                  budgetUnder30k: !filters.budgetUnder30k,
-                  premium11: false,
-                })
+          <div className="ds-configurator__price">
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="от"
+              className="ds-configurator__input"
+              value={filters.priceFrom}
+              onChange={(e) =>
+                onChange({ ...filters, priceFrom: digitsOnly(e.target.value) })
               }
-            >
-              До 30 000 ₽
-            </button>
-            <button
-              type="button"
-              className={`ds-chip${filters.premium11 ? " ds-chip--active" : ""}`}
-              onClick={() =>
-                onChange({
-                  ...filters,
-                  premium11: !filters.premium11,
-                  budgetUnder30k: false,
-                })
+            />
+            <span className="ds-configurator__price-dash">—</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="до"
+              className="ds-configurator__input"
+              value={filters.priceTo}
+              onChange={(e) =>
+                onChange({ ...filters, priceTo: digitsOnly(e.target.value) })
               }
-            >
-              Премиум от 25 000 ₽
-            </button>
-            <button
-              type="button"
-              className={`ds-chip${
-                !filters.budgetUnder30k && !filters.premium11 ? " ds-chip--active" : ""
-              }`}
-              onClick={() =>
-                onChange({ ...filters, budgetUnder30k: false, premium11: false })
-              }
-            >
-              Любой
-            </button>
+            />
           </div>
         </fieldset>
 
-        {/* Опции */}
-        <fieldset className="ds-configurator__field" data-span="2">
+        <fieldset className="ds-configurator__field">
           <legend className="ds-configurator__label">Дополнительно</legend>
           <div className="ds-configurator__opts">
             <button

@@ -55,15 +55,18 @@
 }
 .ds-configurator__grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: var(--ds-space-4);
 }
 @media (min-width: 768px) {
   .ds-configurator__grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   .ds-configurator__field[data-span="2"] {
     grid-column: span 2;
+  }
+  .ds-configurator__field[data-span="3"] {
+    grid-column: span 3;
   }
 }
 .ds-configurator__field {
@@ -151,7 +154,6 @@
   color: var(--ds-indigo-900);
   box-shadow: 0 1px 2px rgba(11, 10, 46, 0.06);
 }
-.ds-configurator__budget,
 .ds-configurator__opts {
   display: flex;
   flex-wrap: wrap;
@@ -159,12 +161,25 @@
   min-height: var(--cfg-control-h);
   align-items: stretch;
 }
-/* Чипы бюджета/опций в конфигураторе — той же высоты, что инпуты. */
-.ds-configurator__budget .ds-chip,
+/* Чипы опций в конфигураторе — той же высоты, что инпуты. */
 .ds-configurator__opts .ds-chip {
   height: var(--cfg-control-h);
   display: inline-flex;
   align-items: center;
+}
+/* Диапазон цены: два инпута «от»/«до» + тире. */
+.ds-configurator__price {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+.ds-configurator__price .ds-configurator__input {
+  flex: 1;
+  min-width: 0;
+}
+.ds-configurator__price-dash {
+  color: var(--ds-slate-400);
+  flex-shrink: 0;
 }
 .ds-configurator__foot {
   display: flex;

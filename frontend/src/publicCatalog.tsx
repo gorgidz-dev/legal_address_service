@@ -55,6 +55,9 @@ type CatalogFilters = {
   region: string;
   geoCity: string;
   fnsOfficeId: string;
+  // Диапазон цены за 11 мес. (строки — из числовых инпутов «от»/«до»).
+  priceFrom: string;
+  priceTo: string;
   sort: CatalogSort;
   withCorr: boolean;
   budgetUnder30k: boolean;
@@ -68,6 +71,8 @@ const initialFilters: CatalogFilters = {
   region: "",
   geoCity: "",
   fnsOfficeId: "",
+  priceFrom: "",
+  priceTo: "",
   sort: "default",
   withCorr: false,
   budgetUnder30k: false,
@@ -85,6 +90,8 @@ function filtersToQueryString(f: CatalogFilters): string {
   if (f.region) p.set("region", f.region);
   if (f.geoCity) p.set("gcity", f.geoCity);
   if (f.fnsOfficeId) p.set("office", f.fnsOfficeId);
+  if (f.priceFrom) p.set("pf", f.priceFrom);
+  if (f.priceTo) p.set("pt", f.priceTo);
   if (f.sort !== "default") p.set("sort", f.sort);
   if (f.withCorr) p.set("corr", "1");
   if (f.budgetUnder30k) p.set("budget", "lt30");
@@ -103,6 +110,8 @@ function filtersFromQueryString(search: string): CatalogFilters {
     region: p.get("region") ?? "",
     geoCity: p.get("gcity") ?? "",
     fnsOfficeId: p.get("office") ?? "",
+    priceFrom: p.get("pf") ?? "",
+    priceTo: p.get("pt") ?? "",
     sort: sort && (VALID_SORTS as string[]).includes(sort) ? (sort as CatalogSort) : "default",
     withCorr: p.get("corr") === "1",
     budgetUnder30k: p.get("budget") === "lt30",
@@ -451,8 +460,18 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
         geo_city: filters.geoCity || undefined,
         fns_office_id: filters.fnsOfficeId || undefined,
         correspondence: filters.withCorr || undefined,
-        price_lt: filters.budgetUnder30k ? 30000 : undefined,
-        price_gte: filters.premium11 ? 25000 : undefined,
+        // Диапазон цены из конфигуратора имеет приоритет; чипы filter-бара
+        // (budgetUnder30k / premium11) — fallback.
+        price_lt: filters.priceTo
+          ? Number(filters.priceTo)
+          : filters.budgetUnder30k
+            ? 30000
+            : undefined,
+        price_gte: filters.priceFrom
+          ? Number(filters.priceFrom)
+          : filters.premium11
+            ? 25000
+            : undefined,
         sort: filters.sort === "default" ? "relevance" : filters.sort,
         page,
         page_size: PAGE_SIZE,
@@ -478,6 +497,8 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     filters.region,
     filters.geoCity,
     filters.fnsOfficeId,
+    filters.priceFrom,
+    filters.priceTo,
     filters.withCorr,
     filters.budgetUnder30k,
     filters.premium11,
@@ -497,6 +518,8 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     filters.region,
     filters.geoCity,
     filters.fnsOfficeId,
+    filters.priceFrom,
+    filters.priceTo,
     filters.withCorr,
     filters.budgetUnder30k,
     filters.premium11,
@@ -584,6 +607,8 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
       filters.region ||
       filters.geoCity ||
       filters.fnsOfficeId ||
+      filters.priceFrom ||
+      filters.priceTo ||
       filters.city !== initialFilters.city ||
       filters.withCorr ||
       filters.budgetUnder30k ||
@@ -777,9 +802,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
           region: filters.region,
           geoCity: filters.geoCity,
           fnsOfficeId: filters.fnsOfficeId,
+          priceFrom: filters.priceFrom,
+          priceTo: filters.priceTo,
           withCorr: filters.withCorr,
-          budgetUnder30k: filters.budgetUnder30k,
-          premium11: filters.premium11,
         }}
         onChange={(next) => setFilters({ ...filters, ...next })}
         termMonths={11}
