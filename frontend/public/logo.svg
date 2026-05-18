@@ -1,0 +1,17 @@
+<svg width="900" height="220" viewBox="0 0 900 220" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">uradres.net logo</title>
+  <desc id="desc">Modular address grid mark with indigo highlighted square and uradres.net wordmark.</desc>
+  <rect width="900" height="220" fill="white"/>
+  <g transform="translate(40 38)">
+    <rect x="0" y="0" width="42" height="42" rx="8" fill="#111827"/>
+    <rect x="52" y="0" width="42" height="42" rx="8" fill="#111827"/>
+    <rect x="104" y="0" width="42" height="42" rx="8" fill="#111827"/>
+    <rect x="0" y="52" width="42" height="42" rx="8" fill="#111827"/>
+    <rect x="52" y="52" width="42" height="42" rx="8" fill="#4F46E5"/>
+    <rect x="104" y="52" width="42" height="42" rx="8" fill="#111827"/>
+    <rect x="0" y="104" width="42" height="42" rx="8" fill="#111827"/>
+    <rect x="52" y="104" width="42" height="42" rx="8" fill="#111827"/>
+    <rect x="104" y="104" width="42" height="42" rx="8" fill="#111827"/>
+  </g>
+  <text x="236" y="136" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="90" font-weight="700" letter-spacing="0"><tspan fill="#4F46E5">uradres</tspan><tspan fill="#111827">.net</tspan></text>
+</svg>

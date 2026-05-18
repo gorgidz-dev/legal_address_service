@@ -24,24 +24,15 @@
   gap: var(--ds-space-4);
 }
 .ds-topnav__brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--ds-space-2);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: var(--ds-tracking-tight);
-  color: var(--ds-indigo-950);
+  text-decoration: none;
+  flex-shrink: 0;
 }
-.ds-topnav__brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, var(--ds-indigo-500), #8b87ff);
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
+.ds-topnav__logo {
+  height: 34px;
+  width: auto;
+  display: block;
 }
 .ds-topnav__links {
   display: flex;

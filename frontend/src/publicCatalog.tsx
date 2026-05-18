@@ -721,10 +721,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
   return (
     <main className="ds-catalog">
       <header className="ds-topnav">
-        <div className="ds-topnav__brand">
-          <span className="ds-topnav__brand-mark">UR</span>
-          <span>UrAdres</span>
-        </div>
+        <a className="ds-topnav__brand" href="/" aria-label="uradres.net — на главную">
+          <img className="ds-topnav__logo" src="/logo.svg" alt="uradres.net" />
+        </a>
         <nav className="ds-topnav__links" aria-label="Главное меню">
           <a href="#catalog">Каталог</a>
           <a href="#how">Как это работает</a>
