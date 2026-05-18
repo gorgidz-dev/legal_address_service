@@ -378,6 +378,17 @@ export interface PublicReview {
   owner_reply_at: string | null;
 }
 
+export interface MyReview {
+  id: string;
+  address_id: string;
+  rating: number;
+  body: string;
+  status: string;
+  moderation_note: string | null;
+  owner_reply: string | null;
+  created_at: string;
+}
+
 export interface ModerationReview {
   id: string;
   address_id: string;

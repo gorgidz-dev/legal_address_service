@@ -599,6 +599,43 @@ h1 {
   z-index: 80;
 }
 
+/* Детальная карточка адреса может быть выше экрана (фото + услуги + отзывы).
+   Делаем скролл ВНУТРИ панели — иначе колесо мыши прокручивает каталог под
+   модалкой. Скроллбар скрыт (есть кнопка «наверх»), overscroll-behavior
+   не даёт скроллу «протекать» на body. */
+.modal-panel.ds-address-detail {
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none; /* Firefox */
+  position: relative;
+}
+.modal-panel.ds-address-detail::-webkit-scrollbar {
+  display: none; /* WebKit */
+}
+
+/* Кнопка «наверх» внутри детальной модалки. */
+.ds-detail-totop {
+  position: sticky;
+  bottom: 16px;
+  margin-left: auto;
+  margin-right: 4px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--ds-slate-200);
+  background: #fff;
+  color: var(--ds-indigo-700);
+  box-shadow: 0 6px 20px rgba(11, 10, 46, 0.16);
+  cursor: pointer;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.ds-detail-totop:hover {
+  transform: translateY(-2px);
+}
+
 /* Унифицированный padding контента раздела во всех кабинетах:
    client-shell / owner-shell — выровнять верхний/нижний/боковой отступы
    относительно sidebar. */

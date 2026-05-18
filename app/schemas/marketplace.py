@@ -201,6 +201,21 @@ class PublicReviewRead(BaseModel):
     owner_reply_at: Optional[datetime] = None
 
 
+class MyReviewRead(BaseModel):
+    """Собственный отзыв клиента — со статусом модерации (для edit/delete UI)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    address_id: UUID
+    rating: int
+    body: str
+    status: str
+    moderation_note: Optional[str] = None
+    owner_reply: Optional[str] = None
+    created_at: datetime
+
+
 class ModerationReviewRead(BaseModel):
     """Отзыв в админ-очереди модерации — со всеми служебными полями."""
 

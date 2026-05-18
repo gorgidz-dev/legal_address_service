@@ -35,6 +35,7 @@ import type {
   ProviderConnectionRequestStatusUpdate,
   PublicAddress,
   PublicReview,
+  MyReview,
   ModerationReview,
   UserSessionInfo
 } from "./types";
@@ -179,6 +180,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+
+  getMyReview: (addressId: string) =>
+    request<MyReview | null>(`/marketplace/addresses/${addressId}/reviews/mine`),
+
+  updateMyReview: (reviewId: string, payload: { rating: number; body: string }) =>
+    request<MyReview>(`/marketplace/reviews/${reviewId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+
+  deleteMyReview: (reviewId: string) =>
+    request<void>(`/marketplace/reviews/${reviewId}`, { method: "DELETE" }),
 
   ownerReplyToReview: (reviewId: string, body: string) =>
     request<PublicReview>(`/marketplace/reviews/${reviewId}/owner-reply`, {

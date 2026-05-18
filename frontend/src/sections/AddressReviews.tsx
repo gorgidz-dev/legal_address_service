@@ -1,51 +1,78 @@
 /**
  * Блок отзывов на детальной карточке адреса.
  *
- * - Список опубликованных отзывов (+ ответ собственника, если есть).
- * - Форма создания отзыва — показывается только когда canReview=true
- *   (клиент с завершённой заявкой; решение принимает родитель).
- * - Новый отзыв уходит на модерацию: после отправки показываем уведомление,
- *   в публичный список он не попадает до approve админом.
+ * - Список опубликованных отзывов (+ ответ собственника).
+ * - Свой отзыв клиента (любой статус) — со статус-бейджем, кнопками
+ *   «Редактировать» / «Удалить». Редактирование возвращает отзыв на модерацию.
+ * - Форма создания — если своего отзыва ещё нет и canReview=true.
+ *
+ * Бэк гейтит verified-purchase (нужна завершённая заявка) — фронт показывает
+ * 403-ошибку текстом.
  */
 import { useEffect, useState } from "react";
-import { MessageSquare, ShieldCheck } from "lucide-react";
+import { MessageSquare, Pencil, Trash2 } from "lucide-react";
 import { api, ApiError } from "../api";
-import type { PublicReview } from "../types";
+import type { MyReview, PublicReview } from "../types";
 import { StarRating } from "./StarRating";
 
 type Props = {
   addressId: string;
-  /** Может ли текущий пользователь оставить отзыв (клиент с completed-заявкой). */
+  /** Клиент ли текущий пользователь (может оставлять/редактировать отзыв). */
   canReview: boolean;
+};
+
+const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
+  pending: { text: "На модерации", cls: "ds-rev-badge--pending" },
+  published: { text: "Опубликован", cls: "ds-rev-badge--published" },
+  rejected: { text: "Отклонён", cls: "ds-rev-badge--rejected" },
 };
 
 export function AddressReviews({ addressId, canReview }: Props) {
   const [reviews, setReviews] = useState<PublicReview[]>([]);
+  const [myReview, setMyReview] = useState<MyReview | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Форма (создание / редактирование).
+  const [formOpen, setFormOpen] = useState(false);
   const [rating, setRating] = useState(0);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
+  function reload() {
     setLoading(true);
-    api
-      .listAddressReviews(addressId)
-      .then((r) => {
-        if (alive) setReviews(r);
-      })
-      .catch(() => {
-        if (alive) setReviews([]);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [addressId]);
+    const tasks: Promise<unknown>[] = [
+      api
+        .listAddressReviews(addressId)
+        .then((r) => setReviews(r))
+        .catch(() => setReviews([])),
+    ];
+    if (canReview) {
+      tasks.push(
+        api
+          .getMyReview(addressId)
+          .then((r) => setMyReview(r))
+          .catch(() => setMyReview(null)),
+      );
+    }
+    Promise.all(tasks).finally(() => setLoading(false));
+  }
+
+  useEffect(reload, [addressId, canReview]);
+
+  function openCreate() {
+    setRating(0);
+    setBody("");
+    setError(null);
+    setFormOpen(true);
+  }
+
+  function openEdit(r: MyReview) {
+    setRating(r.rating);
+    setBody(r.body);
+    setError(null);
+    setFormOpen(true);
+  }
 
   async function submit() {
     setError(null);
@@ -59,16 +86,47 @@ export function AddressReviews({ addressId, canReview }: Props) {
     }
     setBusy(true);
     try {
-      await api.createAddressReview(addressId, { rating, body: body.trim() });
-      setSubmitted(true);
-      setBody("");
-      setRating(0);
+      if (myReview) {
+        const updated = await api.updateMyReview(myReview.id, {
+          rating,
+          body: body.trim(),
+        });
+        setMyReview(updated);
+      } else {
+        await api.createAddressReview(addressId, { rating, body: body.trim() });
+      }
+      setFormOpen(false);
+      reload();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Не удалось отправить отзыв.");
+      setError(e instanceof ApiError ? e.message : "Не удалось сохранить отзыв.");
     } finally {
       setBusy(false);
     }
   }
+
+  async function remove() {
+    if (!myReview) return;
+    if (!window.confirm("Удалить ваш отзыв?")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteMyReview(myReview.id);
+      setMyReview(null);
+      setFormOpen(false);
+      reload();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Не удалось удалить отзыв.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const badge = myReview ? STATUS_LABEL[myReview.status] : null;
+  // Свой отзыв показываем в блоке «Ваш отзыв» — из общей ленты убираем,
+  // чтобы не дублировался.
+  const otherReviews = myReview
+    ? reviews.filter((r) => r.id !== myReview.id)
+    : reviews;
 
   return (
     <section className="ds-reviews">
@@ -77,8 +135,59 @@ export function AddressReviews({ addressId, canReview }: Props) {
         {reviews.length > 0 && <span className="ds-reviews__n">{reviews.length}</span>}
       </h3>
 
-      {/* Форма */}
-      {canReview && !submitted && (
+      {/* Свой отзыв клиента */}
+      {canReview && myReview && !formOpen && (
+        <div className="ds-reviews__mine">
+          <div className="ds-reviews__mine-head">
+            <StarRating value={myReview.rating} size={13} />
+            {badge && <span className={`ds-rev-badge ${badge.cls}`}>{badge.text}</span>}
+            <span className="ds-reviews__mine-tag">Ваш отзыв</span>
+          </div>
+          <p className="ds-reviews__body">{myReview.body}</p>
+          {myReview.status === "rejected" && myReview.moderation_note && (
+            <p className="ds-reviews__error">
+              Причина отклонения: {myReview.moderation_note}
+            </p>
+          )}
+          {myReview.status === "pending" && (
+            <p className="ds-reviews__hint">
+              Отзыв ждёт проверки модератором и появится в каталоге после одобрения.
+            </p>
+          )}
+          <div className="ds-reviews__mine-actions">
+            <button
+              type="button"
+              className="ds-btn ds-btn--ghost ds-btn--sm"
+              onClick={() => openEdit(myReview)}
+              disabled={busy}
+            >
+              <Pencil size={13} /> Редактировать
+            </button>
+            <button
+              type="button"
+              className="ds-btn ds-btn--ghost ds-btn--sm"
+              onClick={remove}
+              disabled={busy}
+            >
+              <Trash2 size={13} /> Удалить
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Кнопка «оставить отзыв» — если своего ещё нет */}
+      {canReview && !myReview && !formOpen && (
+        <button
+          type="button"
+          className="ds-btn ds-btn--primary ds-btn--md"
+          onClick={openCreate}
+        >
+          Оставить отзыв
+        </button>
+      )}
+
+      {/* Форма создания / редактирования */}
+      {canReview && formOpen && (
         <div className="ds-reviews__form">
           <div className="ds-reviews__form-row">
             <span className="ds-reviews__form-label">Ваша оценка</span>
@@ -93,34 +202,47 @@ export function AddressReviews({ addressId, canReview }: Props) {
             maxLength={2000}
           />
           {error && <div className="ds-reviews__error">{error}</div>}
-          <button
-            type="button"
-            className="ds-btn ds-btn--primary ds-btn--md"
-            onClick={submit}
-            disabled={busy}
-          >
-            {busy ? "Отправляем…" : "Оставить отзыв"}
-          </button>
+          <div className="ds-reviews__form-actions">
+            <button
+              type="button"
+              className="ds-btn ds-btn--primary ds-btn--md"
+              onClick={submit}
+              disabled={busy}
+            >
+              {busy
+                ? "Сохраняем…"
+                : myReview
+                  ? "Сохранить и отправить на модерацию"
+                  : "Оставить отзыв"}
+            </button>
+            <button
+              type="button"
+              className="ds-btn ds-btn--ghost ds-btn--md"
+              onClick={() => setFormOpen(false)}
+              disabled={busy}
+            >
+              Отмена
+            </button>
+          </div>
         </div>
       )}
 
-      {canReview && submitted && (
-        <div className="ds-reviews__sent">
-          <ShieldCheck size={16} />
-          Спасибо! Отзыв отправлен на модерацию и появится после проверки.
-        </div>
-      )}
+      {error && !formOpen && <div className="ds-reviews__error">{error}</div>}
 
-      {/* Список */}
+      {/* Публичный список (без своего отзыва — он выше) */}
       {loading ? (
         <div className="ds-reviews__empty">Загружаем отзывы…</div>
-      ) : reviews.length === 0 ? (
+      ) : otherReviews.length === 0 ? (
         <div className="ds-reviews__empty">
-          Пока нет отзывов. {canReview ? "Будьте первым." : "Отзывы оставляют клиенты после завершённой сделки."}
+          {myReview
+            ? "Других отзывов пока нет."
+            : canReview
+              ? "Пока нет отзывов. Будьте первым."
+              : "Пока нет отзывов. Отзывы оставляют клиенты после завершённой сделки."}
         </div>
       ) : (
         <ul className="ds-reviews__list">
-          {reviews.map((r) => (
+          {otherReviews.map((r) => (
             <li key={r.id} className="ds-reviews__item">
               <div className="ds-reviews__item-head">
                 <StarRating value={r.rating} size={13} />

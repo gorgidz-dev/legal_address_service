@@ -9,9 +9,11 @@
 """
 from __future__ import annotations
 
+import logging
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,10 +27,15 @@ from app.models.user import User
 from app.schemas.marketplace import (
     AddressReviewCreate,
     ModerationReviewRead,
+    MyReviewRead,
     OwnerReplyCreate,
     PublicReviewRead,
     ReviewModerationAction,
 )
+from app.services.email_outbox import send_email
+from app.services.notification_events import write_user_notification
+
+logger = logging.getLogger("address_reviews")
 
 router = APIRouter(prefix="/marketplace", tags=["address-reviews"])
 
@@ -150,6 +157,82 @@ async def list_address_reviews(
     return [_public_review(review, author.full_name) for review, author in rows]
 
 
+def _my_review(review: AddressReview) -> MyReviewRead:
+    return MyReviewRead(
+        id=review.id,
+        address_id=review.address_id,
+        rating=review.rating,
+        body=review.body,
+        status=review.status,
+        moderation_note=review.moderation_note,
+        owner_reply=review.owner_reply,
+        created_at=review.created_at,
+    )
+
+
+# ====================== Client: own review (edit / delete) ======================
+
+
+@router.get(
+    "/addresses/{address_id}/reviews/mine",
+    response_model=Optional[MyReviewRead],
+)
+async def get_my_review(
+    address_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Optional[MyReviewRead]:
+    """Собственный отзыв клиента по адресу (любой статус) — или null."""
+    review = (
+        await db.execute(
+            select(AddressReview).where(
+                AddressReview.address_id == address_id,
+                AddressReview.client_user_id == user.id,
+            )
+        )
+    ).scalars().first()
+    return _my_review(review) if review is not None else None
+
+
+@router.patch("/reviews/{review_id}", response_model=MyReviewRead)
+async def update_my_review(
+    review_id: UUID,
+    payload: AddressReviewCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MyReviewRead:
+    """Редактирование своего отзыва. Возвращает его на повторную модерацию."""
+    review = await db.get(AddressReview, review_id)
+    if review is None or review.client_user_id != user.id:
+        # Не подтверждаем существование чужого отзыва.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Отзыв не найден")
+
+    review.rating = payload.rating
+    review.body = payload.body.strip()
+    # Изменённый текст должен пройти модерацию заново — сбрасываем в pending.
+    review.status = ReviewStatus.PENDING.value
+    review.moderated_by = None
+    review.moderated_at = None
+    review.moderation_note = None
+    await db.commit()
+    await db.refresh(review)
+    return _my_review(review)
+
+
+@router.delete("/reviews/{review_id}")
+async def delete_my_review(
+    review_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    review = await db.get(AddressReview, review_id)
+    if review is None or review.client_user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Отзыв не найден")
+    await db.delete(review)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ============================== Owner: reply ==============================
 
 
@@ -194,6 +277,52 @@ async def owner_reply_to_review(
 
     author = await db.get(User, review.client_user_id)
     return _public_review(review, author.full_name if author else "")
+
+
+async def _notify_review_moderated(
+    db: AsyncSession,
+    *,
+    review: AddressReview,
+    address: Address | None,
+    author: User | None,
+    published: bool,
+) -> None:
+    """Уведомляет автора об итоге модерации отзыва: in-app запись + email.
+
+    Сбой уведомления не должен ломать саму модерацию — всё под try/except.
+    Ссылку в in-app не кладём: спец-route для отзыва нет, адрес назван в тексте.
+    """
+    if author is None:
+        return
+    address_short = (address.full_address[:80] if address else "адрес")
+    if published:
+        title = "Ваш отзыв опубликован"
+        body = (
+            f"Отзыв об адресе «{address_short}» прошёл модерацию и теперь "
+            f"виден в каталоге. Спасибо!"
+        )
+    else:
+        reason = f" Причина: {review.moderation_note}." if review.moderation_note else ""
+        title = "Ваш отзыв отклонён"
+        body = (
+            f"Отзыв об адресе «{address_short}» не прошёл модерацию.{reason} "
+            f"Вы можете отредактировать его в карточке адреса."
+        )
+    try:
+        await write_user_notification(
+            db,
+            user_id=review.client_user_id,
+            kind="review_moderated",
+            title=title,
+            body=body,
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("review-moderated notif failed review=%s", review.id, exc_info=True)
+    try:
+        await send_email(to=author.email, subject=title, body=body)
+    except Exception:  # noqa: BLE001
+        logger.warning("review-moderated email failed review=%s", review.id, exc_info=True)
 
 
 # ============================== Admin: moderation ==============================
@@ -255,10 +384,9 @@ async def moderate_review(
             f"Модерировать можно только pending-отзыв, текущий статус: {review.status}",
         )
 
+    published = payload.action == "publish"
     review.status = (
-        ReviewStatus.PUBLISHED.value
-        if payload.action == "publish"
-        else ReviewStatus.REJECTED.value
+        ReviewStatus.PUBLISHED.value if published else ReviewStatus.REJECTED.value
     )
     review.moderated_by = admin.id
     review.moderated_at = utcnow()
@@ -268,6 +396,13 @@ async def moderate_review(
 
     address = await db.get(Address, review.address_id)
     author = await db.get(User, review.client_user_id)
+
+    # Уведомляем автора об итоге модерации — in-app + email.
+    # Ошибки уведомления не должны ломать саму модерацию.
+    await _notify_review_moderated(
+        db, review=review, address=address, author=author, published=published
+    )
+
     return ModerationReviewRead(
         id=review.id,
         address_id=review.address_id,

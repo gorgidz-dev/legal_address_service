@@ -720,3 +720,60 @@
   padding: var(--ds-space-6);
   text-align: center;
 }
+
+/* --- Свой отзыв клиента: бейдж статуса, карточка, действия --- */
+.ds-reviews__mine {
+  border: 1px solid var(--ds-indigo-200);
+  background: var(--ds-indigo-50);
+  border-radius: var(--ds-radius-lg);
+  padding: var(--ds-space-4);
+  margin-bottom: var(--ds-space-6);
+}
+.ds-reviews__mine-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin-bottom: var(--ds-space-2);
+  flex-wrap: wrap;
+}
+.ds-reviews__mine-tag {
+  margin-left: auto;
+  font-size: var(--ds-text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  font-weight: 600;
+  color: var(--ds-indigo-600);
+}
+.ds-reviews__mine-actions {
+  display: flex;
+  gap: var(--ds-space-2);
+  margin-top: var(--ds-space-3);
+}
+.ds-reviews__hint {
+  font-size: var(--ds-text-body-sm);
+  color: var(--ds-slate-500);
+  margin: var(--ds-space-2) 0 0;
+}
+.ds-reviews__form-actions {
+  display: flex;
+  gap: var(--ds-space-2);
+  flex-wrap: wrap;
+}
+.ds-rev-badge {
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--ds-radius-pill);
+}
+.ds-rev-badge--pending {
+  background: var(--ds-warning-bg);
+  color: var(--ds-warning-fg);
+}
+.ds-rev-badge--published {
+  background: var(--ds-success-bg);
+  color: var(--ds-success-fg);
+}
+.ds-rev-badge--rejected {
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger-fg);
+}

@@ -15,10 +15,14 @@ from app.enums import ApplicationStatus, ReviewStatus, UserRole
 from app.models.address import Address
 from app.models.application import Application
 from app.models.user import User
+from app.models.address_review import AddressReview
 from app.routers.address_reviews import (
     _mask_author_name,
     create_review,
+    delete_my_review,
+    get_my_review,
     moderate_review,
+    update_my_review,
 )
 from app.schemas.marketplace import AddressReviewCreate, ReviewModerationAction
 
@@ -45,6 +49,7 @@ class _FakeSession:
         self._get_map = get_map or {}
         self._exec = list(exec_results or [])
         self.added = []
+        self.deleted = []
         self.committed = False
 
     async def get(self, model, pk):
@@ -55,6 +60,12 @@ class _FakeSession:
 
     def add(self, obj):
         self.added.append(obj)
+
+    async def delete(self, obj):
+        self.deleted.append(obj)
+
+    async def flush(self):
+        pass
 
     async def commit(self):
         self.committed = True
@@ -242,3 +253,95 @@ async def test_moderate_review_already_moderated_conflict():
             review.id, ReviewModerationAction(action="reject"), db=db, admin=admin
         )
     assert exc.value.status_code == 409
+
+
+# ----------------------- get / update / delete own review -----------------------
+
+def _own_review(*, client_id, address_id=None, status=None):
+    return SimpleNamespace(
+        id=uuid4(),
+        address_id=address_id or uuid4(),
+        client_user_id=client_id,
+        rating=4,
+        body="Мой отзыв достаточной длины для теста.",
+        status=status or ReviewStatus.PUBLISHED.value,
+        moderation_note=None,
+        moderated_at=None,
+        moderated_by=None,
+        owner_reply=None,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_my_review_returns_own():
+    user = _client()
+    addr_id = uuid4()
+    review = _own_review(client_id=user.id, address_id=addr_id)
+    db = _FakeSession(exec_results=[_ExecResult([review])])
+    result = await get_my_review(addr_id, db=db, user=user)
+    assert result is not None
+    assert result.id == review.id
+
+
+@pytest.mark.asyncio
+async def test_get_my_review_none_when_absent():
+    user = _client()
+    db = _FakeSession(exec_results=[_ExecResult([])])
+    result = await get_my_review(uuid4(), db=db, user=user)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_update_my_review_resets_to_pending():
+    user = _client()
+    review = _own_review(client_id=user.id, status=ReviewStatus.PUBLISHED.value)
+    review.moderated_by = uuid4()
+    db = _FakeSession(get_map={(AddressReview, review.id): review})
+    result = await update_my_review(
+        review.id,
+        AddressReviewCreate(rating=2, body="Передумал, всё оказалось хуже."),
+        db=db,
+        user=user,
+    )
+    assert result.status == ReviewStatus.PENDING.value
+    assert result.rating == 2
+    assert review.moderated_by is None
+    assert review.moderation_note is None
+
+
+@pytest.mark.asyncio
+async def test_update_foreign_review_404():
+    user = _client()
+    review = _own_review(client_id=uuid4())  # чужой
+    db = _FakeSession(get_map={(AddressReview, review.id): review})
+    with pytest.raises(HTTPException) as exc:
+        await update_my_review(
+            review.id,
+            AddressReviewCreate(rating=1, body="Пытаюсь править чужой отзыв."),
+            db=db,
+            user=user,
+        )
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_my_review_ok():
+    user = _client()
+    review = _own_review(client_id=user.id)
+    db = _FakeSession(get_map={(AddressReview, review.id): review})
+    resp = await delete_my_review(review.id, db=db, user=user)
+    assert resp.status_code == 204
+    assert review in db.deleted
+    assert db.committed is True
+
+
+@pytest.mark.asyncio
+async def test_delete_foreign_review_404():
+    user = _client()
+    review = _own_review(client_id=uuid4())  # чужой
+    db = _FakeSession(get_map={(AddressReview, review.id): review})
+    with pytest.raises(HTTPException) as exc:
+        await delete_my_review(review.id, db=db, user=user)
+    assert exc.value.status_code == 404
+    assert db.deleted == []

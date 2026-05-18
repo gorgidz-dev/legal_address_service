@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   ArrowRight,
+  ArrowUp,
   Building2,
   Camera,
   CheckCircle2,
@@ -16,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AddressChatPanel } from "./AddressChatPanel";
 import { api } from "./api";
 import { PhoneInput } from "./PhoneInput";
@@ -350,6 +351,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
 
   // Детальная карточка адреса (фото-галерея + услуги).
   const [detailAddress, setDetailAddress] = useState<PublicAddress | null>(null);
+  // Скролл внутри детальной модалки — для кнопки «наверх».
+  const detailPanelRef = useRef<HTMLDivElement | null>(null);
+  const [detailScrolled, setDetailScrolled] = useState(false);
   const [detailPhotoIdx, setDetailPhotoIdx] = useState(0);
 
   // Чат с собственником: открытый чат + indicator "ожидание входа" +
@@ -1410,7 +1414,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
         <div className="modal-backdrop" onClick={() => setDetailAddress(null)}>
           <div
             className="modal-panel ds-address-detail"
+            ref={detailPanelRef}
             onClick={(e) => e.stopPropagation()}
+            onScroll={(e) => setDetailScrolled(e.currentTarget.scrollTop > 300)}
           >
             <header>
               <div>
@@ -1626,6 +1632,19 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
               addressId={detailAddress.id}
               canReview={currentUser?.role === "client"}
             />
+
+            {detailScrolled && (
+              <button
+                type="button"
+                className="ds-detail-totop"
+                aria-label="Наверх"
+                onClick={() =>
+                  detailPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+                }
+              >
+                <ArrowUp size={18} />
+              </button>
+            )}
           </div>
         </div>
       )}
