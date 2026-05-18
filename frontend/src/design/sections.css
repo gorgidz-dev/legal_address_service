@@ -11,12 +11,26 @@
 /* =====================================================================
    КОНФИГУРАТОР
    ===================================================================== */
+/* Все секции главной выровнены по единой контентной колонке (как .ds-hero
+   и грид) — max-width страницы + центрирование. */
+.ds-configurator,
+.ds-faq,
+.ds-owners,
+.ds-cases {
+  max-width: var(--ds-page-max-width);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .ds-configurator {
   background: #ffffff;
   border: 1px solid var(--ds-slate-200);
   border-radius: var(--ds-radius-xl);
   padding: var(--ds-space-8);
-  margin: var(--ds-space-8) 0 var(--ds-space-12);
+  margin-top: var(--ds-space-8);
+  margin-bottom: var(--ds-space-12);
   box-shadow: var(--ds-shadow-md);
   position: relative;
   overflow: hidden;
@@ -212,10 +226,8 @@ legend.ds-configurator__label {
    FAQ
    ===================================================================== */
 .ds-faq {
-  margin: var(--ds-space-20) 0;
-  max-width: 800px;
-  margin-left: auto;
-  margin-right: auto;
+  margin-top: var(--ds-space-20);
+  margin-bottom: var(--ds-space-20);
 }
 .ds-faq__head {
   text-align: center;
@@ -302,7 +314,8 @@ legend.ds-configurator__label {
    ДЛЯ СОБСТВЕННИКОВ
    ===================================================================== */
 .ds-owners {
-  margin: var(--ds-space-20) 0;
+  margin-top: var(--ds-space-20);
+  margin-bottom: var(--ds-space-20);
   position: relative;
 }
 .ds-owners__inner {
@@ -427,7 +440,8 @@ legend.ds-configurator__label {
    КЕЙСЫ
    ===================================================================== */
 .ds-cases {
-  margin: var(--ds-space-20) 0;
+  margin-top: var(--ds-space-20);
+  margin-bottom: var(--ds-space-20);
 }
 .ds-cases__head {
   text-align: center;
