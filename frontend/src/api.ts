@@ -30,6 +30,7 @@ import type {
   ProviderConnectionRequest,
   ProviderConnectionRequestApprove,
   ProviderConnectionRequestApproveResult,
+  GeoRegion,
   Payment,
   PaymentAttachment,
   PaymentAttachmentKind,
@@ -173,6 +174,9 @@ export const api = {
       "/marketplace/fns-options"
     ),
 
+  // Дерево Регион → Город → ИФНС для каскадного фильтра.
+  publicGeoTree: () => request<GeoRegion[]>("/marketplace/geo"),
+
   // --- Отзывы об адресах ---
   listAddressReviews: (addressId: string) =>
     request<PublicReview[]>(`/marketplace/addresses/${addressId}/reviews`),
@@ -222,6 +226,9 @@ export const api = {
     q?: string;
     city?: string;
     fns_number?: number | "";
+    region?: string;
+    geo_city?: string;
+    fns_office_id?: string;
     correspondence?: boolean;
     price_lt?: number;
     price_gte?: number;
@@ -234,6 +241,9 @@ export const api = {
     if (params.q?.trim()) p.set("q", params.q.trim());
     if (params.city) p.set("city", params.city);
     if (params.fns_number) p.set("fns_number", String(params.fns_number));
+    if (params.region) p.set("region", params.region);
+    if (params.geo_city) p.set("geo_city", params.geo_city);
+    if (params.fns_office_id) p.set("fns_office_id", params.fns_office_id);
     if (params.correspondence) p.set("correspondence", "true");
     if (params.price_lt != null) p.set("price_lt", String(params.price_lt));
     if (params.price_gte != null) p.set("price_gte", String(params.price_gte));

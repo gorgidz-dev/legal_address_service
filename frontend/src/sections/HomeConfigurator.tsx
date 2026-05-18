@@ -9,12 +9,16 @@
  * Live-счётчик «N адресов» — это `totalCount`, который дёргается из
  * /marketplace/addresses/search с debounce.
  */
-import { ArrowDown, Building2, Calendar, Search, Wallet } from "lucide-react";
+import { ArrowDown, Calendar, Search, Wallet } from "lucide-react";
 import { useMemo } from "react";
+import type { GeoRegion } from "../types";
+import { GeoCascade, type GeoSelection } from "./GeoCascade";
 
 export type ConfiguratorFilters = {
   query: string;
-  fnsNumber: string;
+  region: string;
+  geoCity: string;
+  fnsOfficeId: string;
   withCorr: boolean;
   budgetUnder30k: boolean;
   premium11: boolean;
@@ -25,7 +29,7 @@ export type ConfiguratorProps = {
   onChange: (next: ConfiguratorFilters) => void;
   termMonths: 6 | 11;
   onTermChange: (term: 6 | 11) => void;
-  fnsOptions: { fns_number: number; fns_city: string | null; count: number }[];
+  geoTree: GeoRegion[];
   totalCount: number;
   loading: boolean;
   /** Скролл к гриду с результатами. */
@@ -37,7 +41,7 @@ export function HomeConfigurator({
   onChange,
   termMonths,
   onTermChange,
-  fnsOptions,
+  geoTree,
   totalCount,
   loading,
   onShowResults,
@@ -80,25 +84,16 @@ export function HomeConfigurator({
           />
         </label>
 
-        {/* ИФНС */}
-        <label className="ds-configurator__field">
-          <span className="ds-configurator__label">
-            <Building2 size={14} /> ИФНС
-          </span>
-          <select
-            value={filters.fnsNumber}
-            onChange={(e) => onChange({ ...filters, fnsNumber: e.target.value })}
-            className="ds-configurator__input"
-          >
-            <option value="">Любая</option>
-            {fnsOptions.map((opt) => (
-              <option key={opt.fns_number} value={opt.fns_number}>
-                № {opt.fns_number} · {opt.count}
-                {opt.count === 1 ? " адрес" : " адр."}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Каскад Регион → Город → ИФНС */}
+        <GeoCascade
+          tree={geoTree}
+          value={{
+            region: filters.region,
+            geoCity: filters.geoCity,
+            fnsOfficeId: filters.fnsOfficeId,
+          }}
+          onChange={(geo: GeoSelection) => onChange({ ...filters, ...geo })}
+        />
 
         {/* Срок */}
         <fieldset className="ds-configurator__field">

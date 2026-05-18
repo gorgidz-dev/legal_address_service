@@ -403,6 +403,25 @@ export interface ModerationReview {
   created_at: string;
 }
 
+export interface GeoOffice {
+  id: string;
+  short_number: number | null;
+  name: string;
+  count: number;
+}
+
+export interface GeoCity {
+  city: string;
+  count: number;
+  offices: GeoOffice[];
+}
+
+export interface GeoRegion {
+  region: string;
+  count: number;
+  cities: GeoCity[];
+}
+
 export type PaymentAttachmentKind = "invoice" | "payment_order";
 
 export interface PaymentAttachment {

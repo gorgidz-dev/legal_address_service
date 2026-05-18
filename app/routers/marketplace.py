@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
+from uuid import UUID
 
 from datetime import date, timedelta
 

@@ -30,6 +30,7 @@ import { AddressReviews } from "./sections/AddressReviews";
 import type {
   AddressChat,
   CurrentUser,
+  GeoRegion,
   ProviderConnectionRequestCreate,
   PublicAddress,
   PublicClientApplicationCreate,
@@ -50,6 +51,10 @@ type CatalogFilters = {
   query: string;
   city: string;
   fnsNumber: string;
+  // Гео-каскад: Регион → Город → ИФНС (структурный фильтр через fns_offices).
+  region: string;
+  geoCity: string;
+  fnsOfficeId: string;
   sort: CatalogSort;
   withCorr: boolean;
   budgetUnder30k: boolean;
@@ -60,6 +65,9 @@ const initialFilters: CatalogFilters = {
   query: "",
   city: "Москва",
   fnsNumber: "",
+  region: "",
+  geoCity: "",
+  fnsOfficeId: "",
   sort: "default",
   withCorr: false,
   budgetUnder30k: false,
@@ -74,6 +82,9 @@ function filtersToQueryString(f: CatalogFilters): string {
   if (f.query.trim()) p.set("q", f.query.trim());
   if (f.city !== initialFilters.city) p.set("city", f.city);
   if (f.fnsNumber) p.set("ifns", f.fnsNumber);
+  if (f.region) p.set("region", f.region);
+  if (f.geoCity) p.set("gcity", f.geoCity);
+  if (f.fnsOfficeId) p.set("office", f.fnsOfficeId);
   if (f.sort !== "default") p.set("sort", f.sort);
   if (f.withCorr) p.set("corr", "1");
   if (f.budgetUnder30k) p.set("budget", "lt30");
@@ -89,6 +100,9 @@ function filtersFromQueryString(search: string): CatalogFilters {
     query: p.get("q") ?? "",
     city: p.get("city") ?? initialFilters.city,
     fnsNumber: p.get("ifns") ?? "",
+    region: p.get("region") ?? "",
+    geoCity: p.get("gcity") ?? "",
+    fnsOfficeId: p.get("office") ?? "",
     sort: sort && (VALID_SORTS as string[]).includes(sort) ? (sort as CatalogSort) : "default",
     withCorr: p.get("corr") === "1",
     budgetUnder30k: p.get("budget") === "lt30",
@@ -316,6 +330,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
   const [fnsOptions, setFnsOptions] = useState<
     { fns_number: number; fns_city: string | null; count: number }[]
   >([]);
+  const [geoTree, setGeoTree] = useState<GeoRegion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -432,6 +447,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
         q: debouncedQuery,
         city: filters.city.trim() || undefined,
         fns_number: filters.fnsNumber ? Number(filters.fnsNumber) : "",
+        region: filters.region || undefined,
+        geo_city: filters.geoCity || undefined,
+        fns_office_id: filters.fnsOfficeId || undefined,
         correspondence: filters.withCorr || undefined,
         price_lt: filters.budgetUnder30k ? 30000 : undefined,
         price_gte: filters.premium11 ? 25000 : undefined,
@@ -457,6 +475,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     debouncedQuery,
     filters.city,
     filters.fnsNumber,
+    filters.region,
+    filters.geoCity,
+    filters.fnsOfficeId,
     filters.withCorr,
     filters.budgetUnder30k,
     filters.premium11,
@@ -473,6 +494,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     debouncedQuery,
     filters.city,
     filters.fnsNumber,
+    filters.region,
+    filters.geoCity,
+    filters.fnsOfficeId,
     filters.withCorr,
     filters.budgetUnder30k,
     filters.premium11,
@@ -520,6 +544,14 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
         // Бэк может быть недоступен / older deployment без endpoint'а — silently
         // фолбэк на хардкод MOSCOW_FNS_NUMBERS, см. рендер <select> ниже.
       });
+    api
+      .publicGeoTree()
+      .then((tree) => {
+        if (alive) setGeoTree(tree);
+      })
+      .catch(() => {
+        /* гео-дерево недоступно — каскад покажет пустые селекты */
+      });
     return () => {
       alive = false;
     };
@@ -549,6 +581,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
   const hasActiveFilters = Boolean(
     filters.query.trim() ||
       filters.fnsNumber ||
+      filters.region ||
+      filters.geoCity ||
+      filters.fnsOfficeId ||
       filters.city !== initialFilters.city ||
       filters.withCorr ||
       filters.budgetUnder30k ||
@@ -739,7 +774,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
       <HomeConfigurator
         filters={{
           query: filters.query,
-          fnsNumber: filters.fnsNumber,
+          region: filters.region,
+          geoCity: filters.geoCity,
+          fnsOfficeId: filters.fnsOfficeId,
           withCorr: filters.withCorr,
           budgetUnder30k: filters.budgetUnder30k,
           premium11: filters.premium11,
@@ -749,7 +786,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
         onTermChange={() => {
           /* MVP: term shown per card; конфигуратор пока не привязывает term глобально */
         }}
-        fnsOptions={fnsOptions}
+        geoTree={geoTree}
         totalCount={totalCount}
         loading={loading}
         onShowResults={() => {
