@@ -5,7 +5,7 @@
  * Пишет фильтры в общий `filters`-state главной (конфигуратор и filter-бар
  * работают на один state).
  */
-import { ArrowDown, Calendar, Search, Wallet, X } from "lucide-react";
+import { ArrowDown, Calendar, Mail, Search, Wallet, X } from "lucide-react";
 import { useMemo } from "react";
 import type { GeoRegion } from "../types";
 import { GeoCascade, type GeoSelection } from "./GeoCascade";
@@ -172,7 +172,7 @@ export function HomeConfigurator({
               className={`ds-chip${filters.withCorr ? " ds-chip--active" : ""}`}
               onClick={() => onChange({ ...filters, withCorr: !filters.withCorr })}
             >
-              ✉ С корреспонденцией
+              <Mail size={18} /> С почтой
             </button>
           </div>
         </fieldset>

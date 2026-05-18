@@ -110,11 +110,9 @@ legend.ds-configurator__label {
   display: inline-flex;
   align-items: center;
   gap: var(--ds-space-1);
-  font-size: var(--ds-text-label);
+  font-size: var(--ds-text-body-sm);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--ds-tracking-wide);
-  color: var(--ds-slate-500);
+  color: var(--ds-slate-600);
   padding: 0;
 }
 .ds-configurator__input {
@@ -185,6 +183,7 @@ legend.ds-configurator__label {
   height: var(--cfg-control-h);
   display: inline-flex;
   align-items: center;
+  gap: var(--ds-space-2);
 }
 /* Диапазон цены: два инпута «от»/«до» + тире. */
 .ds-configurator__price {

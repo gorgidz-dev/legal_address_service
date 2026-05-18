@@ -213,6 +213,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* Safari: у absolute + inline-flex ширина схлопывалась — текст обрезался
+     до одной буквы. max-content + nowrap фиксят размер по содержимому. */
+  width: max-content;
+  max-width: max-content;
+  white-space: nowrap;
   background: rgba(255, 255, 255, 0.94);
   border-radius: var(--ds-radius-pill);
   padding: 2px 8px 2px 5px;
@@ -223,7 +228,16 @@
   box-shadow: var(--ds-shadow-sm);
   user-select: none;
 }
-.ds-card__compare input { accent-color: var(--ds-indigo-600); }
+.ds-card__compare input {
+  accent-color: var(--ds-indigo-600);
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex-shrink: 0;
+}
+.ds-card__compare span {
+  flex-shrink: 0;
+}
 .ds-card__compare.selected {
   background: var(--ds-indigo-600);
   color: #fff;
