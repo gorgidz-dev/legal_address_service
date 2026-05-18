@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models.address import Address
 from app.models.provider import Provider
 from app.schemas.address import AddressCreate, AddressRead
+from app.services.fns_office import resolve_fns_office_for_address
 
 router = APIRouter(prefix="/addresses", tags=["addresses"], dependencies=[Depends(require_staff)])
 
@@ -55,6 +56,16 @@ async def create_address(
         )
 
     address = Address(**payload.model_dump())
+
+    # Гео-привязка через DaData: регион/город/ИФНС из текста адреса.
+    # Опционально — сбой DaData не блокирует создание адреса.
+    try:
+        office = await resolve_fns_office_for_address(db, address.full_address)
+        if office is not None:
+            address.fns_office_id = office.id
+    except Exception:  # noqa: BLE001
+        pass
+
     db.add(address)
     try:
         await db.commit()

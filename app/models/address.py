@@ -49,6 +49,14 @@ class Address(UUIDPKMixin, TimestampMixin, Base):
 
     fns_number: Mapped[Optional[int]] = mapped_column(SmallInteger)
     fns_city: Mapped[Optional[str]] = mapped_column(Text)
+    # Структурная привязка к справочнику ИФНС (регион/город/код). Заполняется
+    # из DaData при создании адреса; даёт каскад Регион→Город→ИФНС в каталоге.
+    fns_office_id: Mapped[Optional[UUID]] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("fns_offices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     is_available: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text)

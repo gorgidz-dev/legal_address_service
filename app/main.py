@@ -114,6 +114,8 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path == f"{API_PREFIX}/marketplace/fns-options" and method == "GET":
         return True
+    if path == f"{API_PREFIX}/marketplace/geo" and method == "GET":
+        return True
     # Публичная лента отзывов по адресу: /marketplace/addresses/{id}/reviews
     if (
         path.startswith(f"{API_PREFIX}/marketplace/addresses/")

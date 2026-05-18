@@ -13,6 +13,7 @@ from app.models.client import Client
 from app.models.contract import Contract
 from app.models.document_template import DocumentTemplate
 from app.models.egrn_extract import EgrnExtract
+from app.models.fns_office import FnsOffice
 from app.models.generated_document import GeneratedDocument
 from app.models.guarantee_letter import GuaranteeLetter
 from app.models.incoming_webhook import IncomingWebhook
@@ -45,6 +46,7 @@ __all__ = [
     "Contract",
     "DocumentTemplate",
     "EgrnExtract",
+    "FnsOffice",
     "GeneratedDocument",
     "GuaranteeLetter",
     "IncomingWebhook",

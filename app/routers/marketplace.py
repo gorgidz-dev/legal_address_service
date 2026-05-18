@@ -30,6 +30,7 @@ from app.models.address import Address
 from app.models.address_photo import AddressPhoto
 from app.models.address_review import AddressReview
 from app.models.address_service import AddressService
+from app.models.fns_office import FnsOffice
 from app.models.application import Application
 from app.models.payment import Payment
 from app.models.provider import Provider
@@ -230,11 +231,83 @@ async def public_fns_options(
     ]
 
 
+@router.get("/geo")
+async def public_geo_tree(
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Дерево Регион → Город → ИФНС по опубликованному каталогу.
+
+    Используется каскадным фильтром: фронт грузит дерево один раз и каскадит
+    в памяти. В выдаче только то, где реально есть опубликованные адреса.
+    Возвращает:
+        [{"region": "Москва", "count": 12, "cities": [
+            {"city": "Москва", "count": 12, "offices": [
+                {"id": "...", "short_number": 46, "name": "...", "count": 4}]}]}]
+    """
+    stmt = (
+        select(
+            FnsOffice.region,
+            FnsOffice.city,
+            FnsOffice.id,
+            FnsOffice.short_number,
+            FnsOffice.name,
+            func.count(Address.id).label("count"),
+        )
+        .join(Address, Address.fns_office_id == FnsOffice.id)
+        .join(Provider, Provider.id == Address.provider_id)
+        .where(
+            Provider.is_active.is_(True),
+            Address.is_available.is_(True),
+            Address.publication_status == AddressPublicationStatus.PUBLISHED.value,
+        )
+        .group_by(
+            FnsOffice.region,
+            FnsOffice.city,
+            FnsOffice.id,
+            FnsOffice.short_number,
+            FnsOffice.name,
+        )
+        .order_by(FnsOffice.region, FnsOffice.city, FnsOffice.short_number)
+    )
+    rows = (await db.execute(stmt)).all()
+
+    # Сворачиваем плоские строки в дерево region → city → offices.
+    regions: dict = {}
+    for region, city, office_id, short_number, name, count in rows:
+        reg = regions.setdefault(
+            region, {"region": region, "count": 0, "_cities": {}}
+        )
+        reg["count"] += count
+        cit = reg["_cities"].setdefault(
+            city, {"city": city, "count": 0, "offices": []}
+        )
+        cit["count"] += count
+        cit["offices"].append(
+            {
+                "id": str(office_id),
+                "short_number": short_number,
+                "name": name,
+                "count": count,
+            }
+        )
+    return [
+        {
+            "region": reg["region"],
+            "count": reg["count"],
+            "cities": list(reg["_cities"].values()),
+        }
+        for reg in regions.values()
+    ]
+
+
 @router.get("/addresses/search")
 async def public_addresses_search(
     q: Annotated[Optional[str], Query(max_length=200)] = None,
     city: Annotated[Optional[str], Query(max_length=120)] = None,
     fns_number: Annotated[Optional[int], Query(ge=1, le=9999)] = None,
+    region: Annotated[Optional[str], Query(max_length=120)] = None,
+    geo_city: Annotated[Optional[str], Query(max_length=120)] = None,
+    fns_office_id: Annotated[Optional[UUID], Query()] = None,
     correspondence: Annotated[Optional[bool], Query()] = None,
     price_lt: Annotated[Optional[int], Query(ge=0, le=10_000_000)] = None,
     price_gte: Annotated[Optional[int], Query(ge=0, le=10_000_000)] = None,
@@ -273,6 +346,14 @@ async def public_addresses_search(
         base_where.append(Address.full_address.ilike(f"%{city.strip()}%"))
     if fns_number is not None:
         base_where.append(Address.fns_number == fns_number)
+    if fns_office_id is not None:
+        base_where.append(Address.fns_office_id == fns_office_id)
+    # Гео-каскад Регион→Город — фильтр через справочник fns_offices.
+    geo_join_needed = bool(region) or bool(geo_city)
+    if region:
+        base_where.append(FnsOffice.region == region)
+    if geo_city:
+        base_where.append(FnsOffice.city == geo_city)
     if correspondence is True:
         base_where.append(Address.correspondence_price.is_not(None))
     if price_lt is not None:
@@ -297,6 +378,8 @@ async def public_addresses_search(
         .join(Provider, Provider.id == Address.provider_id)
         .where(*base_where)
     )
+    if geo_join_needed:
+        stmt = stmt.join(FnsOffice, FnsOffice.id == Address.fns_office_id)
 
     # Сортировка.
     if has_query and sort == "relevance":
@@ -320,6 +403,10 @@ async def public_addresses_search(
         .join(Provider, Provider.id == Address.provider_id)
         .where(*base_where)
     )
+    if geo_join_needed:
+        count_stmt = count_stmt.join(
+            FnsOffice, FnsOffice.id == Address.fns_office_id
+        )
 
     total = (await db.execute(count_stmt)).scalar_one()
 
