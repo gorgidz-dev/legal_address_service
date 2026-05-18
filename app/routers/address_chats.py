@@ -30,7 +30,6 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
-    Query,
     WebSocket,
     WebSocketDisconnect,
     status,
@@ -450,14 +449,15 @@ ws_router = APIRouter()
 async def chat_websocket(
     websocket: WebSocket,
     chat_id: UUID,
-    token: str = Query(default=""),
 ) -> None:
-    # httponly-cookie не достать из JS, поэтому при same-origin WS-handshake
-    # браузер сам прикладывает cookie. Сначала пытаемся cookie, fallback — query.
+    # Аутентификация WS — ТОЛЬКО через HttpOnly session-cookie. При same-origin
+    # WS-handshake браузер сам прикладывает cookie.
+    # Query-param ?token= намеренно не поддерживается: токен в URL утекает в
+    # логи nginx/прокси, в history браузера и в Referer — это была дыра.
     from app.config import settings as _settings
 
     cookie_token = websocket.cookies.get(_settings.session_cookie_name)
-    user = await _ws_resolve_user(cookie_token or token)
+    user = await _ws_resolve_user(cookie_token or "")
     if user is None:
         await websocket.close(code=4401)  # custom: unauthorized
         return
