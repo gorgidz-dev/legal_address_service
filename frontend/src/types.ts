@@ -364,6 +364,32 @@ export interface PublicAddress {
   photos: AddressPhoto[];
   main_photo_url: string | null;
   services: PublicAddressService[];
+  rating_avg: number | null;
+  rating_count: number;
+}
+
+export interface PublicReview {
+  id: string;
+  rating: number;
+  body: string;
+  author_name: string;
+  created_at: string;
+  owner_reply: string | null;
+  owner_reply_at: string | null;
+}
+
+export interface ModerationReview {
+  id: string;
+  address_id: string;
+  address_full: string;
+  client_email: string;
+  rating: number;
+  body: string;
+  status: string;
+  moderation_note: string | null;
+  moderated_at: string | null;
+  owner_reply: string | null;
+  created_at: string;
 }
 
 export interface AddressChat {

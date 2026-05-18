@@ -34,6 +34,8 @@ import type {
   ProviderConnectionRequestCreate,
   ProviderConnectionRequestStatusUpdate,
   PublicAddress,
+  PublicReview,
+  ModerationReview,
   UserSessionInfo
 } from "./types";
 
@@ -167,6 +169,35 @@ export const api = {
     request<{ fns_number: number; fns_city: string | null; count: number }[]>(
       "/marketplace/fns-options"
     ),
+
+  // --- Отзывы об адресах ---
+  listAddressReviews: (addressId: string) =>
+    request<PublicReview[]>(`/marketplace/addresses/${addressId}/reviews`),
+
+  createAddressReview: (addressId: string, payload: { rating: number; body: string }) =>
+    request<PublicReview>(`/marketplace/addresses/${addressId}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
+  ownerReplyToReview: (reviewId: string, body: string) =>
+    request<PublicReview>(`/marketplace/reviews/${reviewId}/owner-reply`, {
+      method: "POST",
+      body: JSON.stringify({ body })
+    }),
+
+  adminListReviews: (status: "pending" | "published" | "rejected" = "pending") =>
+    request<ModerationReview[]>(`/admin/reviews?status=${status}`),
+
+  adminModerateReview: (
+    reviewId: string,
+    action: "publish" | "reject",
+    note?: string
+  ) =>
+    request<ModerationReview>(`/admin/reviews/${reviewId}/moderate`, {
+      method: "POST",
+      body: JSON.stringify({ action, note: note ?? null })
+    }),
 
   /**
    * Серверный FTS-поиск по каталогу с пагинацией.

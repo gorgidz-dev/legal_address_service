@@ -39,6 +39,7 @@ import PublicCatalog from "./publicCatalog";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { OwnerAddressEditor } from "./OwnerAddressEditor";
 import { PushToggle } from "./PushToggle";
+import { AdminReviewModeration } from "./sections/AdminReviewModeration";
 import type {
   ActiveClientRegistryItem,
   Address,
@@ -83,7 +84,8 @@ type View =
   | "provider-requests"
   | "address-moderation"
   | "address-services"
-  | "address-chats";
+  | "address-chats"
+  | "review-moderation";
 
 const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "applications", label: "Заявки", icon: FolderOpen },
@@ -127,6 +129,12 @@ const adminAddressServicesNavItem: { id: View; label: string; icon: typeof Home 
 const adminAddressChatsNavItem: { id: View; label: string; icon: typeof Home } = {
   id: "address-chats",
   label: "Чаты",
+  icon: MessageSquare
+};
+
+const adminReviewModerationNavItem: { id: View; label: string; icon: typeof Home } = {
+  id: "review-moderation",
+  label: "Отзывы на модерацию",
   icon: MessageSquare
 };
 
@@ -1147,6 +1155,7 @@ export default function App() {
           adminAddressModerationNavItem,
           adminAddressServicesNavItem,
           adminAddressChatsNavItem,
+          adminReviewModerationNavItem,
           adminPhotosNavItem,
           adminNavItem
         ]
@@ -1353,6 +1362,9 @@ export default function App() {
             )}
             {view === "address-chats" && currentUser.role === "admin" && (
               <ChatsListPanel currentUser={currentUser} />
+            )}
+            {view === "review-moderation" && currentUser.role === "admin" && (
+              <AdminReviewModeration />
             )}
             {view === "access" && currentUser.role === "admin" && (
               <>

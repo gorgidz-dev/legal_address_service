@@ -24,6 +24,8 @@ import { HomeConfigurator } from "./sections/HomeConfigurator";
 import { HomeFAQ } from "./sections/HomeFAQ";
 import { HomeForOwners } from "./sections/HomeForOwners";
 import { HomeCases } from "./sections/HomeCases";
+import { StarRating } from "./sections/StarRating";
+import { AddressReviews } from "./sections/AddressReviews";
 import type {
   AddressChat,
   CurrentUser,
@@ -1148,6 +1150,15 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                         ""
                       )}
                     </div>
+                    {address.rating_count > 0 && (
+                      <div className="ds-card__rating">
+                        <StarRating
+                          value={address.rating_avg}
+                          count={address.rating_count}
+                          size={13}
+                        />
+                      </div>
+                    )}
                     <div className="ds-card__options">
                       <div className="ds-segmented" role="group" aria-label="Срок">
                         <button
@@ -1610,6 +1621,11 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                 </div>
               </aside>
             </div>
+
+            <AddressReviews
+              addressId={detailAddress.id}
+              canReview={currentUser?.role === "client"}
+            />
           </div>
         </div>
       )}
