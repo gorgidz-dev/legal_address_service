@@ -17,7 +17,16 @@
 .ds-topnav {
   background: #fff;
   border-bottom: 1px solid var(--ds-border-soft);
-  padding: var(--topbar-pad-y) var(--ds-page-pad-x);
+  padding: var(--topbar-pad-y) 0;
+}
+/* Контент топ-нава — в той же 1180-колонке, что hero/грид: логотип
+   выровнен по левому краю остальных блоков. */
+.ds-topnav__inner {
+  max-width: var(--ds-page-max-width);
+  margin: 0 auto;
+  padding: 0 var(--ds-page-pad-x);
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -30,7 +39,7 @@
   flex-shrink: 0;
 }
 .ds-topnav__logo {
-  height: 34px;
+  height: 40px;
   width: auto;
   display: block;
 }
@@ -198,15 +207,15 @@
 /* ===== Compare bar + modal ===== */
 .ds-card__compare {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 8px;
+  right: 8px;
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: rgba(255, 255, 255, 0.94);
   border-radius: var(--ds-radius-pill);
-  padding: 4px 10px 4px 6px;
+  padding: 2px 8px 2px 5px;
   font-size: 11px;
   font-weight: 600;
   color: var(--ds-indigo-950);
