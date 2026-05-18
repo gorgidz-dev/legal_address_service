@@ -5,7 +5,7 @@
  * Пишет фильтры в общий `filters`-state главной (конфигуратор и filter-бар
  * работают на один state).
  */
-import { ArrowDown, Calendar, Search, Wallet } from "lucide-react";
+import { ArrowDown, Calendar, Search, Wallet, X } from "lucide-react";
 import { useMemo } from "react";
 import type { GeoRegion } from "../types";
 import { GeoCascade, type GeoSelection } from "./GeoCascade";
@@ -30,6 +30,8 @@ export type ConfiguratorProps = {
   loading: boolean;
   /** Скролл к гриду с результатами. */
   onShowResults: () => void;
+  /** Сброс всех фильтров поиска. */
+  onReset: () => void;
 };
 
 /** Оставляет в строке только цифры (для числовых инпутов цены). */
@@ -46,7 +48,17 @@ export function HomeConfigurator({
   totalCount,
   loading,
   onShowResults,
+  onReset,
 }: ConfiguratorProps) {
+  const hasAny = Boolean(
+    filters.query.trim() ||
+      filters.region ||
+      filters.geoCity ||
+      filters.fnsOfficeId ||
+      filters.priceFrom ||
+      filters.priceTo ||
+      filters.withCorr,
+  );
   const resultLabel = useMemo(() => {
     if (loading) return "Считаем подходящие адреса…";
     if (totalCount === 0) return "По заданным параметрам ничего не нашлось";
@@ -170,15 +182,26 @@ export function HomeConfigurator({
         <span className="ds-configurator__count" aria-live="polite">
           {resultLabel}
         </span>
-        <button
-          type="button"
-          className="ds-btn ds-btn--primary ds-btn--md"
-          onClick={onShowResults}
-          disabled={totalCount === 0 && !loading}
-        >
-          Показать все
-          <ArrowDown size={14} />
-        </button>
+        <div className="ds-configurator__foot-actions">
+          {hasAny && (
+            <button
+              type="button"
+              className="ds-btn ds-btn--ghost ds-btn--md"
+              onClick={onReset}
+            >
+              <X size={14} /> Сбросить
+            </button>
+          )}
+          <button
+            type="button"
+            className="ds-btn ds-btn--primary ds-btn--md"
+            onClick={onShowResults}
+            disabled={totalCount === 0 && !loading}
+          >
+            Показать все
+            <ArrowDown size={14} />
+          </button>
+        </div>
       </footer>
     </section>
   );

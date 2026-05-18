@@ -196,6 +196,12 @@
   font-weight: 600;
   color: var(--ds-indigo-900);
 }
+.ds-configurator__foot-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  flex-wrap: wrap;
+}
 
 /* =====================================================================
    FAQ

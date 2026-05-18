@@ -819,6 +819,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
             .getElementById("catalog-grid")
             ?.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
+        onReset={resetFilters}
       />
 
       <div className="ds-filterbar-wrap">
