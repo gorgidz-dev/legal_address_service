@@ -42,7 +42,7 @@ from sqlalchemy.orm import selectinload
 
 from app.auth import get_current_user, utcnow
 from app.database import AsyncSessionLocal, get_db
-from app.enums import UserRole
+from app.enums import AddressPublicationStatus, UserRole
 from app.models.address import Address
 from app.models.address_chat import AddressChat, AddressChatMessage
 from app.models.user import User
@@ -306,6 +306,17 @@ async def open_chat_for_address(
         )
     ).scalar_one_or_none()
     if chat is None:
+        # Новый чат можно создать только по опубликованному и доступному адресу.
+        # Иначе клиент мог бы перебором address_id зондировать существование
+        # скрытых / снятых с публикации / чужих адресов (информационная разведка).
+        # Отдаём 404 как для несуществующего адреса — не подтверждаем сам факт.
+        # Уже существующий чат (адрес мог быть снят с публикации позже) — отдаём:
+        # клиент не теряет доступ к своей переписке.
+        if (
+            address.publication_status != AddressPublicationStatus.PUBLISHED.value
+            or not address.is_available
+        ):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес не найден")
         chat = AddressChat(address_id=address_id, client_user_id=user.id)
         db.add(chat)
         await db.commit()
