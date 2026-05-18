@@ -66,7 +66,7 @@ type CatalogFilters = {
 
 const initialFilters: CatalogFilters = {
   query: "",
-  city: "Москва",
+  city: "",
   fnsNumber: "",
   region: "",
   geoCity: "",
@@ -1034,7 +1034,8 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
               const base = options.term === 6 ? address.price_6m : address.price_11m;
               const total =
                 options.corr && address.correspondence_price
-                  ? Number(base) + Number(address.correspondence_price)
+                  ? Number(base) +
+                    Number(address.correspondence_price) * options.term
                   : base;
               const hasCorr = address.correspondence_price !== null && address.correspondence_price !== undefined;
               return (
@@ -1126,17 +1127,17 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                       <div className="ds-segmented" role="group" aria-label="Срок">
                         <button
                           type="button"
-                          className={options.term === 6 ? "selected" : ""}
-                          onClick={() => updateCardOption(address.id, { term: 6 })}
-                        >
-                          6 мес.
-                        </button>
-                        <button
-                          type="button"
                           className={options.term === 11 ? "selected" : ""}
                           onClick={() => updateCardOption(address.id, { term: 11 })}
                         >
                           11 мес.
+                        </button>
+                        <button
+                          type="button"
+                          className={options.term === 6 ? "selected" : ""}
+                          onClick={() => updateCardOption(address.id, { term: 6 })}
+                        >
+                          6 мес.
                         </button>
                       </div>
                       {hasCorr && (
@@ -1148,7 +1149,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                               updateCardOption(address.id, { corr: event.target.checked })
                             }
                           />
-                          <span>+ корреспонденция {formatMoney(address.correspondence_price)}</span>
+                          <span>
+                            + почта {formatMoney(address.correspondence_price)}/мес
+                          </span>
                         </label>
                       )}
                     </div>
@@ -1329,18 +1332,18 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                 <span>Срок</span>
                 <div className="segmented public-segmented">
                   <button
-                    className={applicationForm.term_months === 6 ? "selected" : ""}
-                    onClick={() => setApplicationForm({ ...applicationForm, term_months: 6 })}
-                    type="button"
-                  >
-                    6 мес.
-                  </button>
-                  <button
                     className={applicationForm.term_months === 11 ? "selected" : ""}
                     onClick={() => setApplicationForm({ ...applicationForm, term_months: 11 })}
                     type="button"
                   >
                     11 мес.
+                  </button>
+                  <button
+                    className={applicationForm.term_months === 6 ? "selected" : ""}
+                    onClick={() => setApplicationForm({ ...applicationForm, term_months: 6 })}
+                    type="button"
+                  >
+                    6 мес.
                   </button>
                 </div>
               </label>
@@ -1493,17 +1496,17 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
 
                 <div className="ds-address-detail__prices">
                   <div className="ds-address-detail__price-row">
-                    <span>6 месяцев</span>
-                    <strong>{formatMoney(detailAddress.price_6m)}</strong>
-                  </div>
-                  <div className="ds-address-detail__price-row">
                     <span>11 месяцев</span>
                     <strong>{formatMoney(detailAddress.price_11m)}</strong>
                   </div>
+                  <div className="ds-address-detail__price-row">
+                    <span>6 месяцев</span>
+                    <strong>{formatMoney(detailAddress.price_6m)}</strong>
+                  </div>
                   {detailAddress.correspondence_price && (
                     <div className="ds-address-detail__price-row ds-address-detail__price-row--soft">
-                      <span>Корреспонденция</span>
-                      <strong>{formatMoney(detailAddress.correspondence_price)}</strong>
+                      <span>Почта</span>
+                      <strong>{formatMoney(detailAddress.correspondence_price)}/мес</strong>
                     </div>
                   )}
                 </div>

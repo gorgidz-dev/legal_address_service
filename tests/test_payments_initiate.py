@@ -247,7 +247,8 @@ async def test_initiate_includes_correspondence_price_when_enabled(monkeypatch) 
         db=db,
         user=client,
     )
-    assert result.amount_kopeks == 2_800_000  # 25000 + 3000 = 28000.00
+    # Почта помесячно × срок: 25000 + 3000×11 = 58000.00
+    assert result.amount_kopeks == 5_800_000
 
 
 def test_only_ru_phone_digits_helper() -> None:

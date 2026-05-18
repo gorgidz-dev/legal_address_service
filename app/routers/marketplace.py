@@ -67,13 +67,17 @@ router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
 
 def _compute_amount_kopeks(address: Address, application: Application) -> int:
-    """Сумма к оплате: цена за выбранный срок + опц. корреспонденция, в копейках."""
+    """Сумма к оплате: цена за выбранный срок + опц. почта, в копейках.
+
+    Корреспонденция тарифицируется помесячно и оплачивается на весь срок
+    выбранного договора (6 или 11 мес.).
+    """
     from decimal import Decimal
     term = application.term_months or 11
     base: Decimal = address.price_6m if term == 6 else address.price_11m
     total = base
     if application.has_correspondence_service and address.correspondence_price is not None:
-        total += address.correspondence_price
+        total += address.correspondence_price * term
     return int((total * 100).quantize(Decimal("1")))
 
 

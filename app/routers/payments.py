@@ -69,7 +69,11 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 async def _compute_amount_kopeks(db: AsyncSession, application: Application) -> int:
-    """Сумма к оплате по заявке: цена за выбранный срок + корреспонденция (если включена)."""
+    """Сумма к оплате по заявке: цена за выбранный срок + почта (если включена).
+
+    Корреспонденция тарифицируется помесячно и оплачивается на весь срок
+    выбранного договора (6 или 11 мес.) — формула едина с marketplace.py.
+    """
     address = await db.get(Address, application.address_id)
     if address is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес заявки не найден")
@@ -77,7 +81,7 @@ async def _compute_amount_kopeks(db: AsyncSession, application: Application) -> 
     base: Decimal = address.price_6m if term == 6 else address.price_11m
     total = base
     if application.has_correspondence_service and address.correspondence_price is not None:
-        total += address.correspondence_price
+        total += address.correspondence_price * term
     kopeks = int((total * 100).quantize(Decimal("1")))
     if kopeks < 100:
         raise HTTPException(
