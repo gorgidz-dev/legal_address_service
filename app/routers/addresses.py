@@ -14,8 +14,8 @@ from app.database import get_db
 from app.models.address import Address
 from app.models.provider import Provider
 from app.schemas.address import AddressCreate, AddressRead
+from app.services.dadata_address import geocode
 from app.services.fns_office import resolve_fns_office_for_address
-from app.services.yandex_geocoder import geocode
 
 router = APIRouter(prefix="/addresses", tags=["addresses"], dependencies=[Depends(require_staff)])
 
@@ -68,8 +68,8 @@ async def create_address(
     except Exception:  # noqa: BLE001
         pass
 
-    # Координаты для карты через геокодер Яндекса. Опционально — сбой/нет
-    # ключа не блокирует создание (координаты можно проставить бэкфиллом).
+    # Координаты для карты через DaData (geo_lat/geo_lon). Опционально —
+    # сбой/нет токена не блокирует создание (координаты проставит бэкфилл).
     try:
         point = await geocode(address.full_address)
         if point is not None:

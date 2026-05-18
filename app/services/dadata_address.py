@@ -35,6 +35,8 @@ class DaDataAddressResult:
     fns_code: Optional[str]          # федеральный код ИФНС, напр. "7746"
     fns_short_number: Optional[int]  # локальный номер, напр. 46
     fns_name: Optional[str]          # сконструированное имя инспекции
+    geo_lat: Optional[float]         # широта (geo_lat DaData), для карты
+    geo_lon: Optional[float]         # долгота (geo_lon DaData), для карты
 
 
 def _parse_suggestion(data: dict) -> Optional[DaDataAddressResult]:
@@ -61,12 +63,20 @@ def _parse_suggestion(data: dict) -> Optional[DaDataAddressResult]:
         label_num = fns_short if fns_short is not None else fns_code
         fns_name = f"ИФНС России № {label_num} по {city}"
 
+    def _to_float(value: object) -> Optional[float]:
+        try:
+            return float(value) if value not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
     return DaDataAddressResult(
         region=region,
         city=city,
         fns_code=fns_code or None,
         fns_short_number=fns_short,
         fns_name=fns_name,
+        geo_lat=_to_float(data.get("geo_lat")),
+        geo_lon=_to_float(data.get("geo_lon")),
     )
 
 
@@ -96,3 +106,15 @@ async def suggest_address(query: str) -> Optional[DaDataAddressResult]:
     if not suggestions:
         return None
     return _parse_suggestion(suggestions[0].get("data") or {})
+
+
+async def geocode(query: str) -> Optional[tuple[float, float]]:
+    """Координаты (latitude, longitude) адреса через DaData. None — нет точки.
+
+    Использует тот же address-suggest, что и разбор региона/ИФНС, — отдельный
+    геокодер не нужен. DaData отдаёт geo_lat/geo_lon в data.
+    """
+    result = await suggest_address(query)
+    if result is None or result.geo_lat is None or result.geo_lon is None:
+        return None
+    return (result.geo_lat, result.geo_lon)

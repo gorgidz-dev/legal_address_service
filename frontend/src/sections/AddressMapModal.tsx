@@ -67,15 +67,14 @@ export function AddressMapModal({
   const [status, setStatus] = useState<"loading" | "ready" | "no-key" | "error">(
     "loading",
   );
-
-  const located = addresses.filter(
-    (a) => a.latitude != null && a.longitude != null,
-  );
+  // Сколько меток уже на карте (растёт по мере браузерного геокодинга).
+  const [placedCount, setPlacedCount] = useState(0);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setStatus("loading");
+    setPlacedCount(0);
 
     loadYandexMaps()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,10 +88,20 @@ export function AddressMapModal({
         });
         mapRef.current = map;
 
-        const collection = new ymaps.GeoObjectCollection();
-        located.forEach((address) => {
+        // Кластеризатор — метки на масштабе страны группируются в кружки.
+        const clusterer = new ymaps.Clusterer({
+          preset: "islands#violetClusterIcons",
+          groupByCoordinates: false,
+          clusterDisableClickZoom: false,
+        });
+
+        const placemarks: unknown[] = [];
+        const addPlacemark = (
+          address: PublicAddress,
+          coords: [number, number],
+        ) => {
           const placemark = new ymaps.Placemark(
-            [address.latitude, address.longitude],
+            coords,
             {
               hintContent: address.full_address,
               balloonContentHeader: address.full_address,
@@ -104,21 +113,30 @@ export function AddressMapModal({
             },
             { preset: "islands#violetDotIcon" },
           );
-          placemark.events.add("click", () => {
-            onSelectAddress(address);
-          });
-          collection.add(placemark);
-        });
-        map.geoObjects.add(collection);
+          placemark.events.add("click", () => onSelectAddress(address));
+          placemarks.push(placemark);
+        };
 
-        // Подгоняем масштаб под все метки.
-        if (located.length > 0) {
-          const bounds = collection.getBounds();
-          if (bounds) {
-            map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 40 });
+        // Координаты адресов берём из БД (геокодинг — на бэкенде через DaData).
+        let placed = 0;
+        for (const address of addresses) {
+          if (address.latitude != null && address.longitude != null) {
+            addPlacemark(address, [address.latitude, address.longitude]);
+            placed += 1;
           }
         }
+        clusterer.add(placemarks);
+        map.geoObjects.add(clusterer);
+        setPlacedCount(placed);
         setStatus("ready");
+
+        // Подгоняем масштаб под все метки.
+        if (placed > 0) {
+          const bounds = clusterer.getBounds();
+          if (bounds) {
+            map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50 });
+          }
+        }
       })
       .catch((err: Error) => {
         if (cancelled) return;
@@ -162,7 +180,7 @@ export function AddressMapModal({
             <MapPin size={18} /> Адреса на карте
           </h3>
           <span className="ds-mapmodal__count">
-            {located.length} из {addresses.length} с координатами
+            {placedCount} из {addresses.length} на карте
           </span>
           <button
             type="button"

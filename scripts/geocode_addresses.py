@@ -1,9 +1,9 @@
-"""Бэкфилл координат адресов через геокодер Яндекса.
+"""Бэкфилл координат адресов через DaData (geo_lat/geo_lon).
 
 Берёт все адреса с пустыми latitude/longitude, геокодит full_address и
 сохраняет точку. Идемпотентен — уже геокодированные пропускает.
 
-Требует YANDEX_GEOCODER_KEY в .env. Без ключа скрипт ничего не делает.
+Требует DADATA_TOKEN в .env. Без токена скрипт ничего не делает.
 
 Запуск: .venv/bin/python -m scripts.geocode_addresses
 """
@@ -17,12 +17,12 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.address import Address
-from app.services.yandex_geocoder import geocode
+from app.services.dadata_address import geocode
 
 
 async def _run() -> None:
-    if not settings.yandex_geocoder_key:
-        print("YANDEX_GEOCODER_KEY не задан — геокодинг пропущен")
+    if not settings.dadata_token:
+        print("DADATA_TOKEN не задан — геокодинг пропущен")
         return
 
     async with AsyncSessionLocal() as db:

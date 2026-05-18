@@ -42,9 +42,9 @@ from app.services.address_photos import (
     OUTPUT_EXTENSION,
     process_image_bytes,
 )
+from app.services.dadata_address import geocode
 from app.services.fns_office import get_or_create_fns_office
 from app.services.storage import get_object_storage, safe_storage_filename
-from app.services.yandex_geocoder import geocode
 
 
 # Пул фотографий зданий и офисов (Unsplash CDN, стабильные id).
@@ -358,7 +358,7 @@ async def _seed():
                 await db.refresh(address)
                 created_addresses += 1
 
-                # Координаты для карты (если YANDEX_GEOCODER_KEY задан).
+                # Координаты для карты (DaData geo_lat/geo_lon).
                 point = await geocode(spec.full_address)
                 if point is not None:
                     address.latitude = Decimal(str(round(point[0], 6)))

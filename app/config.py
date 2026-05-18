@@ -33,11 +33,6 @@ class Settings(BaseSettings):
 
     dadata_token: str = ""
     dadata_secret: str = ""
-
-    # Яндекс.Карты. Geocoder API (HTTP, серверный) — геокодинг адресов в lat/lon.
-    # JS API key для фронта задаётся отдельно через VITE_YANDEX_MAPS_KEY.
-    # Пустой ключ → геокодинг выключен (адрес создаётся без координат).
-    yandex_geocoder_key: str = ""
     dadata_circuit_failure_threshold: int = 3
     dadata_circuit_recovery_seconds: float = 30.0
 
