@@ -403,6 +403,19 @@ export interface ModerationReview {
   created_at: string;
 }
 
+export type PaymentAttachmentKind = "invoice" | "payment_order";
+
+export interface PaymentAttachment {
+  id: string;
+  payment_id: string;
+  kind: PaymentAttachmentKind;
+  original_filename: string;
+  size_bytes: number;
+  uploaded_by: string | null;
+  created_at: string;
+  download_url: string;
+}
+
 export interface AddressChat {
   id: string;
   address_id: string;

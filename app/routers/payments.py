@@ -443,6 +443,35 @@ def _payment_attachment_read(
     )
 
 
+@router.get("/by-application/{application_id}", response_model=Optional[PaymentRead])
+async def get_payment_by_application(
+    application_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Optional[Payment]:
+    """Платёж по заявке (read-only) — или null.
+
+    Нужен собственнику/админу: они не создают платёж (как initiate), а только
+    смотрят существующий. Доступ: клиент заявки, собственник адреса, staff.
+    """
+    application = await db.get(Application, application_id)
+    if application is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка не найдена")
+    address = await db.get(Address, application.address_id)
+    if address is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес заявки не найден")
+    if _payment_role(user, application, address) is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к этой заявке")
+    payment = (
+        await db.execute(
+            select(Payment)
+            .where(Payment.application_id == application_id)
+            .order_by(Payment.created_at.desc())
+        )
+    ).scalars().first()
+    return payment
+
+
 @router.post(
     "/{payment_id}/attachments",
     response_model=PaymentAttachmentRead,

@@ -31,6 +31,8 @@ import type {
   ProviderConnectionRequestApprove,
   ProviderConnectionRequestApproveResult,
   Payment,
+  PaymentAttachment,
+  PaymentAttachmentKind,
   ProviderConnectionRequestCreate,
   ProviderConnectionRequestStatusUpdate,
   PublicAddress,
@@ -298,6 +300,30 @@ export const api = {
       body: JSON.stringify({ application_id: applicationId, payer_type: "individual" })
     }),
   getPayment: (paymentId: string) => request<Payment>(`/payments/${paymentId}`),
+  getPaymentByApplication: (applicationId: string) =>
+    request<Payment | null>(`/payments/by-application/${applicationId}`),
+
+  // --- Документы платежа (счёт / платёжка) ---
+  listPaymentAttachments: (paymentId: string) =>
+    request<PaymentAttachment[]>(`/payments/${paymentId}/attachments`),
+  uploadPaymentAttachment: (
+    paymentId: string,
+    kind: PaymentAttachmentKind,
+    file: File
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("kind", kind);
+    return request<PaymentAttachment>(`/payments/${paymentId}/attachments`, {
+      method: "POST",
+      body: form
+    });
+  },
+  confirmPaymentReceipt: (paymentId: string, comment?: string) =>
+    request<Payment>(`/payments/${paymentId}/confirm-receipt`, {
+      method: "POST",
+      body: JSON.stringify({ comment: comment ?? null })
+    }),
   cancelPayment: (paymentId: string) =>
     request<Payment>(`/payments/${paymentId}/cancel`, { method: "POST" }),
   refundPayment: (paymentId: string, valueRefundKopeks: number | null, reason: string) =>

@@ -777,3 +777,82 @@
   background: var(--ds-danger-bg);
   color: var(--ds-danger-fg);
 }
+
+/* =====================================================================
+   ДОКУМЕНТЫ ПЛАТЕЖА (счёт / платёжка)
+   ===================================================================== */
+.ds-payatt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+}
+.ds-payatt__loading {
+  font-size: var(--ds-text-body-sm);
+  color: var(--ds-slate-500);
+}
+.ds-payatt__row {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+}
+.ds-payatt__icon {
+  flex-shrink: 0;
+  color: var(--ds-slate-400);
+}
+.ds-payatt__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.ds-payatt__label {
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-slate-500);
+}
+.ds-payatt__file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+  font-size: var(--ds-text-body-sm);
+  font-weight: 600;
+  color: var(--ds-indigo-700);
+  text-decoration: none;
+}
+.ds-payatt__file:hover {
+  text-decoration: underline;
+}
+.ds-payatt__muted {
+  font-size: var(--ds-text-body-sm);
+  color: var(--ds-slate-500);
+}
+.ds-payatt__error {
+  font-size: var(--ds-text-body-sm);
+  color: var(--ds-danger-fg);
+}
+.ds-payatt__paid {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-text-body-sm);
+  font-weight: 600;
+  color: var(--ds-success-fg);
+}
+.ds-payatt-card {
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-lg);
+  background: #fff;
+  padding: var(--ds-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+}
+.ds-payatt-card__title {
+  font-size: var(--ds-text-heading-sm);
+  font-weight: 600;
+  color: var(--ds-indigo-950);
+  margin: 0;
+}

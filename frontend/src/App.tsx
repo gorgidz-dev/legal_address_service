@@ -40,6 +40,10 @@ import { ChatsListPanel } from "./ChatsListPanel";
 import { OwnerAddressEditor } from "./OwnerAddressEditor";
 import { PushToggle } from "./PushToggle";
 import { AdminReviewModeration } from "./sections/AdminReviewModeration";
+import {
+  OwnerPaymentSection,
+  PaymentAttachmentsPanel
+} from "./sections/PaymentAttachmentsPanel";
 import type {
   ActiveClientRegistryItem,
   Address,
@@ -1469,10 +1473,15 @@ function SbpPaymentPanel({
           </span>
         </div>
         <p style={{ margin: 0, color: "#596259" }}>
-          Собственник загрузит счёт-фактуру в комплекте документов на адрес. После
-          оплаты по реквизитам администратор подтвердит платёж вручную, и заявка
-          перейдёт в проверку.
+          Скачайте счёт от собственника, оплатите по реквизитам и приложите
+          платёжное поручение. После подтверждения собственником заявка перейдёт
+          к подготовке документов.
         </p>
+        <PaymentAttachmentsPanel
+          paymentId={payment.id}
+          viewerRole="client"
+          paymentStatus={payment.status}
+        />
         {payment.status === "failed" ? (
           <small style={{ color: "#c0392b" }}>
             Оплата не подтверждена. Свяжитесь с поддержкой.
@@ -2131,6 +2140,11 @@ function OwnerDashboardView({
                     {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
                   </div>
                 </div>
+
+                <OwnerPaymentSection
+                  applicationId={selectedApplication.id}
+                  onConfirmed={() => setRefreshKey((value) => value + 1)}
+                />
 
                 {selectedApplication.available_actions.length ? (
                   <div className="owner-action-strip">
