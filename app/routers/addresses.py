@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from app.models.address import Address
 from app.models.provider import Provider
 from app.schemas.address import AddressCreate, AddressRead
 from app.services.fns_office import resolve_fns_office_for_address
+from app.services.yandex_geocoder import geocode
 
 router = APIRouter(prefix="/addresses", tags=["addresses"], dependencies=[Depends(require_staff)])
 
@@ -63,6 +65,16 @@ async def create_address(
         office = await resolve_fns_office_for_address(db, address.full_address)
         if office is not None:
             address.fns_office_id = office.id
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Координаты для карты через геокодер Яндекса. Опционально — сбой/нет
+    # ключа не блокирует создание (координаты можно проставить бэкфиллом).
+    try:
+        point = await geocode(address.full_address)
+        if point is not None:
+            address.latitude = Decimal(str(round(point[0], 6)))
+            address.longitude = Decimal(str(round(point[1], 6)))
     except Exception:  # noqa: BLE001
         pass
 

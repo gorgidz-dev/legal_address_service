@@ -27,6 +27,7 @@ import { HomeForOwners } from "./sections/HomeForOwners";
 import { HomeCases } from "./sections/HomeCases";
 import { StarRating } from "./sections/StarRating";
 import { AddressReviews } from "./sections/AddressReviews";
+import { AddressMapModal } from "./sections/AddressMapModal";
 import type {
   AddressChat,
   CurrentUser,
@@ -80,6 +81,9 @@ const initialFilters: CatalogFilters = {
 };
 
 const VALID_SORTS: CatalogSort[] = ["default", "price_asc", "price_desc", "newest"];
+
+/** Минимальная длина текстового запроса — поиск стартует с 3-го символа. */
+const MIN_QUERY_LEN = 3;
 
 /** Filters → query string. Записываем только не-дефолтные поля, чтобы URL был чистым. */
 function filtersToQueryString(f: CatalogFilters): string {
@@ -344,10 +348,17 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   // Дебаунс текстового запроса. UI обновляется мгновенно (filters.query), а на
-  // бэк уходит с задержкой 300ms — чтобы каждое нажатие не дёргало FTS.
-  const [debouncedQuery, setDebouncedQuery] = useState(filters.query);
+  // бэк уходит с задержкой 200ms. Поиск стартует с 3-го символа: запрос
+  // короче 3 знаков уходит как пустой (показываем весь каталог).
+  const [debouncedQuery, setDebouncedQuery] = useState(() =>
+    filters.query.trim().length >= MIN_QUERY_LEN ? filters.query : "",
+  );
   useEffect(() => {
-    const id = setTimeout(() => setDebouncedQuery(filters.query), 300);
+    const id = setTimeout(() => {
+      setDebouncedQuery(
+        filters.query.trim().length >= MIN_QUERY_LEN ? filters.query : "",
+      );
+    }, 200);
     return () => clearTimeout(id);
   }, [filters.query]);
 
@@ -375,6 +386,8 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
 
   // Детальная карточка адреса (фото-галерея + услуги).
   const [detailAddress, setDetailAddress] = useState<PublicAddress | null>(null);
+  // Модалка поиска адресов на карте (Яндекс.Карты).
+  const [mapOpen, setMapOpen] = useState(false);
   // Скролл внутри детальной модалки — для кнопки «наверх».
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
   const [detailScrolled, setDetailScrolled] = useState(false);
@@ -821,6 +834,18 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
             ?.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
         onReset={resetFilters}
+        onOpenMap={() => setMapOpen(true)}
+      />
+
+      <AddressMapModal
+        open={mapOpen}
+        addresses={addresses}
+        onClose={() => setMapOpen(false)}
+        onSelectAddress={(address) => {
+          setMapOpen(false);
+          setDetailPhotoIdx(0);
+          setDetailAddress(address);
+        }}
       />
 
       <div className="ds-resultbar" id="catalog-grid">

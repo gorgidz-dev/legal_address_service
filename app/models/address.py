@@ -49,6 +49,12 @@ class Address(UUIDPKMixin, TimestampMixin, Base):
 
     fns_number: Mapped[Optional[int]] = mapped_column(SmallInteger)
     fns_city: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Координаты для показа на карте. Заполняются геокодером Яндекса
+    # (app/services/yandex_geocoder.py) при создании/сидинге адреса.
+    # None — геокодер не настроен или не нашёл точку; адрес просто не на карте.
+    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6))
     # Структурная привязка к справочнику ИФНС (регион/город/код). Заполняется
     # из DaData при создании адреса; даёт каскад Регион→Город→ИФНС в каталоге.
     fns_office_id: Mapped[Optional[UUID]] = mapped_column(

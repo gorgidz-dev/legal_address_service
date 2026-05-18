@@ -141,6 +141,121 @@ legend.ds-configurator__label {
 .ds-configurator__input::-webkit-search-decoration {
   -webkit-appearance: none;
 }
+/* Строка поиска: поле + кнопка «На карте» справа. Поле тянется, кнопка
+   фиксированной ширины — поэтому строка поиска визуально стала меньше. */
+.ds-configurator__search-row {
+  display: flex;
+  gap: var(--ds-space-2);
+  align-items: stretch;
+}
+.ds-configurator__search-row .ds-configurator__input {
+  flex: 1 1 auto;
+}
+.ds-configurator__map-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-1);
+  height: var(--cfg-control-h);
+  padding: 0 16px;
+  border: 1px solid var(--ds-indigo-500);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-indigo-50, #eef0fb);
+  color: var(--ds-indigo-700, #3d3da8);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--ds-motion-fast) var(--ds-ease-snappy),
+    border-color var(--ds-motion-fast) var(--ds-ease-snappy);
+}
+.ds-configurator__map-btn:hover {
+  background: var(--ds-indigo-100, #e0e2f7);
+  border-color: var(--ds-indigo-600, #4f4fc7);
+}
+
+/* ====================== Модалка «Адреса на карте» ====================== */
+.ds-mapmodal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 18, 40, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ds-space-4, 16px);
+}
+.ds-mapmodal {
+  background: #fff;
+  border-radius: var(--ds-radius-xl, 16px);
+  width: min(1040px, 100%);
+  height: min(720px, 90vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 18, 40, 0.35);
+}
+.ds-mapmodal__head {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3, 12px);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ds-slate-200);
+}
+.ds-mapmodal__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ds-indigo-950);
+}
+.ds-mapmodal__count {
+  font-size: 13px;
+  color: var(--ds-slate-600);
+}
+.ds-mapmodal__close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-slate-100);
+  color: var(--ds-slate-600);
+  cursor: pointer;
+}
+.ds-mapmodal__close:hover {
+  background: var(--ds-slate-200);
+}
+.ds-mapmodal__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.ds-mapmodal__map {
+  position: absolute;
+  inset: 0;
+}
+.ds-mapmodal__state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-2);
+  background: var(--ds-slate-50, #f7f8fc);
+  color: var(--ds-slate-600);
+  font-size: 14px;
+  text-align: center;
+  padding: var(--ds-space-4, 16px);
+}
 .ds-configurator__segmented {
   display: flex;
   background: var(--ds-slate-100);

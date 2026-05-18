@@ -164,6 +164,9 @@ class PublicAddressRead(BaseModel):
     correspondence_price: Optional[Decimal]
     fns_number: Optional[int]
     fns_city: Optional[str]
+    # Координаты для карты. None — адрес не геокодирован.
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     is_available: bool
     publication_status: str
     created_at: datetime

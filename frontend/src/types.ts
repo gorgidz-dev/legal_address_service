@@ -357,6 +357,8 @@ export interface PublicAddress {
   correspondence_price: string | null;
   fns_number: number | null;
   fns_city: string | null;
+  latitude: number | null;
+  longitude: number | null;
   is_available: boolean;
   publication_status: string;
   created_at: string;

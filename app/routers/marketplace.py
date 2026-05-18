@@ -119,6 +119,16 @@ def public_address_from_row(
         correspondence_price=address.correspondence_price,
         fns_number=address.fns_number,
         fns_city=address.fns_city,
+        latitude=(
+            float(lat)
+            if (lat := getattr(address, "latitude", None)) is not None
+            else None
+        ),
+        longitude=(
+            float(lon)
+            if (lon := getattr(address, "longitude", None)) is not None
+            else None
+        ),
         is_available=address.is_available,
         publication_status=address.publication_status,
         created_at=address.created_at,

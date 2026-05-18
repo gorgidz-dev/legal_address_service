@@ -5,7 +5,7 @@
  * Пишет фильтры в общий `filters`-state главной (конфигуратор и filter-бар
  * работают на один state).
  */
-import { ArrowDown, Calendar, Mail, Search, Wallet, X } from "lucide-react";
+import { ArrowDown, Calendar, Mail, MapPin, Search, Wallet, X } from "lucide-react";
 import { useMemo } from "react";
 import type { GeoRegion } from "../types";
 import { GeoCascade, type GeoSelection } from "./GeoCascade";
@@ -32,6 +32,8 @@ export type ConfiguratorProps = {
   onShowResults: () => void;
   /** Сброс всех фильтров поиска. */
   onReset: () => void;
+  /** Открыть модалку поиска на карте. */
+  onOpenMap: () => void;
 };
 
 /** Оставляет в строке только цифры (для числовых инпутов цены). */
@@ -49,6 +51,7 @@ export function HomeConfigurator({
   loading,
   onShowResults,
   onReset,
+  onOpenMap,
 }: ConfiguratorProps) {
   const hasAny = Boolean(
     filters.query.trim() ||
@@ -85,21 +88,30 @@ export function HomeConfigurator({
       </header>
 
       <div className="ds-configurator__grid">
-        {/* Строка общего поиска — на всю ширину */}
-        <label className="ds-configurator__field" data-span="3">
+        {/* Строка общего поиска + кнопка поиска на карте */}
+        <div className="ds-configurator__field" data-span="3">
           <span className="ds-configurator__label">
             <Search size={14} /> По адресу или ИФНС
           </span>
-          <input
-            type="search"
-            placeholder="Например: «Тверская» или «46»"
-            value={filters.query}
-            onChange={(e) => onChange({ ...filters, query: e.target.value })}
-            className="ds-configurator__input"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
+          <div className="ds-configurator__search-row">
+            <input
+              type="search"
+              placeholder="Например: «Тверская» или «46»"
+              value={filters.query}
+              onChange={(e) => onChange({ ...filters, query: e.target.value })}
+              className="ds-configurator__input"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="ds-configurator__map-btn"
+              onClick={onOpenMap}
+            >
+              <MapPin size={16} /> На карте
+            </button>
+          </div>
+        </div>
 
         {/* Ряд: Регион → Город → ИФНС */}
         <GeoCascade
