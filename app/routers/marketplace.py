@@ -23,10 +23,12 @@ from app.enums import (
     PaymentPayerType,
     PaymentProvider,
     PaymentStatus,
+    ReviewStatus,
     UserRole,
 )
 from app.models.address import Address
 from app.models.address_photo import AddressPhoto
+from app.models.address_review import AddressReview
 from app.models.address_service import AddressService
 from app.models.application import Application
 from app.models.payment import Payment
@@ -85,6 +87,7 @@ def public_address_from_row(
     term_months: Literal[6, 11] = 11,
     photos: list[AddressPhoto] | None = None,
     services: list[AddressService] | None = None,
+    rating: tuple[float | None, int] = (None, 0),
 ) -> PublicAddressRead:
     selected_price: Decimal = address.price_6m if term_months == 6 else address.price_11m
     photo_models = [
@@ -117,7 +120,38 @@ def public_address_from_row(
         photos=photo_models,
         main_photo_url=main_url,
         services=service_models,
+        rating_avg=rating[0],
+        rating_count=rating[1],
     )
+
+
+async def _load_rating_aggregates_for(
+    db: AsyncSession,
+    address_ids: list,
+) -> dict:
+    """Возвращает {address_id: (avg_rating, count)} по ОПУБЛИКОВАННЫМ отзывам.
+
+    Адреса без опубликованных отзывов в словарь не попадают —
+    public_address_from_row подставит дефолт (None, 0).
+    """
+    if not address_ids:
+        return {}
+    result = await db.execute(
+        select(
+            AddressReview.address_id,
+            func.avg(AddressReview.rating),
+            func.count(AddressReview.id),
+        )
+        .where(
+            AddressReview.address_id.in_(address_ids),
+            AddressReview.status == ReviewStatus.PUBLISHED.value,
+        )
+        .group_by(AddressReview.address_id)
+    )
+    out: dict = {}
+    for address_id, avg_rating, count in result.all():
+        out[address_id] = (round(float(avg_rating), 2), int(count))
+    return out
 
 
 async def _load_approved_photos_for(
@@ -297,6 +331,7 @@ async def public_addresses_search(
     address_ids = [a.id for a, _ in rows]
     photos_by_address = await _load_approved_photos_for(db, address_ids)
     services_by_address = await _load_active_services_for(db, address_ids)
+    ratings_by_address = await _load_rating_aggregates_for(db, address_ids)
 
     items = [
         public_address_from_row(
@@ -305,6 +340,7 @@ async def public_addresses_search(
             term_months=6 if term_months == 6 else 11,
             photos=photos_by_address.get(address.id),
             services=services_by_address.get(address.id),
+            rating=ratings_by_address.get(address.id, (None, 0)),
         )
         for address, provider in rows
     ]
@@ -349,6 +385,7 @@ async def public_addresses(
     address_ids = [a.id for a, _ in rows]
     photos_by_address = await _load_approved_photos_for(db, address_ids)
     services_by_address = await _load_active_services_for(db, address_ids)
+    ratings_by_address = await _load_rating_aggregates_for(db, address_ids)
     return [
         public_address_from_row(
             address=address,
@@ -356,6 +393,7 @@ async def public_addresses(
             term_months=6 if term_months == 6 else 11,
             photos=photos_by_address.get(address.id),
             services=services_by_address.get(address.id),
+            rating=ratings_by_address.get(address.id, (None, 0)),
         )
         for address, provider in rows
     ]

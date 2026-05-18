@@ -3,6 +3,7 @@
 from app.models.address import Address
 from app.models.address_chat import AddressChat, AddressChatMessage
 from app.models.address_photo import AddressPhoto
+from app.models.address_review import AddressReview
 from app.models.address_service import AddressService
 from app.models.application import Application
 from app.models.application_event import ApplicationEvent
@@ -33,6 +34,7 @@ __all__ = [
     "AddressChat",
     "AddressChatMessage",
     "AddressPhoto",
+    "AddressReview",
     "AddressService",
     "Application",
     "ApplicationEvent",

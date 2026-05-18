@@ -19,6 +19,7 @@ from app.routers import (
     address_chats,
     address_moderation,
     address_photos,
+    address_reviews,
     address_services,
     addresses,
     application_documents,
@@ -112,6 +113,13 @@ def _is_public_path(path: str, method: str) -> bool:
     if path == f"{API_PREFIX}/marketplace/addresses/search" and method == "GET":
         return True
     if path == f"{API_PREFIX}/marketplace/fns-options" and method == "GET":
+        return True
+    # Публичная лента отзывов по адресу: /marketplace/addresses/{id}/reviews
+    if (
+        path.startswith(f"{API_PREFIX}/marketplace/addresses/")
+        and path.endswith("/reviews")
+        and method == "GET"
+    ):
         return True
     if path == f"{API_PREFIX}/push/public-key" and method == "GET":
         return True
@@ -211,6 +219,8 @@ api_v1.include_router(address_moderation.router)
 api_v1.include_router(address_moderation.admin_router)
 api_v1.include_router(address_services.router)
 api_v1.include_router(address_services.owner_router)
+api_v1.include_router(address_reviews.router)
+api_v1.include_router(address_reviews.admin_router)
 api_v1.include_router(address_chats.router)
 # WebSocket-роут отдельно — middleware пропускает по public-path рулу ниже.
 api_v1.include_router(address_chats.ws_router)

@@ -81,6 +81,19 @@ class OwnerConnectionRequestStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class ReviewStatus(str, Enum):
+    """Статус модерации отзыва об адресе.
+
+    pending   — создан клиентом, ждёт проверки админом (по умолчанию).
+    published — одобрен, виден публично и учитывается в среднем рейтинге.
+    rejected  — отклонён, не виден, в рейтинг не входит.
+    """
+
+    PENDING = "pending"
+    PUBLISHED = "published"
+    REJECTED = "rejected"
+
+
 class DocumentFileKind(str, Enum):
     CLIENT_REQUISITES = "client_requisites"
     COMPANY_DETAILS = "company_details"

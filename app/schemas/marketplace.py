@@ -171,3 +171,60 @@ class PublicAddressRead(BaseModel):
     photos: list[AddressPhotoRead] = Field(default_factory=list)
     main_photo_url: Optional[str] = None
     services: list[PublicAddressServiceRead] = Field(default_factory=list)
+    # Агрегаты рейтинга: средний балл (None если отзывов нет) и кол-во
+    # опубликованных отзывов.
+    rating_avg: Optional[float] = None
+    rating_count: int = 0
+
+
+# ============================== Reviews ==============================
+
+
+class AddressReviewCreate(BaseModel):
+    """Создание отзыва клиентом. application_id подбирается на бэке."""
+
+    rating: int = Field(ge=1, le=5)
+    body: str = Field(min_length=10, max_length=2000)
+
+
+class PublicReviewRead(BaseModel):
+    """Опубликованный отзыв для витрины (без PII клиента)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    rating: int
+    body: str
+    author_name: str
+    created_at: datetime
+    owner_reply: Optional[str] = None
+    owner_reply_at: Optional[datetime] = None
+
+
+class ModerationReviewRead(BaseModel):
+    """Отзыв в админ-очереди модерации — со всеми служебными полями."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    address_id: UUID
+    address_full: str
+    client_email: str
+    rating: int
+    body: str
+    status: str
+    moderation_note: Optional[str] = None
+    moderated_at: Optional[datetime] = None
+    owner_reply: Optional[str] = None
+    created_at: datetime
+
+
+class ReviewModerationAction(BaseModel):
+    """Действие модератора: publish | reject (+ опц. заметка)."""
+
+    action: Literal["publish", "reject"]
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+class OwnerReplyCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=1000)
