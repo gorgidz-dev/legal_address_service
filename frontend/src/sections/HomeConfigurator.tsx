@@ -85,9 +85,6 @@ export function HomeConfigurator({
             письмом и свежей выпиской ЕГРН.
           </p>
         </div>
-        <div className="ds-configurator__deco" aria-hidden="true">
-          <MapPin size={28} strokeWidth={2.2} />
-        </div>
       </header>
 
       <div className="ds-configurator__grid">

@@ -8,9 +8,7 @@
 import {
   ArrowRight,
   BadgeCheck,
-  Banknote,
   CalendarCheck2,
-  Headphones,
   Megaphone,
   ShieldCheck,
 } from "lucide-react";
@@ -85,30 +83,6 @@ export function HomeForOwners({ onCTAClick }: { onCTAClick: () => void }) {
               <p>
                 Каталог индексируется в поиске. Часть клиентов приходит из
                 реферальной сети бухгалтерских сервисов.
-              </p>
-            </div>
-          </li>
-          <li className="ds-owners__perk">
-            <span className="ds-owners__perk-icon">
-              <Banknote size={20} strokeWidth={1.8} />
-            </span>
-            <div>
-              <h3>Безопасные расчёты</h3>
-              <p>
-                Деньги клиента поступают на счёт после подтверждения получения
-                документов — без зависших платежей и долгих ожиданий.
-              </p>
-            </div>
-          </li>
-          <li className="ds-owners__perk">
-            <span className="ds-owners__perk-icon">
-              <Headphones size={20} strokeWidth={1.8} />
-            </span>
-            <div>
-              <h3>Поддержка 24/7</h3>
-              <p>
-                Менеджер на связи в чате, помогает с документами и спорными
-                вопросами — отвечаем в течение часа в рабочее время.
               </p>
             </div>
           </li>

@@ -6,7 +6,6 @@ import {
   Camera,
   CheckCircle2,
   ChevronRight,
-  Clock,
   FileText,
   KeyRound,
   Loader2,
@@ -14,7 +13,6 @@ import {
   MapPin,
   Search,
   Send,
-  ShieldCheck,
   Sparkles,
   X,
 } from "lucide-react";
@@ -784,48 +782,14 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
         animate="visible"
         variants={motionVariants}
       >
-        <div className="ds-hero__inner">
-          <div className="ds-hero__copy">
-            <motion.h1 className="ds-hero__h1" variants={childMotion}>
-              Маркетплейс юридических адресов.<br />
-              <em>За 1 день.</em>
-            </motion.h1>
-            <motion.p className="ds-hero__sub" variants={childMotion}>
-              Проверенные собственники, готовый комплект документов с гарантийным письмом и выпиской ЕГРН.
-              Подходит и для регистрации новой компании, и для смены адреса действующей.
-            </motion.p>
-          </div>
-          <motion.div
-            className="ds-hero__art"
-            variants={childMotion}
-            aria-hidden="true"
-          >
-            <img
-              src="/hero-art.svg"
-              alt=""
-              className="ds-hero__illu"
-              loading="eager"
-            />
-            <div className="ds-hero__badge ds-hero__badge--top">
-              <span className="ds-hero__badge-icon ds-hero__badge-icon--ok">
-                <ShieldCheck size={18} strokeWidth={2.2} />
-              </span>
-              <div className="ds-hero__badge-text">
-                <strong>100%</strong>
-                <span>проверены</span>
-              </div>
-            </div>
-            <div className="ds-hero__badge ds-hero__badge--bot">
-              <span className="ds-hero__badge-icon ds-hero__badge-icon--alt">
-                <Clock size={18} strokeWidth={2.2} />
-              </span>
-              <div className="ds-hero__badge-text">
-                <strong>1 день</strong>
-                <span>гарантия</span>
-              </div>
-            </div>
-          </motion.div>
-        </div>
+        <motion.h1 className="ds-hero__h1" variants={childMotion}>
+          Маркетплейс юридических адресов.<br />
+          <em>За 1 день.</em>
+        </motion.h1>
+        <motion.p className="ds-hero__sub" variants={childMotion}>
+          Проверенные собственники, готовый комплект документов с гарантийным письмом и выпиской ЕГРН.
+          Подходит и для регистрации новой компании, и для смены адреса действующей.
+        </motion.p>
         <motion.div className="ds-hero__stats ds-stat-row" variants={childMotion}>
           <div className="ds-stat">
             <div className="ds-stat__num">{addresses.length || "—"}</div>
