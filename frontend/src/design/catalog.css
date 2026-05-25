@@ -76,6 +76,22 @@
   margin: 0 auto;
   width: 100%;
 }
+/* Двухколоночный hero: текст слева, иллюстрация справа с двумя
+   плавающими бейджами. На мобайле — стек, иллюстрация скрыта. */
+.ds-hero__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--ds-space-10, 40px);
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .ds-hero__inner {
+    grid-template-columns: 1fr;
+  }
+}
+.ds-hero__copy {
+  min-width: 0;
+}
 .ds-hero__h1 {
   font-size: var(--ds-text-display-xl);
   font-weight: 700;
@@ -95,6 +111,86 @@
   line-height: 1.55;
   margin: 18px 0 0;
   max-width: 580px;
+}
+.ds-hero__art {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  aspect-ratio: 6 / 5;
+}
+@media (max-width: 700px) {
+  .ds-hero__art {
+    display: none;
+  }
+}
+.ds-hero__illu {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 24px 40px rgba(67, 56, 202, 0.18));
+}
+.ds-hero__badge {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  padding: 10px 14px 10px 12px;
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgba(15, 18, 40, 0.12),
+    0 2px 6px rgba(15, 18, 40, 0.06);
+  border: 1px solid rgba(79, 70, 229, 0.08);
+  z-index: 2;
+}
+.ds-hero__badge--top {
+  top: 6%;
+  right: -8px;
+}
+.ds-hero__badge--bot {
+  bottom: 8%;
+  left: -8px;
+}
+@media (max-width: 1100px) {
+  .ds-hero__badge--top {
+    right: 0;
+  }
+  .ds-hero__badge--bot {
+    left: 0;
+  }
+}
+.ds-hero__badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(79, 70, 229, 0.12);
+  color: var(--ds-indigo-600, #4f46e5);
+}
+.ds-hero__badge-icon--ok {
+  background: rgba(16, 185, 129, 0.14);
+  color: #0c8a5c;
+}
+.ds-hero__badge-icon--alt {
+  background: rgba(245, 158, 11, 0.16);
+  color: #a86a06;
+}
+.ds-hero__badge-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+.ds-hero__badge-text strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ds-indigo-950);
+}
+.ds-hero__badge-text span {
+  font-size: 12px;
+  color: var(--ds-slate-500);
 }
 .ds-hero__stats {
   display: flex;
