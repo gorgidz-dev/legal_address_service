@@ -1,0 +1,81 @@
+# Прод-композ: postgres + backend (FastAPI) + frontend (nginx со SPA и реверс-прокси).
+# TLS терминирует внешний прокси (Caddy/Cloudflare/хостовый nginx) перед портом 8080
+# фронт-контейнера. Если нужен MinIO для S3 локально — раскомментировать секцию.
+#
+# Запуск:
+#   docker compose --env-file .env.production up -d --build
+#   docker compose run --rm backend alembic upgrade head
+#   docker compose run --rm backend python -m scripts.seed_marketplace_demo
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-legal_address}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?need POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-legal_address}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-legal_address}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.production
+    # DATABASE_URL внутри сети докера ссылается на сервис db, а не localhost.
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-legal_address}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-legal_address}
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    volumes:
+      # Локальное хранилище фото/документов, если STORAGE_BACKEND=local.
+      # Для прода рекомендуется STORAGE_BACKEND=s3.
+      - storage:/app/storage
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: /api/v1
+        VITE_YANDEX_MAPS_KEY: ${VITE_YANDEX_MAPS_KEY:-}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${PUBLIC_HTTP_PORT:-8080}:8080"
+
+  # Опционально: MinIO как S3-совместимый storage для локального/staging
+  # окружения. В проде используйте managed S3 (Yandex Object Storage, Selectel).
+  # minio:
+  #   image: minio/minio:latest
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+  #     MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   volumes:
+  #     - miniodata:/data
+
+volumes:
+  pgdata:
+  storage:
+  # miniodata:

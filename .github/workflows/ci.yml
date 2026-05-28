@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (pytest + prod-config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Pytest
+        run: pytest -q
+
+      - name: Production config — должен упасть с пустыми секретами
+        run: |
+          # Hardening-валидатор в app/config.py отказывается стартовать
+          # без обязательных секретов. Ожидаем падение → CI зелёный.
+          if APP_ENV=production python -c "from app.config import Settings; Settings()" 2>&1; then
+            echo "❌ Production validator пропустил пустую конфигурацию" >&2
+            exit 1
+          else
+            echo "✅ Production validator отверг неполную конфигурацию (ожидаемое поведение)"
+          fi
+
+  frontend:
+    name: Frontend (tsc + vite build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: npm ci || npm install
+
+      - name: Build (tsc + vite)
+        run: npm run build
