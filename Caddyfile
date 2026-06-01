@@ -1,0 +1,33 @@
+# Caddy: авто-HTTPS (Let's Encrypt) для uradres.market.
+# Терминирует TLS, проксирует на frontend:8080 (nginx со SPA + реверс-прокси
+# на backend для /api и /ws). www → редирект на апекс.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# www → апекс (301).
+www.uradres.market {
+	redir https://uradres.market{uri} permanent
+}
+
+uradres.market {
+	encode gzip zstd
+
+	# X-Forwarded-Proto=https прокидывается автоматически — бэкенд это видит
+	# (uvicorn --proxy-headers) и помечает Secure-куки корректно.
+	reverse_proxy frontend:8080
+
+	# Заголовки безопасности на уровне Caddy (дублируют nginx как fallback).
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
