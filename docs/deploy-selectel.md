@@ -113,14 +113,27 @@ docker run --rm -v "$PWD":/app -w /app python:3.12-slim sh -c \
 
 ## 5. Запуск
 
+**Быстрый путь — один скрипт.** Автогенерит `POSTGRES_PASSWORD` и
+`PAYMENT_WEBHOOK_SECRET`, проверяет внешние секреты, собирает, ждёт health,
+прогоняет миграции:
+
 ```bash
-# Сборка и старт всех сервисов
+bash scripts/deploy.sh
+```
+
+Если скрипт ругается на незаполненный секрет — впиши его в `.env.production`
+и запусти снова (скрипт идемпотентен).
+
+**Ручной путь** (то же самое по шагам):
+
+```bash
 docker compose --env-file .env.production up -d --build
-
-# Применить миграции БД (отдельным шагом, после старта db)
 docker compose --env-file .env.production run --rm backend alembic upgrade head
+```
 
-# Создать первого админа / демо-данные (по желанию)
+Первый админ создаётся через сайт (см. ниже), демо-данные — по желанию:
+
+```bash
 docker compose --env-file .env.production run --rm backend \
   python -m scripts.seed_marketplace_demo --password '__сильный_пароль__'
 ```
