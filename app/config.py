@@ -36,6 +36,20 @@ class Settings(BaseSettings):
     dadata_circuit_failure_threshold: int = 3
     dadata_circuit_recovery_seconds: float = 30.0
 
+    # SMTP для исходящих писем (уведомления о модерации, чат и т.п.).
+    # Пустой SMTP_HOST → письма пишутся в лог (стаб), реально не отправляются.
+    # smtp_use_ssl=true → неявный SSL (порт 465); иначе STARTTLS (порт 587).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    # Адрес отправителя, напр. "Uradres <noreply@uradres.market>".
+    # Пустой → берётся smtp_username.
+    smtp_from: str = ""
+    smtp_use_tls: bool = True       # STARTTLS (порт 587)
+    smtp_use_ssl: bool = False      # неявный SSL (порт 465)
+    smtp_timeout: float = 15.0
+
     # HMAC-SHA256 secret shared with the payment provider for inbound webhook verification.
     # Empty disables the endpoint (returns 503 — not configured).
     payment_webhook_secret: str = ""
