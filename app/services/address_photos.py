@@ -11,7 +11,7 @@ import asyncio
 import hashlib
 import io
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status

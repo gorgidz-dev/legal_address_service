@@ -284,7 +284,13 @@ async def _store_idempotent(
     event_type: str,
     body: dict[str, Any],
 ) -> bool:
-    """Returns True if newly stored, False if it was a replay (already in DB)."""
+    """Insert the idempotency row in the CURRENT transaction (flush, not commit).
+
+    Returns True if newly inserted, False if it was a replay (already committed).
+    The caller's handler commits this row together with its side effects in one
+    transaction, so a handler failure rolls the idempotency row back too and the
+    provider's retry gets processed instead of being swallowed as a fake replay.
+    """
     record = IncomingWebhook(
         provider=provider,
         external_id=external_id,
@@ -293,7 +299,7 @@ async def _store_idempotent(
     )
     db.add(record)
     try:
-        await db.commit()
+        await db.flush()
     except IntegrityError:
         await db.rollback()
         log.info("Replayed CDEK webhook %s/%s — already stored", provider, external_id)

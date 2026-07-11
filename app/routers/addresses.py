@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -83,9 +84,10 @@ async def create_address(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
+        logging.getLogger(__name__).warning("IntegrityError on address create: %s", e.orig)
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"Нарушено ограничение БД: {e.orig}",
+            "Нарушено ограничение целостности данных",
         ) from e
     await db.refresh(address)
     return address

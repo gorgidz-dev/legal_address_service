@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -203,7 +204,8 @@ async def create_application(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Нарушено ограничение БД: {e.orig}") from e
+        logging.getLogger(__name__).warning("IntegrityError on application create: %s", e.orig)
+        raise HTTPException(status.HTTP_409_CONFLICT, "Нарушено ограничение целостности данных") from e
     await db.refresh(application)
     return application_read(application)
 

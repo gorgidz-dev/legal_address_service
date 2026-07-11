@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
 from uuid import UUID
@@ -662,7 +663,8 @@ async def create_public_client_application(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Нарушено ограничение БД: {e.orig}") from e
+        logging.getLogger(__name__).warning("IntegrityError on public application create: %s", e.orig)
+        raise HTTPException(status.HTTP_409_CONFLICT, "Нарушено ограничение целостности данных") from e
     await db.refresh(user)
     await db.refresh(application)
     return PublicClientApplicationResult(

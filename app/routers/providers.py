@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -43,9 +44,10 @@ async def create_provider(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
+        logging.getLogger(__name__).warning("IntegrityError on provider create: %s", e.orig)
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"Нарушено ограничение БД: {e.orig}",
+            "Нарушено ограничение целостности данных",
         ) from e
     await db.refresh(provider)
     return provider

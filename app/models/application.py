@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, Numeric, SmallInteger, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, SmallInteger, Text
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 

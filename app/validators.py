@@ -69,13 +69,6 @@ def validate_ogrn(v: str) -> str:
     return s
 
 
-def validate_ogrnip(v: str) -> str:
-    s = _digits_only(v, name="ОГРНИП", length=15)
-    if not _ogrn15_checksum(s):
-        raise ValueError("ОГРНИП: контрольная сумма не сошлась")
-    return s
-
-
 def validate_ogrn_any(v: str) -> str:
     s = _digits_only(v, name="ОГРН/ОГРНИП", length=(13, 15))
     ok = _ogrn13_checksum(s) if len(s) == 13 else _ogrn15_checksum(s)
@@ -108,7 +101,6 @@ INNLegal = Annotated[str, AfterValidator(validate_inn_legal)]
 INN = Annotated[str, AfterValidator(validate_inn_any)]
 KPP = Annotated[str, AfterValidator(validate_kpp)]
 OGRN = Annotated[str, AfterValidator(validate_ogrn)]
-OGRNIP = Annotated[str, AfterValidator(validate_ogrnip)]
 OGRNAny = Annotated[str, AfterValidator(validate_ogrn_any)]
 BIK = Annotated[str, AfterValidator(validate_bik)]
 SettlementAccount = Annotated[str, AfterValidator(validate_settlement_account)]

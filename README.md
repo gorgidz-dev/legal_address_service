@@ -1,89 +1,94 @@
 # Сервис юридических адресов
 
-Автоматизация выдачи договоров и гарантийных писем на предоставление юридического адреса для регистрации ЮЛ в ЕГРЮЛ.
+Маркетплейс юридических адресов (РФ): собственники публикуют помещения, клиенты
+покупают право использовать адрес для регистрации ЮЛ или смены адреса в ЕГРЮЛ.
+Сервис автоматизирует заявки, оплату, генерацию договоров и гарантийных писем.
 
-## Что в этой папке сейчас
+Роли: `client` (клиент), `owner` (собственник помещения), `admin` (оператор
+площадки); legacy-роли `manager` / `lawyer` для внутренних операций.
+
+## Стек
+
+**Бэкенд** — FastAPI, SQLAlchemy (async) + asyncpg, PostgreSQL, Alembic,
+Pydantic v2, `docxtpl` для генерации DOCX, локальное или S3-совместимое
+хранилище. **Фронтенд** — React + Vite + TypeScript.
+**Деплой** — Docker Compose (postgres + backend + nginx-фронт) за Caddy (TLS).
+
+## Структура
 
 ```
 legal_address_service/
-├── README.md                           ← этот файл
-├── migrations/
-│   └── 001_initial_schema.sql          ← схема PostgreSQL
-└── scripts/
-    ├── generate_docx_templates.py      ← создаёт стартовые .docx-шаблоны
-    └── requirements.txt
+├── app/                     ← бэкенд FastAPI
+│   ├── main.py              ← точка входа, auth-middleware, роутинг
+│   ├── config.py            ← настройки (pydantic-settings) + prod-hardening
+│   ├── models/              ← SQLAlchemy-модели
+│   ├── schemas/             ← Pydantic-схемы запросов/ответов
+│   ├── routers/             ← HTTP/WS-эндпоинты
+│   └── services/            ← бизнес-логика (auth, платежи, документы, DaData…)
+├── alembic/versions/        ← миграции БД (0001…0025, линейная цепочка)
+├── frontend/                ← SPA (React + Vite)
+├── tests/                   ← pytest (300+ тестов)
+├── scripts/                 ← вспомогательные скрипты (генерация шаблонов/ключей)
+├── templates/               ← .docx-шаблоны договоров и гарантийных писем
+├── docs/                    ← runbook, security-checklist, deploy-заметки
+├── Dockerfile, docker-compose.yml, Caddyfile, frontend/nginx.conf
+└── .env.example, .env.production.example
 ```
 
-После генерации появится:
-
-```
-└── templates/
-    ├── template_contract.docx          ← договор (для смены адреса)
-    ├── template_guarantee_initial.docx ← гарантийка для первичной регистрации
-    └── template_guarantee_full.docx    ← гарантийка для смены адреса
-```
-
-## Шаг 1. Сгенерировать стартовые .docx-шаблоны
+## Локальный запуск
 
 ```bash
-cd scripts
-python -m venv .venv && source .venv/bin/activate
+# 1. Виртуальное окружение + зависимости
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python generate_docx_templates.py
+
+# 2. Конфиг: скопировать пример и заполнить (как минимум DATABASE_URL)
+cp .env.example .env
+
+# 3. Применить миграции к PostgreSQL
+alembic upgrade head
+
+# 4. Запустить API (http://127.0.0.1:8000, Swagger на /docs)
+uvicorn app.main:app --reload
+
+# 5. Фронтенд (отдельный терминал)
+cd frontend && npm install && npm run dev
 ```
 
-После этого открывайте `templates/*.docx` в Word/LibreOffice и доводите формулировки до желаемого вида. Плейсхолдеры (`{{ ... }}` и `{% ... %}`) — синтаксис **docxtpl** (Jinja2 внутри Word).
+По умолчанию `APP_ENV=development` — проверки безопасности отключены. Для
+прод-конфигурации см. `docs/security-checklist.md` (валидатор в `app/config.py`
+не даст стартовать с небезопасными дефолтами при `APP_ENV=production`).
 
-### Главное правило при правке в Word
-
-Если меняете форматирование (жирный, курсив, размер) **внутри** плейсхолдера — выделяйте плейсхолдер целиком, от `{{` до `}}`. Иначе Word разрежет его на два «run»-а, и движок шаблонов перестанет его видеть. Симптом — в готовом документе остаётся `{{ contract_number }}` как текст. Лекарство: выделить весь тег → «очистить форматирование» → применить нужное.
-
-### Виды плейсхолдеров в шаблонах
-
-| Синтаксис | Где используется | Что делает |
-|---|---|---|
-| `{{ variable }}` | везде | подставляет значение |
-| `{% if x %}...{% endif %}` | внутри одного абзаца | условный кусок текста в строке |
-| `{% if x %}A{% else %}B{% endif %}` | внутри одного абзаца | выбор из вариантов |
-| `{%p if x %}...{%p endif %}` | на отдельных абзацах | условный блок целых абзацев (буква `p` = paragraph) |
-
-## Шаг 2. Применить миграцию к PostgreSQL
+## Тесты и сборка
 
 ```bash
-createdb legal_address
-psql legal_address -f migrations/001_initial_schema.sql
+pytest -q                                    # бэкенд
+cd frontend && npm run build                 # tsc + vite
+APP_ENV=production python -c "from app.config import Settings; Settings()"  # упадёт при пустых секретах — это ожидаемо
 ```
 
-Схема включает таблицы:
+## Деплой (self-hosted)
 
-| Таблица | Назначение |
+```bash
+cp .env.production.example .env.production   # заполнить реальными значениями
+docker compose --env-file .env.production up -d --build
+docker compose run --rm backend alembic upgrade head
+```
+
+Подробности — в `docs/runbook.md` и `docs/deploy-selectel.md`.
+
+## Шаблоны документов
+
+`.docx`-шаблоны в `templates/` используют синтаксис **docxtpl** (Jinja2 внутри
+Word). Стартовые шаблоны генерируются `scripts/generate_docx_templates.py`.
+
+**Правило при правке в Word:** если меняете форматирование *внутри* плейсхолдера
+`{{ … }}` — выделяйте плейсхолдер целиком. Иначе Word разрежет его на два
+«run»-а, и движок перестанет его видеть (симптом: в готовом документе остаётся
+`{{ contract_number }}` как текст).
+
+| Синтаксис | Что делает |
 |---|---|
-| `users` | менеджеры, юристы, админы |
-| `providers` | собственники помещений (несколько) |
-| `addresses` | конкретные помещения, привязаны к собственнику |
-| `egrn_extracts` | выписки ЕГРН (PDF + опц. .sig), версионирование |
-| `clients` | данные ЮЛ из DaData |
-| `applications` | заявка — корневая сущность с двумя типами |
-| `contracts` | договоры (только для `address_change`) |
-| `guarantee_letters` | гарантийные письма (оба варианта) |
-| `document_templates` | версии .docx-шаблонов |
-| `generated_documents` | журнал сгенерированных файлов |
-
-Особенности:
-
-- **Два типа заявки.** `applications.type` = `initial_registration` (только гарантийка) или `address_change` (договор + гарантийка). Инвариант проверяется CHECK-констрейнтом.
-- **Версионирование выписок ЕГРН.** Уникальный частичный индекс `WHERE is_current = TRUE` гарантирует одну актуальную выписку на адрес. Старые остаются в БД для аудита.
-- **Версионирование шаблонов.** Аналогично: одна `is_active`-версия каждого вида одновременно.
-- **Воспроизводимость.** `generated_documents` хранит ссылки на конкретную версию шаблона и конкретную выписку — любой документ можно перегенерировать в точности.
-- **Кэш склонений.** Поля `*_genitive` и `*_initials` в `providers`/`clients` — кэш результатов petrovich/pymorphy3, чтобы не дёргать их на каждой генерации.
-
-## Что дальше
-
-Готовится в следующих коммитах:
-
-- Pydantic-схемы формы заявки (валидация на бэкенде).
-- OpenAPI-спека эндпоинтов FastAPI.
-- React-компоненты мастера заявки (Next.js).
-- DaData-клиент с кэшем.
-- Сервис генерации (docxtpl + LibreOffice → PDF + ZIP-комплект).
-- docker-compose.yml для self-hosted развёртывания.
+| `{{ variable }}` | подставляет значение |
+| `{% if x %}…{% endif %}` | условный кусок в строке |
+| `{%p if x %}…{%p endif %}` | условный блок целых абзацев |

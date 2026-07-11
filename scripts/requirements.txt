@@ -1,1 +1,4 @@
 python-docx==1.1.2
+# gen_vapid_keys.py: генерация VAPID-пары для Web Push.
+cryptography>=42.0.0
+py-vapid>=1.9.0

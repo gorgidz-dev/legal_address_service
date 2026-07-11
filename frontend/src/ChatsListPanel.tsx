@@ -9,7 +9,7 @@
  * При клике на строку открывается `AddressChatPanel` в модалке поверх.
  */
 import { useEffect, useState } from "react";
-import { Loader2, MessageSquare, RefreshCw, X } from "lucide-react";
+import { Loader2, MessageSquare, RefreshCw } from "lucide-react";
 import { AddressChatPanel } from "./AddressChatPanel";
 import { api } from "./api";
 import type { AddressChat, CurrentUser } from "./types";
