@@ -17,8 +17,34 @@ def initials_from_name(full_name: str | None) -> str | None:
     return f"{surname} {initials}".strip()
 
 
+def _decline_full_name_genitive(full_name: str | None) -> str | None:
+    """Склоняет ФИО в родительный падеж через petrovich.
+
+    DaData отдаёт ФИО в порядке «Фамилия Имя Отчество». При любой ошибке
+    возвращаем исходное имя без склонения — чтобы генерация документа не падала
+    и не регрессировала относительно прежнего поведения.
+    """
+    if not full_name:
+        return None
+    try:
+        from petrovich.enums import Case
+        from petrovich.main import Petrovich
+
+        petrovich = Petrovich()
+        parts = full_name.split()
+        if parts:
+            parts[0] = petrovich.lastname(parts[0], Case.GENITIVE)
+        if len(parts) > 1:
+            parts[1] = petrovich.firstname(parts[1], Case.GENITIVE)
+        if len(parts) > 2:
+            parts[2] = petrovich.middlename(parts[2], Case.GENITIVE)
+        return " ".join(parts)
+    except Exception:  # noqa: BLE001 — склонение не должно ронять генерацию документа
+        return full_name
+
+
 def signatory_genitive_fallback(position: str | None, name: str | None) -> str | None:
-    parts = [part for part in (position, name) if part]
+    parts = [part for part in (position, _decline_full_name_genitive(name)) if part]
     return " ".join(parts) if parts else None
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -14,7 +15,12 @@ from app.database import get_db
 from app.models.address import Address
 from app.models.egrn_extract import EgrnExtract
 from app.schemas.egrn import EgrnExtractRead
-from app.services.storage import create_stored_file_record, egrn_storage_dir, relative_storage_url
+from app.services.storage import (
+    create_stored_file_record,
+    egrn_storage_dir,
+    relative_storage_url,
+    safe_storage_filename,
+)
 
 router = APIRouter(tags=["egrn"], dependencies=[Depends(require_staff)])
 
@@ -81,9 +87,9 @@ async def upload_extract(
     if signature_file is not None:
         signature_bytes = await signature_file.read()
         if signature_bytes:
-            suffix = ".sig"
-            if signature_file.filename and "." in signature_file.filename:
-                suffix = "." + signature_file.filename.rsplit(".", 1)[1]
+            # Расширение берём ТОЛЬКО из санитизированного basename: сырое
+            # filename (с '/' и '..') иначе даёт path traversal на запись.
+            suffix = Path(safe_storage_filename(signature_file.filename or "")).suffix or ".sig"
             signature_path = target_dir / f"{pdf_sha256}{suffix}"
             signature_path.write_bytes(signature_bytes)
             signature_url = relative_storage_url(signature_path)

@@ -22,7 +22,6 @@ from app.models.base import Base, TimestampMixin, UUIDPKMixin
 
 if TYPE_CHECKING:
     from app.models.address import Address
-    from app.models.user import User
 
 
 class AddressPhoto(UUIDPKMixin, TimestampMixin, Base):

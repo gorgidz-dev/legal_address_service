@@ -6,6 +6,8 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 .deploy/
+# Dev-артефакты дизайн-ревью — не место в git-истории.
+screenshots/
 .venv/
 scripts/.venv/
 __pycache__/

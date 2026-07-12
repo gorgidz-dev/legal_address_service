@@ -106,7 +106,14 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path.startswith("/invite/"):
         return True
-    if path.startswith(f"{API_PREFIX}/webhooks/"):
+    # Публичны ТОЛЬКО конкретные inbound-приёмники платежей. Админ-CRUD подписок
+    # (/webhooks/subscriptions*) обязан идти через auth-middleware → require_admin.
+    if path.startswith(f"{API_PREFIX}/webhooks/payments/"):
+        return True
+    if path in {
+        f"{API_PREFIX}/webhooks/cdek_pay/payment",
+        f"{API_PREFIX}/webhooks/cdek_pay/refund",
+    }:
         return True
     if path == f"{API_PREFIX}/marketplace/addresses" and method == "GET":
         return True
@@ -231,7 +238,9 @@ api_v1.include_router(clients.router)
 api_v1.include_router(applications.router)
 api_v1.include_router(registry.router)
 api_v1.include_router(templates.router)
-api_v1.include_router(demo.router)
+# Демо-сид создаёт аккаунты (в т.ч. admin) с известным паролем — только вне прода.
+if settings.app_env != "production":
+    api_v1.include_router(demo.router)
 api_v1.include_router(webhooks.router)
 api_v1.include_router(payments.router)
 app.include_router(api_v1)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 """Админская очередь заявок собственников: просмотр, перевод в работу, одобрение, отклонение."""
+import logging
 import secrets
 from datetime import timedelta
 from typing import Optional
@@ -119,9 +120,10 @@ async def approve_provider_request(
         await db.flush()
     except IntegrityError as e:
         await db.rollback()
+        logging.getLogger(__name__).warning("IntegrityError on provider onboarding: %s", e.orig)
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"Не удалось создать собственника: {e.orig}",
+            "Не удалось создать собственника: нарушено ограничение целостности данных",
         ) from e
 
     token = secrets.token_urlsafe(32)

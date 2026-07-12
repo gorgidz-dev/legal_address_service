@@ -64,7 +64,6 @@ class Settings(BaseSettings):
     session_cookie_name: str = "legal_address_session"
     refresh_cookie_name: str = "legal_address_refresh"
     refresh_cookie_path: str = "/auth/refresh"
-    session_ttl_hours: int = 24 * 14  # legacy fallback
     # access token lifetime
     web_session_ttl_hours: int = 24
     mobile_session_ttl_hours: int = 24 * 7
