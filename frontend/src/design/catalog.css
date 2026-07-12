@@ -43,6 +43,47 @@
   width: auto;
   display: block;
 }
+/* Бренд-локап uradres.net: сквиркл-бейдж с белым пином + wordmark на Inter. */
+.ds-brandmark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(160deg, #4a47c2, #5b5bd6 55%, #7d83e0);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(59, 56, 163, 0.25);
+}
+.ds-brandmark__pin {
+  width: 15px;
+  height: 15px;
+  background: #fff;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  display: grid;
+  place-items: center;
+  margin-top: -1px;
+}
+.ds-brandmark__pin::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #5b5bd6;
+  transform: rotate(45deg);
+}
+.ds-brandmark__word {
+  margin-left: 10px;
+  font-family: var(--ds-font-sans);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0b0a2e;
+  line-height: 1;
+}
+.ds-brandmark__tld {
+  color: #5b5bd6;
+}
 .ds-topnav__links {
   display: flex;
   gap: var(--ds-space-6);
