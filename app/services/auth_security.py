@@ -71,3 +71,19 @@ async def hash_password_async(password: str) -> str:
 
 async def verify_password_async(password: str, password_hash: str | None) -> bool:
     return await asyncio.to_thread(verify_password, password, password_hash)
+
+
+# Фиктивный хэш для выравнивания времени ответа, когда аккаунта нет (или он
+# отключён): без него verify_password не вызывается и «нет пользователя»
+# отвечает заметно быстрее «неверный пароль» → user-enumeration по таймингу.
+_DUMMY_PASSWORD_HASH = hash_password("uradres-timing-equalizer")
+
+
+def dummy_verify(password: str) -> None:
+    """Прогоняет PBKDF2 впустую — чтобы неуспешный логин занимал столько же,
+    сколько проверка реального пароля, независимо от наличия пользователя."""
+    verify_password(password, _DUMMY_PASSWORD_HASH)
+
+
+async def dummy_verify_async(password: str) -> None:
+    await asyncio.to_thread(dummy_verify, password)
