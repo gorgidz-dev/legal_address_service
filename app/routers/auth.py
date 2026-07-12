@@ -27,6 +27,7 @@ from app.schemas.auth import (
     SessionRead,
 )
 from app.services.auth_security import (
+    dummy_verify_async,
     hash_password_async,
     hash_token,
     verify_password_async,
@@ -101,11 +102,13 @@ async def login(
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    succeeded = bool(
-        user is not None
-        and user.is_active
-        and await verify_password_async(payload.password, user.password_hash)
-    )
+    if user is not None and user.is_active:
+        succeeded = await verify_password_async(payload.password, user.password_hash)
+    else:
+        # Выравниваем тайминг: без реального пользователя всё равно прогоняем
+        # PBKDF2, иначе время ответа выдаёт существование e-mail (user-enumeration).
+        await dummy_verify_async(payload.password)
+        succeeded = False
     await record_attempt(db, "login", keys, succeeded=succeeded)
 
     if not succeeded:

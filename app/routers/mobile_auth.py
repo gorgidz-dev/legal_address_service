@@ -14,7 +14,7 @@ from app.schemas.auth import (
     MobileRefreshResponse,
     SessionTokenRead,
 )
-from app.services.auth_security import verify_password_async
+from app.services.auth_security import dummy_verify_async, verify_password_async
 from app.services.auth_sessions import (
     SessionProfile,
     atomic_consume_refresh,
@@ -53,11 +53,12 @@ async def mobile_login(
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    succeeded = bool(
-        user is not None
-        and user.is_active
-        and await verify_password_async(payload.password, user.password_hash)
-    )
+    if user is not None and user.is_active:
+        succeeded = await verify_password_async(payload.password, user.password_hash)
+    else:
+        # Выравниваем тайминг ответа (защита от user-enumeration по времени).
+        await dummy_verify_async(payload.password)
+        succeeded = False
     await record_attempt(db, "mobile_login", keys, succeeded=succeeded)
 
     if not succeeded:

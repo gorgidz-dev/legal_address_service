@@ -1,6 +1,7 @@
 """Admin CRUD for webhook subscriptions + delivery log + inbound provider hooks."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -35,7 +36,12 @@ from app.services.cdek_pay import (
     get_cdek_pay_service,
     verify_callback_signature,
 )
-from app.services.webhooks import SIGNATURE_HEADER, verify_signature
+from app.services.webhooks import (
+    SIGNATURE_HEADER,
+    UnsafeWebhookUrl,
+    assert_safe_webhook_url,
+    verify_signature,
+)
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +70,10 @@ async def create_subscription(
     admin: User = Depends(require_admin),
 ) -> WebhookSubscriptionCreateResult:
     secret = payload.secret or generate_secret()
+    try:
+        await asyncio.to_thread(assert_safe_webhook_url, str(payload.url))
+    except UnsafeWebhookUrl as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
     sub = WebhookSubscription(
         url=str(payload.url),
         description=payload.description,
@@ -99,6 +109,10 @@ async def update_subscription(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Подписка не найдена")
 
     if payload.url is not None:
+        try:
+            await asyncio.to_thread(assert_safe_webhook_url, str(payload.url))
+        except UnsafeWebhookUrl as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
         sub.url = str(payload.url)
     if payload.description is not None:
         sub.description = payload.description

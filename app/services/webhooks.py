@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
+import socket
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 import httpx
@@ -40,6 +43,45 @@ DELIVERY_TIMEOUT_SECONDS = 10.0
 SIGNATURE_HEADER = "X-Webhook-Signature"
 DELIVERY_ID_HEADER = "X-Webhook-Delivery-Id"
 EVENT_HEADER = "X-Webhook-Event"
+
+
+class UnsafeWebhookUrl(ValueError):
+    """URL подписки указывает на приватную/служебную сеть (SSRF-риск)."""
+
+
+def assert_safe_webhook_url(url: str) -> None:
+    """Отклоняет URL, ведущие внутрь инфраструктуры (SSRF-защита).
+
+    Проверяет схему (только http/https) и что ВСЕ адреса, в которые резолвится
+    хост, публичные — не loopback/private/link-local/reserved/multicast. Вызывать
+    при создании/смене URL подписки. resolve-time проверка не закрывает
+    DNS-rebinding на 100%, но отсекает очевидные `http://169.254.169.254`,
+    `http://localhost`, `http://10.x` и т.п.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise UnsafeWebhookUrl("URL webhook должен использовать http или https")
+    host = parsed.hostname
+    if not host:
+        raise UnsafeWebhookUrl("URL webhook без хоста")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as e:
+        raise UnsafeWebhookUrl(f"Не удалось разрешить хост webhook: {host}") from e
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise UnsafeWebhookUrl(
+                f"URL webhook указывает на приватный/служебный адрес ({ip})"
+            )
 
 
 def sign_payload(secret: str, body: bytes) -> str:
