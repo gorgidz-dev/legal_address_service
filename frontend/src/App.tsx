@@ -518,9 +518,9 @@ function AuthView({
     <main className="auth-shell">
       <form className="auth-panel" onSubmit={submit}>
         <div className="brand auth-brand">
-          <div className="brand-mark">ЮА</div>
+          <div className="brand-mark">UR</div>
           <div>
-            <strong>Юридический адрес</strong>
+            <strong>uradres.net</strong>
             <span>онлайн-доступ к сервису</span>
           </div>
         </div>
@@ -1251,9 +1251,9 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">ЮА</div>
+          <div className="brand-mark">UR</div>
           <div>
-            <strong>Юридический адрес</strong>
+            <strong>uradres.net</strong>
             <span>договоры и гарантийки</span>
           </div>
         </div>
@@ -1580,7 +1580,7 @@ function ClientDashboardView({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">ЮА</div>
+          <div className="brand-mark">UR</div>
           <div>
             <strong>Личный кабинет</strong>
             <span>клиент</span>
@@ -1904,7 +1904,7 @@ function OwnerDashboardView({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">ЮА</div>
+          <div className="brand-mark">UR</div>
           <div>
             <strong>Кабинет</strong>
             <span>исполнитель</span>

@@ -1,17 +1,14 @@
-<svg width="900" height="220" viewBox="0 0 900 220" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">uradres.net logo</title>
-  <desc id="desc">Modular address grid mark with indigo highlighted square and uradres.net wordmark.</desc>
-  <rect width="900" height="220" fill="white"/>
-  <g transform="translate(40 38)">
-    <rect x="0" y="0" width="42" height="42" rx="8" fill="#111827"/>
-    <rect x="52" y="0" width="42" height="42" rx="8" fill="#111827"/>
-    <rect x="104" y="0" width="42" height="42" rx="8" fill="#111827"/>
-    <rect x="0" y="52" width="42" height="42" rx="8" fill="#111827"/>
-    <rect x="52" y="52" width="42" height="42" rx="8" fill="#4F46E5"/>
-    <rect x="104" y="52" width="42" height="42" rx="8" fill="#111827"/>
-    <rect x="0" y="104" width="42" height="42" rx="8" fill="#111827"/>
-    <rect x="52" y="104" width="42" height="42" rx="8" fill="#111827"/>
-    <rect x="104" y="104" width="42" height="42" rx="8" fill="#111827"/>
-  </g>
-  <text x="236" y="136" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="90" font-weight="700" letter-spacing="0"><tspan fill="#4F46E5">uradres</tspan><tspan fill="#111827">.net</tspan></text>
+<svg width="220" height="48" viewBox="0 0 220 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="uaTitle">
+  <title id="uaTitle">uradres.net</title>
+  <defs>
+    <linearGradient id="uaBadge" x1="4" y1="6" x2="40" y2="42" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4a47c2"/>
+      <stop offset="0.55" stop-color="#5b5bd6"/>
+      <stop offset="1" stop-color="#7d83e0"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="6" width="36" height="36" rx="11" fill="url(#uaBadge)"/>
+  <path d="M22 13c-3.9 0-7 3.1-7 7 0 4.9 7 11.8 7 11.8s7-6.9 7-11.8c0-3.9-3.1-7-7-7z" fill="#ffffff"/>
+  <circle cx="22" cy="19.6" r="2.8" fill="#5b5bd6"/>
+  <text x="52" y="31" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="21" font-weight="700" letter-spacing="-0.03em"><tspan fill="#0b0a2e">uradres</tspan><tspan fill="#5b5bd6">.net</tspan></text>
 </svg>
