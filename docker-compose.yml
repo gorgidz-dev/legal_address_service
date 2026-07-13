@@ -62,7 +62,7 @@ services:
     expose:
       - "8080"
 
-  # Caddy: TLS-терминация + авто-Let's Encrypt для uradres.market.
+  # Caddy: TLS-терминация + авто-Let's Encrypt для uradres.net.
   # Слушает 80/443, проксирует всё на frontend:8080 (тот уже маршрутизирует
   # /api и /ws на backend). Сертификаты и ключи — в именованных volume.
   caddy:

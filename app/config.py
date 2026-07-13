@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_username: str = ""
     smtp_password: str = ""
-    # Адрес отправителя, напр. "Uradres <noreply@uradres.market>".
+    # Адрес отправителя, напр. "Uradres <noreply@uradres.net>".
     # Пустой → берётся smtp_username.
     smtp_from: str = ""
     smtp_use_tls: bool = True       # STARTTLS (порт 587)

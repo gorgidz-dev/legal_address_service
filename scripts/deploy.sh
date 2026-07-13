@@ -75,5 +75,5 @@ echo "==> статус"
 $COMPOSE ps
 echo
 echo "Готово."
-echo "  https://uradres.market  → «Первый вход» создаст первого админа."
+echo "  https://uradres.net  → «Первый вход» создаст первого админа."
 echo "  Сертификат Caddy:  $COMPOSE logs caddy | grep -i certificate"

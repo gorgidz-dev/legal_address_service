@@ -1,4 +1,4 @@
-# Деплой на Selectel (uradres.market)
+# Деплой на Selectel (uradres.net)
 
 Прод-стек: **Caddy → frontend (nginx+SPA) → backend (FastAPI) → PostgreSQL**,
 файлы в **Selectel S3**. Платежи на старте — **вручную** (CDEK выключен).
@@ -11,7 +11,7 @@ TLS — авто-Let's Encrypt через Caddy.
 ## 0. Предусловия (один раз)
 
 - [ ] SSH-доступ к серверу под пользователем с `sudo`.
-- [ ] Домен `uradres.market` зарегистрирован.
+- [ ] Домен `uradres.net` зарегистрирован.
 - [ ] Аккаунт DaData с боевым токеном.
 - [ ] Яндекс.Карты JS API key.
 
@@ -23,14 +23,14 @@ TLS — авто-Let's Encrypt через Caddy.
 **публичный IP сервера**:
 
 ```
-A    uradres.market       → <SERVER_IP>
-A    www.uradres.market   → <SERVER_IP>
+A    uradres.net       → <SERVER_IP>
+A    www.uradres.net   → <SERVER_IP>
 ```
 
 Проверить распространение (с локальной машины):
 
 ```bash
-dig +short uradres.market
+dig +short uradres.net
 ```
 
 ⚠️ Caddy не получит сертификат, пока A-запись не указывает на сервер и порты
@@ -99,7 +99,7 @@ docker run --rm -v "$PWD":/app -w /app python:3.12-slim sh -c \
 | `APP_ENV` | `production` |
 | `POSTGRES_PASSWORD` | сгенерированный |
 | `SESSION_COOKIE_SECURE` | `true` |
-| `SESSION_COOKIE_DOMAIN` | `.uradres.market` |
+| `SESSION_COOKIE_DOMAIN` | `.uradres.net` |
 | `PAYMENT_WEBHOOK_SECRET` | `openssl rand -hex 32` |
 | `DADATA_TOKEN` / `DADATA_SECRET` | боевые |
 | `STORAGE_BACKEND` | `s3` |
@@ -138,7 +138,7 @@ docker compose --env-file .env.production run --rm backend \
   python -m scripts.seed_marketplace_demo --password '__сильный_пароль__'
 ```
 
-Caddy при первом старте сам получит сертификат для `uradres.market`
+Caddy при первом старте сам получит сертификат для `uradres.net`
 (может занять до минуты). Логи:
 
 ```bash
@@ -151,13 +151,13 @@ docker compose logs -f caddy
 
 ```bash
 # Health бэкенда через публичный домен
-curl -fsS https://uradres.market/health
+curl -fsS https://uradres.net/health
 
 # Каталог отдаёт адреса
-curl -fsS 'https://uradres.market/api/v1/marketplace/addresses/search?page=1&page_size=1'
+curl -fsS 'https://uradres.net/api/v1/marketplace/addresses/search?page=1&page_size=1'
 ```
 
-В браузере: `https://uradres.market` — каталог, замок TLS, карта (если ключ задан).
+В браузере: `https://uradres.net` — каталог, замок TLS, карта (если ключ задан).
 
 ---
 

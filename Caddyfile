@@ -1,4 +1,4 @@
-# Caddy: авто-HTTPS (Let's Encrypt) для uradres.market.
+# Caddy: авто-HTTPS (Let's Encrypt) для uradres.net.
 # Терминирует TLS, проксирует на frontend:8080 (nginx со SPA + реверс-прокси
 # на backend для /api и /ws). www → редирект на апекс.
 
@@ -7,11 +7,11 @@
 }
 
 # www → апекс (301).
-www.uradres.market {
-	redir https://uradres.market{uri} permanent
+www.uradres.net {
+	redir https://uradres.net{uri} permanent
 }
 
-uradres.market {
+uradres.net {
 	encode gzip zstd
 
 	# X-Forwarded-Proto=https прокидывается автоматически — бэкенд это видит
