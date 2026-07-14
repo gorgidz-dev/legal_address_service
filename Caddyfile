@@ -11,13 +11,6 @@ www.uradres.net {
 	redir https://uradres.net{uri} permanent
 }
 
-# Старый домен uradres.market → новый uradres.net (301, сохраняем путь и SEO).
-# Работает, пока DNS uradres.market указывает на этот сервер и Caddy держит его
-# сертификат. Когда старые ссылки перестанут ходить — блок можно удалить.
-uradres.market, www.uradres.market {
-	redir https://uradres.net{uri} permanent
-}
-
 uradres.net {
 	encode gzip zstd
 
