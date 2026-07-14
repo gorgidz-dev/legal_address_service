@@ -47,7 +47,7 @@ dig +short uradres.net
      (тип контейнера «публичный») ИЛИ оставить приватным и позже включить
      раздачу через presigned (см. «Дальнейшие шаги»). Для MVP — публичный.
 2. Создать **сервисного пользователя S3** (Access Key + Secret Key).
-3. Запомнить endpoint пула (обычно `https://s3.ru-1.storage.selcloud.ru`).
+3. Запомнить endpoint пула — для СПб/ru-3 это `https://s3.ru-3.storage.selcloud.ru`.
 
 ---
 
