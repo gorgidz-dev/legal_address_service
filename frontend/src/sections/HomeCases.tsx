@@ -1,69 +1,64 @@
 /**
- * Карточки кейсов / отзывов клиентов.
+ * Блок «Как мы проверяем адрес».
  *
- * MVP — статичные цитаты. Когда наберётся достаточно реальных,
- * заменим на CMS-фид (или таблицу `client_reviews` в БД).
+ * Раньше здесь стояли отзывы клиентов — выдуманные заглушки с выдуманными
+ * именами, оставшиеся с этапа разработки. На живом сайте они читались как
+ * настоящие отзывы, то есть вводили посетителя в заблуждение. Вернуть блок
+ * можно будет, когда появятся реальные отзывы с согласием авторов: в продукте
+ * уже есть модерируемые отзывы по адресам (address_reviews).
+ *
+ * Пока на этом месте — описание того, что сервис действительно делает: каждый
+ * пункт соответствует реализованному шагу.
  */
-import { Quote } from "lucide-react";
+import { Camera, FileCheck2, MessagesSquare, ShieldCheck } from "lucide-react";
 
-type Case = {
-  quote: string;
-  author: string;
-  role: string;
-  /** Опционально — задача клиента. */
-  context?: string;
+type Check = {
+  icon: typeof ShieldCheck;
+  title: string;
+  text: string;
 };
 
-const CASES: Case[] = [
+const CHECKS: Check[] = [
   {
-    quote:
-      "Регистрировали ООО за неделю — нужен был быстрый и легальный юр-адрес. Подобрали Тверская за 2 часа, гарантийку выдали в тот же день. В ФНС зашли без вопросов.",
-    author: "Алексей Морозов",
-    role: "Учредитель, ИТ-стартап",
-    context: "Первичная регистрация ООО",
+    icon: ShieldCheck,
+    title: "Проверяем собственника",
+    text: "Заявка от владельца помещения проходит ручную проверку: сверяем организацию и права на объект. Пока проверка не пройдена, его адреса в каталог не попадают.",
   },
   {
-    quote:
-      "Меняли адрес давно работающей компании — налоговая по старому адресу резко изменила трактовку. Сервис выручил: и договор, и письмо, и сопровождение в одном пакете.",
-    author: "Мария Зайцева",
-    role: "Финдиректор",
-    context: "Смена юр. адреса",
+    icon: FileCheck2,
+    title: "Смотрим документы на объект",
+    text: "К адресу прикладывается выписка из ЕГРН. Карточка уходит на модерацию и публикуется только после проверки администратором.",
   },
   {
-    quote:
-      "Поначалу пугало, что собственник «виртуальный». Но в чате договорились о выезде на объект, посмотрели реальный офис. Всё чисто, теперь работаем второй год.",
-    author: "Дмитрий Канарейкин",
-    role: "Гендиректор, торговля",
-    context: "Адрес с корреспонденцией",
+    icon: Camera,
+    title: "Модерируем фотографии",
+    text: "Снимки помещения проверяются вручную перед публикацией — в каталог не проходят случайные картинки вместо реального объекта.",
+  },
+  {
+    icon: MessagesSquare,
+    title: "Оставляем прямую связь",
+    text: "До оплаты можно написать собственнику в чат прямо в сервисе: уточнить детали, договориться об осмотре помещения или личной встрече.",
   },
 ];
 
 export function HomeCases() {
   return (
-    <section className="ds-cases" aria-label="Кейсы клиентов">
+    <section className="ds-cases" aria-label="Как мы проверяем адрес">
       <header className="ds-cases__head">
-        <span className="ds-cases__eyebrow">Кейсы клиентов</span>
-        <h2 className="ds-cases__title">Кому уже помогли</h2>
+        <span className="ds-cases__eyebrow">Проверка адресов</span>
+        <h2 className="ds-cases__title">Что происходит до публикации карточки</h2>
       </header>
       <div className="ds-cases__grid">
-        {CASES.map((c, i) => (
-          <article className="ds-cases__card" key={i}>
-            <Quote
-              className="ds-cases__mark"
-              size={28}
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <blockquote className="ds-cases__quote">{c.quote}</blockquote>
-            <footer className="ds-cases__by">
-              <div>
-                <strong>{c.author}</strong>
-                <span>{c.role}</span>
-              </div>
-              {c.context && <span className="ds-cases__tag">{c.context}</span>}
-            </footer>
-          </article>
-        ))}
+        {CHECKS.map((check) => {
+          const Icon = check.icon;
+          return (
+            <article className="ds-cases__card" key={check.title}>
+              <Icon className="ds-cases__mark" size={28} strokeWidth={1.5} aria-hidden="true" />
+              <h3 className="ds-cases__step-title">{check.title}</h3>
+              <p className="ds-cases__step-text">{check.text}</p>
+            </article>
+          );
+        })}
       </div>
     </section>
   );

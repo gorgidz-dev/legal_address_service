@@ -584,7 +584,7 @@ legend.ds-configurator__label {
 }
 @media (min-width: 900px) {
   .ds-cases__grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 .ds-cases__card {
@@ -595,7 +595,7 @@ legend.ds-configurator__label {
   padding: var(--ds-space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--ds-space-4);
+  gap: var(--ds-space-3);
   transition:
     border-color var(--ds-motion-fast) var(--ds-ease-snappy),
     transform var(--ds-motion-fast) var(--ds-ease-snappy),
@@ -610,47 +610,20 @@ legend.ds-configurator__label {
   color: var(--ds-indigo-200);
   flex-shrink: 0;
 }
-.ds-cases__quote {
-  font-size: var(--ds-text-body-md);
-  line-height: 1.55;
-  color: var(--ds-indigo-950);
+/* Блок отзывов заменён на описание проверки адреса — стили цитаты/автора
+   больше не используются, вместо них заголовок и текст шага. */
+.ds-cases__step-title {
   margin: 0;
-  font-style: italic;
-}
-.ds-cases__by {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ds-space-2);
-  margin-top: auto;
-  padding-top: var(--ds-space-3);
-  border-top: 1px solid var(--ds-border-soft);
-}
-.ds-cases__by > div {
-  display: flex;
-  flex-direction: column;
-}
-.ds-cases__by strong {
-  font-size: var(--ds-text-body-sm);
-  font-weight: 600;
+  font-size: var(--ds-text-heading-sm);
+  font-weight: 650;
   color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-snug);
 }
-.ds-cases__by span {
-  font-size: var(--ds-text-label);
-  text-transform: uppercase;
-  letter-spacing: var(--ds-tracking-wide);
+.ds-cases__step-text {
+  margin: 0;
+  font-size: var(--ds-text-body-sm);
+  line-height: 1.55;
   color: var(--ds-slate-500);
-}
-.ds-cases__tag {
-  font-size: var(--ds-text-label);
-  padding: 3px 8px;
-  border-radius: var(--ds-radius-pill);
-  background: var(--ds-indigo-50);
-  color: var(--ds-indigo-700);
-  font-weight: 600;
-  text-transform: none !important;
-  letter-spacing: 0 !important;
-  white-space: nowrap;
 }
 
 /* =====================================================================
@@ -1136,4 +1109,139 @@ legend.ds-configurator__label {
   .ds-steps__list {
     grid-template-columns: repeat(4, 1fr);
   }
+}
+
+/* =====================================================================
+   ПРАВОВЫЕ ДОКУМЕНТЫ (/legal/*) + ПОДВАЛ
+   ===================================================================== */
+.ds-legal {
+  background: var(--ds-page-bg);
+  min-height: 100dvh;
+  padding: var(--ds-space-8) var(--ds-page-pad-x) var(--ds-space-20);
+}
+.ds-legal__inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.ds-legal__nav {
+  display: flex;
+  gap: var(--ds-space-4);
+  margin-bottom: var(--ds-space-6);
+}
+.ds-legal__nav .text-action {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ds-slate-500);
+}
+.ds-legal__nav .text-action:hover {
+  color: var(--ds-indigo-600);
+}
+.ds-legal__title {
+  font-size: var(--ds-text-display-md);
+  font-weight: 700;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-tight);
+  margin: 0;
+}
+.ds-legal__updated {
+  margin: var(--ds-space-2) 0 var(--ds-space-6);
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+}
+.ds-legal__warning {
+  margin: 0 0 var(--ds-space-6);
+  padding: var(--ds-space-4);
+  border: 1px solid var(--ds-danger-bg);
+  border-left: 3px solid var(--ds-danger-fg);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger-fg);
+  font-size: var(--ds-text-body-sm);
+}
+.ds-legal__intro {
+  margin: 0 0 var(--ds-space-8);
+  font-size: var(--ds-text-body-md);
+  line-height: 1.65;
+  color: var(--ds-slate-600);
+}
+.ds-legal__section {
+  margin-bottom: var(--ds-space-6);
+}
+.ds-legal__section h2 {
+  font-size: var(--ds-text-heading-md);
+  font-weight: 650;
+  color: var(--ds-indigo-950);
+  margin: 0 0 var(--ds-space-3);
+  letter-spacing: var(--ds-tracking-snug);
+}
+.ds-legal__section p {
+  margin: 0 0 var(--ds-space-3);
+  font-size: var(--ds-text-body-md);
+  line-height: 1.65;
+  color: var(--ds-slate-600);
+}
+
+/* Подвал лендинга: без него правовые документы негде разместить. */
+.ds-footer {
+  border-top: 1px solid var(--ds-border-soft);
+  background: #ffffff;
+  margin-top: var(--ds-space-20);
+  padding: var(--ds-space-8) var(--ds-page-pad-x);
+}
+.ds-footer__inner {
+  max-width: var(--ds-page-max-width);
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-4) var(--ds-space-8);
+  align-items: center;
+  justify-content: space-between;
+}
+.ds-footer__brand {
+  font-weight: 650;
+  color: var(--ds-indigo-950);
+  font-size: var(--ds-text-body-md);
+}
+.ds-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-4);
+}
+.ds-footer__links a,
+.ds-footer__links button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+  text-decoration: none;
+}
+.ds-footer__links a:hover,
+.ds-footer__links button:hover {
+  color: var(--ds-indigo-600);
+}
+.ds-footer__note {
+  width: 100%;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-label);
+  line-height: 1.5;
+}
+
+/* Чекбокс согласия под публичными формами. */
+.ds-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-text-body-sm);
+  line-height: 1.5;
+  color: var(--ds-slate-600);
+}
+.ds-consent input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.ds-consent a {
+  color: var(--ds-indigo-600);
 }
