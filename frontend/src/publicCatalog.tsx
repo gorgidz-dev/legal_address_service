@@ -150,6 +150,40 @@ function filtersFromQueryString(search: string): CatalogFilters {
 type CardOptions = { term: 6 | 11; corr: boolean };
 const defaultCardOptions: CardOptions = { term: 11, corr: false };
 
+/** Ключ хранения выбора по карточкам — на вкладку, не навсегда. */
+const CARD_OPTIONS_KEY = "ds:card-options";
+
+function readCardOptions(): Record<string, CardOptions> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(CARD_OPTIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== "object") return {};
+    const result: Record<string, CardOptions> = {};
+    for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+      const option = value as Partial<CardOptions> | null;
+      if (!option) continue;
+      result[id] = {
+        term: option.term === 6 ? 6 : 11,
+        corr: option.corr === true,
+      };
+    }
+    return result;
+  } catch {
+    // Мусор в хранилище не должен ронять каталог.
+    return {};
+  }
+}
+
+function writeCardOptions(value: Record<string, CardOptions>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(CARD_OPTIONS_KEY, JSON.stringify(value));
+  } catch {
+    /* приватный режим / переполнение — выбор просто не переживёт перезагрузку */
+  }
+}
+
 // Fallback на случай, если /marketplace/fns-options ещё не загрузился
 // или пуст. ИФНС Москвы: 1–31, 33–36, 43, 51.
 const MOSCOW_FNS_NUMBERS: number[] = [
@@ -372,6 +406,8 @@ export default function PublicCatalog({
     return p && /^\d+$/.test(p) ? Math.max(1, parseInt(p, 10)) : 1;
   });
   const PAGE_SIZE = 24;
+  /** Потолок выборки для карты — совпадает с максимумом page_size на бэке. */
+  const MAP_MAX_ADDRESSES = 100;
   const [fnsOptions, setFnsOptions] = useState<
     { fns_number: number; fns_city: string | null; count: number }[]
   >([]);
@@ -407,11 +443,20 @@ export default function PublicCatalog({
 
   // Per-card user choices: срок (6/11) и подключение корреспонденции.
   // Применяются при клике "Подробнее" → пробрасываются в форму заявки.
-  const [cardOptions, setCardOptions] = useState<Record<string, CardOptions>>({});
+  // Выбор срока и корреспонденции по карточкам держим в sessionStorage: раньше
+  // это был обычный useState, и переход на 2-ю страницу или F5 сбрасывал уже
+  // настроенные цены обратно на 11 мес. без почты.
+  const [cardOptions, setCardOptions] = useState<Record<string, CardOptions>>(() =>
+    readCardOptions(),
+  );
   const getCardOption = (id: string): CardOptions =>
     cardOptions[id] ?? defaultCardOptions;
   const updateCardOption = (id: string, patch: Partial<CardOptions>) =>
-    setCardOptions((prev) => ({ ...prev, [id]: { ...getCardOption(id), ...patch } }));
+    setCardOptions((prev) => {
+      const next = { ...prev, [id]: { ...(prev[id] ?? defaultCardOptions), ...patch } };
+      writeCardOptions(next);
+      return next;
+    });
 
   // Расширенный поиск — модалка с фильтрами (город + ИФНС).
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -541,32 +586,57 @@ export default function PublicCatalog({
     };
   }, [currentUser, pendingChatAddressId, activeChat, chatBusy]);
 
+  /** Параметры серверного поиска из текущих фильтров — общие для выдачи и карты. */
+  const searchParams = useMemo(
+    () => ({
+      q: debouncedQuery,
+      city: filters.city.trim() || undefined,
+      fns_number: filters.fnsNumber ? Number(filters.fnsNumber) : ("" as const),
+      region: filters.region || undefined,
+      geo_city: filters.geoCity || undefined,
+      fns_office_id: filters.fnsOfficeId || undefined,
+      correspondence: filters.withCorr || undefined,
+      // Диапазон цены из конфигуратора имеет приоритет; чипы filter-бара
+      // (budgetUnder30k / premium11) — fallback.
+      price_lt: filters.priceTo
+        ? Number(filters.priceTo)
+        : filters.budgetUnder30k
+          ? 30000
+          : undefined,
+      price_gte: filters.priceFrom
+        ? Number(filters.priceFrom)
+        : filters.premium11
+          ? 25000
+          : undefined,
+      sort: (filters.sort === "default" ? "relevance" : filters.sort) as
+        | "relevance"
+        | "price_asc"
+        | "price_desc"
+        | "newest",
+    }),
+    [
+      debouncedQuery,
+      filters.city,
+      filters.fnsNumber,
+      filters.region,
+      filters.geoCity,
+      filters.fnsOfficeId,
+      filters.withCorr,
+      filters.priceFrom,
+      filters.priceTo,
+      filters.budgetUnder30k,
+      filters.premium11,
+      filters.sort,
+    ],
+  );
+
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setError(null);
     api
       .publicSearchAddresses({
-        q: debouncedQuery,
-        city: filters.city.trim() || undefined,
-        fns_number: filters.fnsNumber ? Number(filters.fnsNumber) : "",
-        region: filters.region || undefined,
-        geo_city: filters.geoCity || undefined,
-        fns_office_id: filters.fnsOfficeId || undefined,
-        correspondence: filters.withCorr || undefined,
-        // Диапазон цены из конфигуратора имеет приоритет; чипы filter-бара
-        // (budgetUnder30k / premium11) — fallback.
-        price_lt: filters.priceTo
-          ? Number(filters.priceTo)
-          : filters.budgetUnder30k
-            ? 30000
-            : undefined,
-        price_gte: filters.priceFrom
-          ? Number(filters.priceFrom)
-          : filters.premium11
-            ? 25000
-            : undefined,
-        sort: filters.sort === "default" ? "relevance" : filters.sort,
+        ...searchParams,
         page,
         page_size: PAGE_SIZE,
       })
@@ -584,22 +654,39 @@ export default function PublicCatalog({
     return () => {
       alive = false;
     };
-  }, [
-    debouncedQuery,
-    filters.city,
-    filters.fnsNumber,
-    filters.region,
-    filters.geoCity,
-    filters.fnsOfficeId,
-    filters.priceFrom,
-    filters.priceTo,
-    filters.withCorr,
-    filters.budgetUnder30k,
-    filters.premium11,
-    filters.sort,
-    page,
-    reloadKey,
-  ]);
+  }, [searchParams, page, reloadKey]);
+
+  // Карта грузит собственную выборку: раньше в неё передавалась текущая
+  // страница выдачи (24 адреса), а счётчик «N из 24» это маскировал — на карте
+  // молча не было ничего со второй страницы.
+  const [mapAddresses, setMapAddresses] = useState<PublicAddress[]>([]);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [mapTotal, setMapTotal] = useState(0);
+
+  useEffect(() => {
+    if (!mapOpen) return;
+    let alive = true;
+    setMapLoading(true);
+    api
+      .publicSearchAddresses({ ...searchParams, page: 1, page_size: MAP_MAX_ADDRESSES })
+      .then((result) => {
+        if (!alive) return;
+        setMapAddresses(result.items);
+        setMapTotal(result.total);
+      })
+      .catch(() => {
+        if (!alive) return;
+        // Карта не критична: пустая выборка честнее, чем чужие метки.
+        setMapAddresses([]);
+        setMapTotal(0);
+      })
+      .finally(() => {
+        if (alive) setMapLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [mapOpen, searchParams]);
 
   // При смене любого фильтра кроме page — возвращаемся на 1-ю страницу.
   // (page сам по себе не триггерит этот reset, иначе цикл.)
@@ -1000,7 +1087,9 @@ export default function PublicCatalog({
 
       <AddressMapModal
         open={mapOpen}
-        addresses={addresses}
+        addresses={mapAddresses}
+        loading={mapLoading}
+        totalCount={mapTotal}
         onClose={() => setMapOpen(false)}
         onSelectAddress={(address) => {
           setMapOpen(false);
@@ -1394,7 +1483,7 @@ export default function PublicCatalog({
       <HomeFAQ />
 
       {selectedAddress && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop modal-backdrop--top">
           <form className="modal-panel public-application-modal" onSubmit={submitClientApplication}>
             <header>
               <div>
@@ -1751,11 +1840,7 @@ export default function PublicCatalog({
                   <button
                     type="button"
                     className="ds-btn ds-btn--primary ds-btn--md ds-address-detail__cta"
-                    onClick={() => {
-                      const target = detailAddress;
-                      closeDetail();
-                      openApplicationForm(target);
-                    }}
+                    onClick={() => openApplicationForm(detailAddress)}
                   >
                     Оформить заявку
                     <ChevronRight size={16} />
@@ -2030,9 +2115,7 @@ export default function PublicCatalog({
                   className="ds-btn ds-btn--primary ds-btn--sm"
                   onClick={() => {
                     setChatAuthPrompt(false);
-                    const target = detailAddress;
-                    closeDetail();
-                    openApplicationForm(target);
+                    openApplicationForm(detailAddress);
                   }}
                 >
                   Оформить заявку

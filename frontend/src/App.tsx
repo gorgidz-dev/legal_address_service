@@ -46,6 +46,7 @@ import PublicCatalog from "./publicCatalog";
 import { parsePath, routeToPath, useRouter } from "./router";
 import { useModalDismiss } from "./useModalDismiss";
 import { ChatsListPanel } from "./ChatsListPanel";
+import { DownloadLink } from "./DownloadLink";
 import { OwnerAddressEditor } from "./OwnerAddressEditor";
 import { PushToggle } from "./PushToggle";
 import { AdminReviewModeration } from "./sections/AdminReviewModeration";
@@ -2602,7 +2603,7 @@ function OwnerDashboardView({
                   ) : documents.length ? (
                     <div className="owner-document-list">
                       {documents.map((document) => (
-                        <a className="owner-document-item" href={apiDownloadUrl(document.download_url)} key={document.id}>
+                        <DownloadLink className="owner-document-item" href={apiDownloadUrl(document.download_url)} key={document.id}>
                           <FileText size={17} />
                           <span>
                             <strong>{document.original_filename}</strong>
@@ -2612,7 +2613,7 @@ function OwnerDashboardView({
                             </small>
                           </span>
                           <Download size={16} />
-                        </a>
+                        </DownloadLink>
                       ))}
                     </div>
                   ) : (
@@ -3111,9 +3112,9 @@ function ApplicationsView({
                     <FileCheck2 size={15} /> Договор
                   </button>
                 ) : null}
-                <a className="download-link" href={packageDownloadUrl(application.id)}>
+                <DownloadLink className="download-link" href={packageDownloadUrl(application.id)}>
                   <Download size={16} /> ZIP
-                </a>
+                </DownloadLink>
               </div>
             </div>
           );
@@ -3234,7 +3235,7 @@ function DocumentModerationPanel({
               {documents.length ? (
                 <div className="owner-document-list">
                   {documents.map((document) => (
-                    <a className="owner-document-item" href={apiDownloadUrl(document.download_url)} key={document.id}>
+                    <DownloadLink className="owner-document-item" href={apiDownloadUrl(document.download_url)} key={document.id}>
                       <FileText size={17} />
                       <span>
                         <strong>{document.original_filename}</strong>
@@ -3244,7 +3245,7 @@ function DocumentModerationPanel({
                         </small>
                       </span>
                       <Download size={16} />
-                    </a>
+                    </DownloadLink>
                   ))}
                 </div>
               ) : (
@@ -3396,9 +3397,9 @@ function PromoteContractPanel({
             Создать договор
           </Button>
           {downloadUrl ? (
-            <a className="btn secondary" href={downloadUrl}>
+            <DownloadLink className="btn secondary" href={downloadUrl}>
               <Download size={16} /> Скачать ZIP
-            </a>
+            </DownloadLink>
           ) : null}
         </div>
       </form>
@@ -3640,9 +3641,9 @@ function NewApplicationView({
             Сформировать комплект
           </Button>
           {resultUrl ? (
-            <a className="btn secondary" href={resultUrl}>
+            <DownloadLink className="btn secondary" href={resultUrl}>
               <Download size={16} /> Скачать ZIP
-            </a>
+            </DownloadLink>
           ) : null}
         </div>
       </section>
@@ -3763,9 +3764,9 @@ function RegistryView() {
                 <button className="text-action" onClick={() => setPaymentClient(item)} type="button">
                   <ReceiptText size={15} /> Оплата
                 </button>
-                <a className="download-link" href={packageDownloadUrl(item.application_id)}>
+                <DownloadLink className="download-link" href={packageDownloadUrl(item.application_id)}>
                   <Download size={16} /> ZIP
-                </a>
+                </DownloadLink>
               </div>
             </div>
           ))}
@@ -3878,9 +3879,9 @@ function PaymentDocumentsPanel({
                     {document.comment ? ` · ${document.comment}` : ""}
                   </span>
                 </div>
-                <a className="download-link" href={apiDownloadUrl(document.download_url)}>
+                <DownloadLink className="download-link" href={apiDownloadUrl(document.download_url)}>
                   <Download size={16} /> Скачать
-                </a>
+                </DownloadLink>
               </div>
             ))}
           </div>
