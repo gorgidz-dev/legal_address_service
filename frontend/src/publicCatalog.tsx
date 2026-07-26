@@ -796,6 +796,14 @@ export default function PublicCatalog({
     return set.size;
   }, [addresses]);
 
+  const cityCount = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of addresses) {
+      if (a.fns_city) set.add(a.fns_city);
+    }
+    return set.size;
+  }, [addresses]);
+
   const cities = useMemo(() => {
     const values = new Set<string>(["Москва"]);
     for (const address of addresses) {
@@ -1062,12 +1070,12 @@ export default function PublicCatalog({
             <div className="ds-stat__lbl">ИФНС в выборке</div>
           </div>
           <div className="ds-stat">
-            <div className="ds-stat__num">98%</div>
-            <div className="ds-stat__lbl">одобрений ФНС</div>
+            <div className="ds-stat__num">{cityCount || "—"}</div>
+            <div className="ds-stat__lbl">{cityCount === 1 ? "город" : "городов"}</div>
           </div>
           <div className="ds-stat">
-            <div className="ds-stat__num">1 день</div>
-            <div className="ds-stat__lbl">средний срок выдачи</div>
+            <div className="ds-stat__num">6 и 11</div>
+            <div className="ds-stat__lbl">месяцев аренды</div>
           </div>
         </motion.div>
       </motion.section>
