@@ -12,6 +12,13 @@ from sqlalchemy import select
 from app.api_errors import register_error_handlers
 from app.auth import utcnow
 from app.config import settings
+from app.services.csrf import (
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
+    csrf_check_required,
+    set_csrf_cookie,
+    tokens_match,
+)
 from app.database import AsyncSessionLocal
 from app.models.user import User
 from app.models.user_session import UserSession
@@ -162,6 +169,26 @@ async def auth_middleware(request: Request, call_next):
     if _is_public_path(request.url.path, request.method):
         return await call_next(request)
 
+    # Куку браузер подставляет сам — значит запрос может быть подделан с чужого
+    # сайта. Bearer-токен так не подставляется, поэтому CSRF-проверка нужна
+    # только для куки-авторизации.
+    authenticated_by_cookie = settings.session_cookie_name in request.cookies
+    if csrf_check_required(
+        method=request.method, authenticated_by_cookie=authenticated_by_cookie
+    ) and not tokens_match(
+        request.cookies.get(CSRF_COOKIE_NAME),
+        request.headers.get(CSRF_HEADER_NAME),
+    ):
+        return JSONResponse(
+            {
+                "error": {
+                    "code": "csrf_failed",
+                    "message": "Проверка CSRF не пройдена. Обновите страницу и повторите.",
+                }
+            },
+            status_code=403,
+        )
+
     token = _session_token_from_request(request)
     if not token:
         return JSONResponse(
@@ -202,7 +229,13 @@ async def auth_middleware(request: Request, call_next):
             session.last_seen_at = now
             await db.commit()
 
-    return await call_next(request)
+    response = await call_next(request)
+    # Досеиваем токен уже существующим сессиям: после выката пользователи
+    # остаются залогинены, но CSRF-куки у них ещё нет, и первый же POST
+    # упёрся бы в 403. Первый GET (обычно /auth/me на загрузке SPA) её выдаёт.
+    if authenticated_by_cookie and CSRF_COOKIE_NAME not in request.cookies:
+        set_csrf_cookie(response)
+    return response
 
 
 app.add_middleware(

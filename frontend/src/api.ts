@@ -89,12 +89,35 @@ async function attemptRefresh(): Promise<boolean> {
   return refreshInFlight;
 }
 
+/**
+ * Защита от CSRF: сервер кладёт случайный токен в не-httponly куку, мы
+ * дублируем его в заголовке. Чужой сайт куку прочитать не может, поэтому
+ * заголовок подделать не в состоянии — а без него запрос отвергается.
+ */
+const CSRF_COOKIE_NAME = "uradres_csrf";
+const CSRF_HEADER_NAME = "X-CSRF-Token";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
+
+function readCsrfToken(): string | null {
+  // Без регулярки намеренно: в шаблонной строке «\s» пришлось бы экранировать
+  // дважды, и одна потерянная косая черта тихо ломает всю защиту.
+  for (const part of document.cookie.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === CSRF_COOKIE_NAME) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
 async function doFetch(path: string, init?: RequestInit): Promise<Response> {
+  const method = (init?.method || "GET").toUpperCase();
+  const csrfToken = SAFE_METHODS.has(method) ? null : readCsrfToken();
+
   return fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: "include",
     headers: {
       ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+      ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
       ...(init?.headers || {})
     }
   });

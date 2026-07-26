@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import utcnow
 from app.config import settings
+from app.services.csrf import delete_csrf_cookie, set_csrf_cookie
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.services.auth_security import hash_token
@@ -72,6 +73,7 @@ def delete_session_cookie(response: Response) -> None:
         path=settings.refresh_cookie_path,
         domain=settings.session_cookie_domain,
     )
+    delete_csrf_cookie(response)
 
 
 def _access_ttl_hours(profile: SessionProfile) -> int:
@@ -157,6 +159,9 @@ async def create_session(
     if should_set_cookie and response is not None:
         set_session_cookie(response, access_token, access_expires_at)
         set_refresh_cookie(response, refresh_token, refresh_expires_at)
+        # Вместе с сессией выдаём CSRF-токен: вход и обновление сессии —
+        # публичные пути, middleware их не трогает и куку там не поставит.
+        set_csrf_cookie(response)
 
     return SessionCredentials(
         token=access_token,
