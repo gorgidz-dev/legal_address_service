@@ -44,6 +44,7 @@ import {
 import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
 import { parsePath, routeToPath, useRouter } from "./router";
+import { LegalPage } from "./sections/LegalPage";
 import { useModalDismiss } from "./useModalDismiss";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { DownloadLink } from "./DownloadLink";
@@ -1515,6 +1516,11 @@ export default function App() {
     );
   }
 
+  // Правовые документы доступны всем и по прямой ссылке.
+  if (route.name === "legal") {
+    return <LegalPage doc={route.doc} onHome={goHome} onBack={back} canGoBack={canGoBack} />;
+  }
+
   if (route.name !== "cabinet") {
     // «/» и «/address/<id>» — публичная главная, одинаково для гостя и для
     // залогиненного. Это и есть починка «логотип уводит в Заявки».
@@ -1526,6 +1532,7 @@ export default function App() {
         onLoginClick={() => navigate({ name: "login", next: routeToPath(route) })}
         onOpenDashboard={() => openCabinet()}
         openAddressId={route.name === "address" ? route.id : null}
+        onOpenLegal={(doc) => navigate({ name: "legal", doc })}
         onOpenAddress={(id) => {
           if (id) {
             navigate({ name: "address", id });

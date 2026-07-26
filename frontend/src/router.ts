@@ -11,11 +11,17 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
+/** Правовые документы сервиса. Значение = сегмент пути. */
+export const LEGAL_DOCS = ["privacy", "offer", "consent"] as const;
+export type LegalDoc = (typeof LEGAL_DOCS)[number];
+
 export type Route =
   /** Публичный лендинг + каталог. Главная для всех, включая залогиненных. */
   | { name: "home" }
   /** Карточка адреса из каталога — шарится ссылкой. */
   | { name: "address"; id: string }
+  /** Правовые документы: /legal/privacy, /legal/offer, /legal/consent. */
+  | { name: "legal"; doc: LegalDoc }
   /** Экран входа. next — куда вернуть после успешной авторизации. */
   | { name: "login"; next: string }
   /** Приём приглашения по токену из письма. */
@@ -61,6 +67,10 @@ export function parseRoute(pathname: string, search = ""): Route {
   if (head === "address" && rest.length) {
     return { name: "address", id: rest[0] };
   }
+  if (head === "legal" && rest.length) {
+    const doc = LEGAL_DOCS.find((item) => item === rest[0]);
+    if (doc) return { name: "legal", doc };
+  }
   if (head === "app") {
     return { name: "cabinet", section: rest[0] || null, id: rest[1] || null };
   }
@@ -82,6 +92,8 @@ export function routeToPath(route: Route): string {
       return "/";
     case "address":
       return `/address/${encodeURIComponent(route.id)}`;
+    case "legal":
+      return `/legal/${route.doc}`;
     case "login":
       return route.next ? `/login?next=${encodeURIComponent(route.next)}` : "/login";
     case "invite":

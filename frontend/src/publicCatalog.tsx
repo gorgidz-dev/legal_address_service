@@ -30,6 +30,7 @@ import { HomeSteps } from "./sections/HomeSteps";
 import { StarRating } from "./sections/StarRating";
 import { AddressReviews } from "./sections/AddressReviews";
 import { useModalDismiss } from "./useModalDismiss";
+import type { LegalDoc } from "./router";
 import { AddressMapModal } from "./sections/AddressMapModal";
 import type {
   AddressChat,
@@ -54,6 +55,8 @@ type PublicCatalogProps = {
    */
   openAddressId: string | null;
   onOpenAddress: (id: string | null) => void;
+  /** Открыть правовой документ (подвал и ссылки под формами). */
+  onOpenLegal: (doc: LegalDoc) => void;
 };
 
 type CatalogSort = "default" | "price_asc" | "price_desc" | "newest";
@@ -386,6 +389,7 @@ export default function PublicCatalog({
   onOpenDashboard,
   openAddressId,
   onOpenAddress,
+  onOpenLegal,
 }: PublicCatalogProps) {
   const reduceMotion = useReducedMotion();
   const motionVariants = reduceMotion ? undefined : heroStaggerVariants;
@@ -462,6 +466,16 @@ export default function PublicCatalog({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // Мобильное меню (бургер).
   const [menuOpen, setMenuOpen] = useState(false);
+  // Согласия на обработку ПДн: без отметки отправка форм заблокирована.
+  const [applicationConsent, setApplicationConsent] = useState(false);
+  const [ownerConsent, setOwnerConsent] = useState(false);
+
+  /** Ссылка на документ: настоящий href для новой вкладки, обычный клик — SPA. */
+  function openLegalLink(event: React.MouseEvent<HTMLAnchorElement>, doc: LegalDoc) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+    event.preventDefault();
+    onOpenLegal(doc);
+  }
 
   // Детальная карточка адреса (фото-галерея + услуги). Что открыто, решает URL:
   // openAddressId приходит сверху, здесь только кешируется сам объект.
@@ -1246,6 +1260,66 @@ export default function PublicCatalog({
                       Сортировка <X size={12} />
                     </button>
                   )}
+                  {/* Фильтры конфигуратора (регион / город / ИФНС-офис / цена)
+                      сюда не попадали: экран советовал «сбрось ненужные
+                      фильтры», а сбрасывать было нечего — блок чипов оставался
+                      пустым, хотя выдача была отфильтрована. */}
+                  {filters.region && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() =>
+                        setFilters({ ...filters, region: "", geoCity: "", fnsOfficeId: "" })
+                      }
+                    >
+                      Регион: {filters.region} <X size={12} />
+                    </button>
+                  )}
+                  {filters.geoCity && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, geoCity: "", fnsOfficeId: "" })}
+                    >
+                      Город: {filters.geoCity} <X size={12} />
+                    </button>
+                  )}
+                  {filters.fnsOfficeId && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, fnsOfficeId: "" })}
+                    >
+                      Выбранная ИФНС <X size={12} />
+                    </button>
+                  )}
+                  {filters.priceFrom && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, priceFrom: "" })}
+                    >
+                      Цена от {Number(filters.priceFrom).toLocaleString("ru-RU")} ₽{" "}
+                      <X size={12} />
+                    </button>
+                  )}
+                  {filters.priceTo && (
+                    <button
+                      type="button"
+                      className="ds-chip ds-chip--active"
+                      onClick={() => setFilters({ ...filters, priceTo: "" })}
+                    >
+                      Цена до {Number(filters.priceTo).toLocaleString("ru-RU")} ₽{" "}
+                      <X size={12} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="ds-chip"
+                    onClick={resetFilters}
+                  >
+                    Сбросить все
+                  </button>
                 </div>
 
                 {/* Похожие ИФНС: если есть текущий фильтр по ИФНС — top-3 других
@@ -1482,6 +1556,27 @@ export default function PublicCatalog({
       <HomeCases />
       <HomeFAQ />
 
+      <footer className="ds-footer">
+        <div className="ds-footer__inner">
+          <span className="ds-footer__brand">uradres.net</span>
+          <nav className="ds-footer__links" aria-label="Правовая информация">
+            <button type="button" onClick={() => onOpenLegal("privacy")}>
+              Политика обработки персональных данных
+            </button>
+            <button type="button" onClick={() => onOpenLegal("consent")}>
+              Согласие на обработку данных
+            </button>
+            <button type="button" onClick={() => onOpenLegal("offer")}>
+              Публичная оферта
+            </button>
+          </nav>
+          <p className="ds-footer__note">
+            Отправляя формы на сайте, вы соглашаетесь с обработкой персональных данных.
+            Сервис не является регистрирующим органом; решение о регистрации принимает ФНС.
+          </p>
+        </div>
+      </footer>
+
       {selectedAddress && (
         <div className="modal-backdrop modal-backdrop--top">
           <form className="modal-panel public-application-modal" onSubmit={submitClientApplication}>
@@ -1638,8 +1733,32 @@ export default function PublicCatalog({
 
             {applicationError ? <div className="inline-error compact-error">{applicationError}</div> : null}
 
+            <label className="ds-consent">
+              <input
+                type="checkbox"
+                checked={applicationConsent}
+                onChange={(event) => setApplicationConsent(event.target.checked)}
+                required
+              />
+              <span>
+                Я даю{" "}
+                <a href="/legal/consent" onClick={(e) => openLegalLink(e, "consent")}>
+                  согласие на обработку персональных данных
+                </a>{" "}
+                и принимаю{" "}
+                <a href="/legal/offer" onClick={(e) => openLegalLink(e, "offer")}>
+                  условия оферты
+                </a>
+                .
+              </span>
+            </label>
+
             <div className="actions">
-              <button className="ds-btn ds-btn--primary ds-btn--lg" disabled={applicationBusy} type="submit">
+              <button
+                className="ds-btn ds-btn--primary ds-btn--lg"
+                disabled={applicationBusy || !applicationConsent}
+                type="submit"
+              >
                 {applicationBusy ? <Loader2 className="spin" size={16} /> : <FileText size={16} />}
                 Создать заявку и аккаунт
               </button>
@@ -2059,8 +2178,28 @@ export default function PublicCatalog({
               </div>
             ) : null}
 
+            <label className="ds-consent">
+              <input
+                type="checkbox"
+                checked={ownerConsent}
+                onChange={(event) => setOwnerConsent(event.target.checked)}
+                required
+              />
+              <span>
+                Я даю{" "}
+                <a href="/legal/consent" onClick={(e) => openLegalLink(e, "consent")}>
+                  согласие на обработку персональных данных
+                </a>
+                .
+              </span>
+            </label>
+
             <div className="actions">
-              <button className="ds-btn ds-btn--primary ds-btn--lg" disabled={ownerBusy} type="submit">
+              <button
+                className="ds-btn ds-btn--primary ds-btn--lg"
+                disabled={ownerBusy || !ownerConsent}
+                type="submit"
+              >
                 {ownerBusy ? <Loader2 className="spin" size={16} /> : <Send size={16} />}
                 Отправить заявку
               </button>
