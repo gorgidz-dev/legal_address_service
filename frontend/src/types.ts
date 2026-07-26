@@ -44,6 +44,8 @@ export interface CurrentUser {
   role: UserRole;
   is_active: boolean;
   provider_id: string | null;
+  /** Подтверждён ли адрес. Пока false — в кабинете висит напоминание. */
+  email_verified: boolean;
 }
 
 export interface BootstrapState {
@@ -62,6 +64,17 @@ export interface UserSessionInfo {
   user_agent: string | null;
   ip_address: string | null;
   is_current: boolean;
+}
+
+export interface EmailVerificationResult {
+  verified: boolean;
+  already_verified: boolean;
+  message: string;
+}
+
+export interface EmailVerificationRequestResult {
+  sent: boolean;
+  message: string;
 }
 
 export interface Invitation {

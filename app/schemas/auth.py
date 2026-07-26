@@ -44,6 +44,8 @@ class CurrentUserRead(BaseModel):
     role: UserRole
     is_active: bool
     provider_id: Optional[UUID] = None
+    #: Подтверждён ли адрес. Фронтенд показывает напоминание, пока False.
+    email_verified: bool = True
 
 
 class AuthResponse(BaseModel):
@@ -128,3 +130,18 @@ class UserAdminRead(BaseModel):
 
 class UserActiveUpdate(BaseModel):
     is_active: bool
+
+
+class EmailVerificationConfirm(BaseModel):
+    token: str = Field(min_length=1, max_length=400)
+
+
+class EmailVerificationResult(BaseModel):
+    verified: bool
+    already_verified: bool = False
+    message: str = ""
+
+
+class EmailVerificationRequestResult(BaseModel):
+    sent: bool
+    message: str = ""

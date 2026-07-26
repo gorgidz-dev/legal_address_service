@@ -1245,3 +1245,82 @@ legend.ds-configurator__label {
 .ds-consent a {
   color: var(--ds-indigo-600);
 }
+
+/* =====================================================================
+   ПОДТВЕРЖДЕНИЕ E-MAIL
+   ===================================================================== */
+.ds-verify {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--ds-space-8) var(--ds-page-pad-x);
+  background: var(--ds-page-bg);
+}
+.ds-verify__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ds-space-4);
+  max-width: 460px;
+  width: 100%;
+  padding: var(--ds-space-12) var(--ds-space-8);
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-xl);
+  box-shadow: var(--ds-shadow-md);
+}
+.ds-verify__card h1 {
+  margin: 0;
+  font-size: var(--ds-text-heading-lg);
+  font-weight: 700;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-tight);
+}
+.ds-verify__card p {
+  margin: 0;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-md);
+  line-height: 1.55;
+}
+.ds-verify__hint {
+  font-size: var(--ds-text-body-sm) !important;
+}
+.ds-verify__icon--ok {
+  color: var(--ds-success-fg);
+}
+.ds-verify__icon--err {
+  color: var(--ds-danger-fg);
+}
+
+/* Напоминание в кабинете. */
+.email-verify-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-3);
+  max-width: 1280px;
+  margin: 0 auto var(--ds-space-4);
+  padding: var(--ds-space-4);
+  border: 1px solid var(--ds-warning-bg);
+  border-left: 3px solid var(--ds-warning-fg);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-warning-bg);
+  color: var(--ds-indigo-950);
+}
+.email-verify-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  font-size: var(--ds-text-body-sm);
+  line-height: 1.5;
+}
+.email-verify-banner__text span {
+  color: var(--ds-slate-600);
+}
+.email-verify-banner__note {
+  color: var(--ds-success-fg) !important;
+}
+.email-verify-banner__error {
+  color: var(--ds-danger-fg) !important;
+}

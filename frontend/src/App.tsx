@@ -45,6 +45,10 @@ import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
 import { parsePath, routeToPath, useRouter } from "./router";
 import { LegalPage } from "./sections/LegalPage";
+import {
+  EmailVerificationBanner,
+  EmailVerificationPage
+} from "./sections/EmailVerification";
 import { useModalDismiss } from "./useModalDismiss";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { DownloadLink } from "./DownloadLink";
@@ -1516,6 +1520,11 @@ export default function App() {
     );
   }
 
+  // Ссылку из письма открывают в любом браузере — авторизация не нужна.
+  if (route.name === "verify") {
+    return <EmailVerificationPage token={route.token} onHome={goHome} />;
+  }
+
   // Правовые документы доступны всем и по прямой ссылке.
   if (route.name === "legal") {
     return <LegalPage doc={route.doc} onHome={goHome} onBack={back} canGoBack={canGoBack} />;
@@ -2026,6 +2035,9 @@ function ClientDashboardView({
           </h1>
         </section>
 
+        {user.email_verified === false ? (
+          <EmailVerificationBanner email={user.email} />
+        ) : null}
         <InlineError message={error} />
         <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
 
@@ -2386,6 +2398,9 @@ function OwnerDashboardView({
           </h1>
         </section>
 
+        {user.email_verified === false ? (
+          <EmailVerificationBanner email={user.email} />
+        ) : null}
         <InlineError message={error} />
         <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
 

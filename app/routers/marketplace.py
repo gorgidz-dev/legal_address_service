@@ -55,6 +55,7 @@ from app.schemas.auth import CurrentUserRead
 from app.services.address_photos import photo_to_public_dict
 from app.services.auth_security import hash_password_async
 from app.services.auth_sessions import create_session, extract_request_metadata
+from app.services.email_verification import issue_verification
 from app.services.user_create import try_persist_user
 from app.services.rate_limit import (
     PROVIDER_REQUEST_RULES,
@@ -614,6 +615,10 @@ async def create_public_client_application(
     )
     if not await try_persist_user(db, user):
         raise HTTPException(status.HTTP_409_CONFLICT, "Пользователь с таким e-mail уже существует")
+    # Адрес пока ничем не подтверждён — отправляем ссылку. Вход не блокируем:
+    # заявка и аккаунт создаются одним действием, и запертый сразу после
+    # отправки клиент означал бы потерянную заявку.
+    await issue_verification(db, user)
     await create_session(db=db, user=user, response=response, user_agent=ua, ip_address=ip)
     await record_attempt(db, "public_application", keys, succeeded=True)
 

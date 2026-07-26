@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import time
 
+#: Порог восстановления в тестах. Спим кратно ему, а не «на 10 мс больше»:
+#: разрешение системного таймера на Windows около 15 мс, и слишком узкий запас
+#: делал эти тесты плавающими — падал то один, то другой.
+RECOVERY_SECONDS = 0.05
+
 import pytest
 
 from app.services.dadata import (
@@ -38,30 +43,30 @@ def test_breaker_success_resets_failure_count() -> None:
 
 
 def test_breaker_transitions_to_half_open_after_recovery() -> None:
-    cb = CircuitBreaker(failure_threshold=2, recovery_seconds=0.05)
+    cb = CircuitBreaker(failure_threshold=2, recovery_seconds=RECOVERY_SECONDS)
     cb.record_failure()
     cb.record_failure()
     assert cb.state == "open"
-    time.sleep(0.06)
+    time.sleep(RECOVERY_SECONDS * 4)
     assert cb.state == "half_open"
     assert cb.allow_request() is True
 
 
 def test_breaker_half_open_success_closes() -> None:
-    cb = CircuitBreaker(failure_threshold=2, recovery_seconds=0.05)
+    cb = CircuitBreaker(failure_threshold=2, recovery_seconds=RECOVERY_SECONDS)
     cb.record_failure()
     cb.record_failure()
-    time.sleep(0.06)
+    time.sleep(RECOVERY_SECONDS * 4)
     assert cb.state == "half_open"
     cb.record_success()
     assert cb.state == "closed"
 
 
 def test_breaker_half_open_failure_reopens() -> None:
-    cb = CircuitBreaker(failure_threshold=2, recovery_seconds=0.05)
+    cb = CircuitBreaker(failure_threshold=2, recovery_seconds=RECOVERY_SECONDS)
     cb.record_failure()
     cb.record_failure()
-    time.sleep(0.06)
+    time.sleep(RECOVERY_SECONDS * 4)
     cb.record_failure()
     assert cb.state == "open"
 
@@ -110,7 +115,7 @@ async def test_service_fast_fails_when_breaker_open() -> None:
 async def test_service_recovers_after_window() -> None:
     service = DaDataService(
         token="x",
-        breaker=CircuitBreaker(failure_threshold=1, recovery_seconds=0.05),
+        breaker=CircuitBreaker(failure_threshold=1, recovery_seconds=RECOVERY_SECONDS),
     )
     failing = _FakeFailingClient()
     service._client = failing  # type: ignore[assignment]
@@ -118,7 +123,7 @@ async def test_service_recovers_after_window() -> None:
         await service.lookup("inn-1")
     assert service._breaker.state == "open"
 
-    time.sleep(0.06)
+    time.sleep(RECOVERY_SECONDS * 4)
 
     # Replace client with OK one for half-open trial
     service._client = _FakeOKClient()  # type: ignore[assignment]

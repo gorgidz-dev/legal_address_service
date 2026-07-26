@@ -26,6 +26,8 @@ export type Route =
   | { name: "login"; next: string }
   /** Приём приглашения по токену из письма. */
   | { name: "invite"; token: string }
+  /** Подтверждение e-mail по ссылке из письма. */
+  | { name: "verify"; token: string }
   /**
    * Кабинет (админ/клиент/собственник): section — раздел, id — выбранная
    * карточка внутри раздела (заявка), чтобы F5 не сбрасывал выбор.
@@ -67,6 +69,9 @@ export function parseRoute(pathname: string, search = ""): Route {
   if (head === "address" && rest.length) {
     return { name: "address", id: rest[0] };
   }
+  if (head === "verify" && rest.length) {
+    return { name: "verify", token: rest.join("/") };
+  }
   if (head === "legal" && rest.length) {
     const doc = LEGAL_DOCS.find((item) => item === rest[0]);
     if (doc) return { name: "legal", doc };
@@ -98,6 +103,8 @@ export function routeToPath(route: Route): string {
       return route.next ? `/login?next=${encodeURIComponent(route.next)}` : "/login";
     case "invite":
       return `/invite/${encodeURIComponent(route.token)}`;
+    case "verify":
+      return `/verify/${encodeURIComponent(route.token)}`;
     case "cabinet": {
       if (!route.section) return "/app";
       const base = `/app/${encodeURIComponent(route.section)}`;

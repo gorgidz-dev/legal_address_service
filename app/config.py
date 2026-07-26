@@ -77,6 +77,10 @@ class Settings(BaseSettings):
 
     invitation_ttl_hours: int = 24 * 7
 
+    #: Внешний адрес сайта — из него строятся ссылки в письмах. Без него
+    #: ссылка подтверждения указывала бы на localhost.
+    public_base_url: str = "https://uradres.net"
+
     egrn_extract_validity_days: int = 30
     initial_application_validity_days: int = 30
 

@@ -104,6 +104,9 @@ def _is_public_path(path: str, method: str) -> bool:
         f"{API_PREFIX}/auth/refresh",
         f"{API_PREFIX}/auth/bootstrap-admin",
         f"{API_PREFIX}/auth/bootstrap-state",
+        # Ссылку из письма открывают в том браузере, где сессии может не быть.
+        # Защита — сам токен: одноразовый, с ограниченным сроком, в базе хеш.
+        f"{API_PREFIX}/auth/email/verify/confirm",
         f"{API_PREFIX}/mobile/auth/login",
         f"{API_PREFIX}/mobile/auth/refresh",
     }

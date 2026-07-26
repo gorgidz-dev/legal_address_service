@@ -25,10 +25,18 @@ from app.schemas.auth import (
     InvitationCreate,
     InvitationCreateResult,
     InvitationRead,
+    EmailVerificationConfirm,
+    EmailVerificationRequestResult,
+    EmailVerificationResult,
     LoginRequest,
     SessionRead,
     UserActiveUpdate,
     UserAdminRead,
+)
+from app.services.email_verification import (
+    can_resend,
+    confirm_verification,
+    issue_verification,
 )
 from app.services.auth_security import (
     dummy_verify_async,
@@ -241,6 +249,61 @@ async def list_my_sessions(
 @router.get("/me", response_model=CurrentUserRead)
 async def me(user: User = Depends(get_current_user)) -> User:
     return user
+
+
+@router.post("/email/verify/request", response_model=EmailVerificationRequestResult)
+async def request_email_verification(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> EmailVerificationRequestResult:
+    """Отправить (или переотправить) письмо со ссылкой подтверждения."""
+    if user.email_verified_at is not None:
+        return EmailVerificationRequestResult(sent=False, message="Адрес уже подтверждён")
+
+    if not can_resend(user):
+        # Иначе кнопкой «отправить ещё раз» можно засыпать чужой ящик письмами
+        # от нашего имени.
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Письмо уже отправлено. Повторите через пару минут",
+        )
+
+    await issue_verification(db, user)
+    await db.commit()
+
+    if not settings.smtp_host:
+        # Отправка не настроена: токен создан, но письмо никуда не ушло.
+        # Врать «письмо отправлено» нельзя — человек будет ждать его напрасно.
+        return EmailVerificationRequestResult(
+            sent=False,
+            message="Отправка писем пока не настроена — напишите на info@uradres.net",
+        )
+
+    return EmailVerificationRequestResult(
+        sent=True, message=f"Письмо отправлено на {user.email}"
+    )
+
+
+@router.post("/email/verify/confirm", response_model=EmailVerificationResult)
+async def confirm_email_verification(
+    payload: EmailVerificationConfirm,
+    db: AsyncSession = Depends(get_db),
+) -> EmailVerificationResult:
+    """Подтвердить адрес по токену из письма.
+
+    Эндпоинт публичный: человек может открыть ссылку в другом браузере, где он
+    не авторизован. Достаточная защита — сам токен: он одноразовый, живёт
+    ограниченное время и хранится в базе только хешем.
+    """
+    result = await confirm_verification(db, payload.token)
+    await db.commit()
+    if not result.ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, result.reason)
+    return EmailVerificationResult(
+        verified=True,
+        already_verified=result.already,
+        message="Адрес уже был подтверждён" if result.already else "Адрес подтверждён",
+    )
 
 
 @router.get("/users", response_model=list[UserAdminRead])

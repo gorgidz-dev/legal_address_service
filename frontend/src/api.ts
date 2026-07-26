@@ -17,6 +17,8 @@ import type {
   CurrentUser,
   DadataLookup,
   DemoSeedResult,
+  EmailVerificationRequestResult,
+  EmailVerificationResult,
   Invitation,
   InvitationCreateResult,
   NotificationInbox,
@@ -181,6 +183,13 @@ export const api = {
     request<AdminUser>(`/auth/users/${encodeURIComponent(userId)}`, {
       method: "PATCH",
       body: JSON.stringify({ is_active: isActive })
+    }),
+  requestEmailVerification: () =>
+    request<EmailVerificationRequestResult>("/auth/email/verify/request", { method: "POST" }),
+  confirmEmailVerification: (token: string) =>
+    request<EmailVerificationResult>("/auth/email/verify/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token })
     }),
   invitations: () => request<Invitation[]>("/auth/invitations"),
   createInvitation: (payload: unknown) =>

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,3 +30,14 @@ class User(UUIDPKMixin, TimestampMixin, Base):
         ForeignKey("providers.id", ondelete="SET NULL"),
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+
+    # Подтверждение адреса. NULL — не подтверждён: аккаунт заведён публичной
+    # формой на произвольный e-mail. Приглашённые считаются подтверждёнными:
+    # ссылка приходила на их же адрес.
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    email_verification_token_hash: Mapped[Optional[str]] = mapped_column(Text)
+    email_verification_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None
