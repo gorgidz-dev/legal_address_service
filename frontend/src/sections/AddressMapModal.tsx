@@ -80,7 +80,9 @@ export function AddressMapModal({
   const [placedCount, setPlacedCount] = useState(0);
 
   useEffect(() => {
-    if (!open) return;
+    // Пока выборка адресов не приехала, карту не инициализируем: иначе она
+    // создаётся дважды (пустая, потом с метками) и заметно моргает.
+    if (!open || loading) return;
     let cancelled = false;
     setStatus("loading");
     setPlacedCount(0);
@@ -161,7 +163,7 @@ export function AddressMapModal({
     };
     // located пересчитывается из addresses; open триггерит re-init.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, addresses]);
+  }, [open, loading, addresses]);
 
   // Esc закрывает модалку, фон не прокручивается — общий хук со стеком модалок,
   // чтобы карта под открытой поверх неё карточкой не перехватывала Escape.
