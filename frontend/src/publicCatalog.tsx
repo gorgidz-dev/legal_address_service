@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddressChatPanel } from "./AddressChatPanel";
 import { api } from "./api";
 import { PhoneInput } from "./PhoneInput";
@@ -27,6 +27,7 @@ import { HomeForOwners } from "./sections/HomeForOwners";
 import { HomeCases } from "./sections/HomeCases";
 import { StarRating } from "./sections/StarRating";
 import { AddressReviews } from "./sections/AddressReviews";
+import { useModalDismiss } from "./useModalDismiss";
 import { AddressMapModal } from "./sections/AddressMapModal";
 import type {
   AddressChat,
@@ -44,6 +45,13 @@ type PublicCatalogProps = {
   onLoginClick: () => void;
   /** Открыт ли каталог из кабинета — возврат назад. */
   onOpenDashboard?: () => void;
+  /**
+   * Открытая карточка адреса живёт в URL (/address/<id>): ссылкой на объект
+   * можно поделиться, а «Назад» в браузере закрывает карточку, а не уводит
+   * со страницы.
+   */
+  openAddressId: string | null;
+  onOpenAddress: (id: string | null) => void;
 };
 
 type CatalogSort = "default" | "price_asc" | "price_desc" | "newest";
@@ -320,7 +328,15 @@ const cardVariants: Variants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: "easeOut" } },
 };
 
-export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticated, onLoginClick, onOpenDashboard }: PublicCatalogProps) {
+export default function PublicCatalog({
+  canBootstrap,
+  currentUser,
+  onAuthenticated,
+  onLoginClick,
+  onOpenDashboard,
+  openAddressId,
+  onOpenAddress,
+}: PublicCatalogProps) {
   const reduceMotion = useReducedMotion();
   const motionVariants = reduceMotion ? undefined : heroStaggerVariants;
   const childMotion = reduceMotion ? undefined : heroChildVariants;
@@ -384,14 +400,61 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
   // Расширенный поиск — модалка с фильтрами (город + ИФНС).
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // Детальная карточка адреса (фото-галерея + услуги).
+  // Детальная карточка адреса (фото-галерея + услуги). Что открыто, решает URL:
+  // openAddressId приходит сверху, здесь только кешируется сам объект.
   const [detailAddress, setDetailAddress] = useState<PublicAddress | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
   // Модалка поиска адресов на карте (Яндекс.Карты).
   const [mapOpen, setMapOpen] = useState(false);
   // Скролл внутри детальной модалки — для кнопки «наверх».
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
   const [detailScrolled, setDetailScrolled] = useState(false);
   const [detailPhotoIdx, setDetailPhotoIdx] = useState(0);
+
+  /** Открыть/закрыть карточку — через URL, чтобы работали «Назад» и ссылка. */
+  const openDetail = useCallback(
+    (address: PublicAddress | null) => onOpenAddress(address ? address.id : null),
+    [onOpenAddress],
+  );
+  const closeDetail = useCallback(() => onOpenAddress(null), [onOpenAddress]);
+
+  // URL → карточка. Обычно объект уже есть в выдаче; при заходе по прямой
+  // ссылке (адреса нет на текущей странице выдачи) догружаем его точечно.
+  useEffect(() => {
+    if (!openAddressId) {
+      setDetailAddress(null);
+      setDetailError(null);
+      return;
+    }
+    if (detailAddress?.id === openAddressId) return;
+
+    const fromList = addresses.find((address) => address.id === openAddressId);
+    if (fromList) {
+      setDetailPhotoIdx(0);
+      setDetailError(null);
+      setDetailAddress(fromList);
+      return;
+    }
+
+    let alive = true;
+    api
+      .publicAddress(openAddressId)
+      .then((address) => {
+        if (!alive) return;
+        setDetailPhotoIdx(0);
+        setDetailError(null);
+        setDetailAddress(address);
+      })
+      .catch((err: Error) => {
+        if (!alive) return;
+        // Адрес сняли с публикации или ссылка битая — не держим пустую модалку.
+        setDetailError(err.message);
+        onOpenAddress(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [openAddressId, addresses, detailAddress?.id, onOpenAddress]);
 
   // Чат с собственником: открытый чат + indicator "ожидание входа" +
   // "запомнить адрес для чата на момент логина".
@@ -424,7 +487,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     try {
       const chat = await api.openChatForAddress(address.id);
       setActiveChat(chat);
-      setDetailAddress(null);
+      closeDetail();
     } catch (err) {
       setChatError((err as Error).message);
     } finally {
@@ -443,7 +506,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
       .then((chat) => {
         if (cancelled) return;
         setActiveChat(chat);
-        setDetailAddress(null);
+        closeDetail();
         setChatAuthPrompt(false);
       })
       .catch((err: Error) => {
@@ -522,7 +585,14 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
 
   // При смене любого фильтра кроме page — возвращаемся на 1-ю страницу.
   // (page сам по себе не триггерит этот reset, иначе цикл.)
+  // Первый прогон пропускаем: иначе ?page=3 из ссылки тут же схлопывался в 1,
+  // и поделиться страницей выдачи было нельзя.
+  const filtersSettled = useRef(false);
   useEffect(() => {
+    if (!filtersSettled.current) {
+      filtersSettled.current = true;
+      return;
+    }
     setPage(1);
   }, [
     debouncedQuery,
@@ -551,7 +621,9 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const next = `${window.location.pathname}${newSearch}${window.location.hash}`;
     if (next !== current) {
-      window.history.replaceState(null, "", next);
+      // history.state обязательно сохраняем: в нём глубина навигации роутера,
+      // по которой кнопка «Назад» понимает, есть ли куда возвращаться.
+      window.history.replaceState(window.history.state, "", next);
     }
   }, [filters, page]);
 
@@ -654,6 +726,21 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     setFilters(initialFilters);
   }
 
+  // Escape закрывает верхнюю модалку, фон под ней не прокручивается.
+  // Правило: Escape делает то же, что клик по фону. Где фон намеренно не
+  // закрывает окно (форма заявки), Escape тоже не закрывает — только блокировка
+  // прокрутки, иначе случайное нажатие стёрло бы заполненные поля.
+  useModalDismiss(!!detailAddress, closeDetail);
+  useModalDismiss(!!selectedAddress, null);
+  useModalDismiss(advancedOpen, () => setAdvancedOpen(false));
+  useModalDismiss(ownerOpen, () => setOwnerOpen(false));
+  useModalDismiss(chatAuthPrompt, () => {
+    setChatAuthPrompt(false);
+    setPendingChatAddressId(null);
+  });
+  useModalDismiss(!!activeChat, () => setActiveChat(null));
+  useModalDismiss(compareOpen, () => setCompareOpen(false));
+
   async function submitOwnerRequest(event: FormEvent) {
     event.preventDefault();
     setOwnerBusy(true);
@@ -735,7 +822,19 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
     <main className="ds-catalog">
       <header className="ds-topnav">
        <div className="ds-topnav__inner">
-        <a className="ds-topnav__brand" href="/" aria-label="uradres.net — на главную">
+        {/* href оставлен для «открыть в новой вкладке» и индексации, но обычный
+            клик обрабатываем сами — перезагружать всё приложение незачем. */}
+        <a
+          className="ds-topnav__brand"
+          href="/"
+          aria-label="uradres.net — на главную"
+          onClick={(event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+            event.preventDefault();
+            closeDetail();
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
           <span className="ds-brandmark" aria-hidden="true">
             <span className="ds-brandmark__pin" />
           </span>
@@ -849,7 +948,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
         onSelectAddress={(address) => {
           setMapOpen(false);
           setDetailPhotoIdx(0);
-          setDetailAddress(address);
+          openDetail(address);
         }}
       />
 
@@ -1093,7 +1192,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                     className="ds-card__media ds-card__media--clickable"
                     onClick={() => {
                       setDetailPhotoIdx(0);
-                      setDetailAddress(address);
+                      openDetail(address);
                     }}
                     aria-label={`Открыть карточку: ${address.full_address}`}
                   >
@@ -1403,7 +1502,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
       )}
 
       {detailAddress && (
-        <div className="modal-backdrop" onClick={() => setDetailAddress(null)}>
+        <div className="modal-backdrop" onClick={closeDetail}>
           <div
             className="modal-panel ds-address-detail"
             ref={detailPanelRef}
@@ -1415,7 +1514,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                 <span className="eyebrow">Адрес</span>
                 <h2>{detailAddress.full_address}</h2>
               </div>
-              <button className="text-action" onClick={() => setDetailAddress(null)} type="button">
+              <button className="text-action" onClick={closeDetail} type="button">
                 <X size={16} /> Закрыть
               </button>
             </header>
@@ -1596,7 +1695,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                     className="ds-btn ds-btn--primary ds-btn--md ds-address-detail__cta"
                     onClick={() => {
                       const target = detailAddress;
-                      setDetailAddress(null);
+                      closeDetail();
                       openApplicationForm(target);
                     }}
                   >
@@ -1874,7 +1973,7 @@ export default function PublicCatalog({ canBootstrap, currentUser, onAuthenticat
                   onClick={() => {
                     setChatAuthPrompt(false);
                     const target = detailAddress;
-                    setDetailAddress(null);
+                    closeDetail();
                     openApplicationForm(target);
                   }}
                 >

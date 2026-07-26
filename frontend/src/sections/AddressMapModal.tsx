@@ -9,6 +9,7 @@
  */
 import { Loader2, MapPin, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useModalDismiss } from "../useModalDismiss";
 import type { PublicAddress } from "../types";
 
 type Props = {
@@ -154,15 +155,9 @@ export function AddressMapModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, addresses]);
 
-  // Esc закрывает модалку.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  // Esc закрывает модалку, фон не прокручивается — общий хук со стеком модалок,
+  // чтобы карта под открытой поверх неё карточкой не перехватывала Escape.
+  useModalDismiss(open, onClose);
 
   if (!open) return null;
 

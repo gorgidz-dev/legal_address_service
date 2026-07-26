@@ -498,6 +498,23 @@ h1 {
   border-radius: var(--ds-radius-xl);
   box-shadow: var(--ds-shadow-xl);
   background: #ffffff;
+  /* Высокая форма (например «Смена адреса») на ноутбуке вылезала за экран
+     вместе с шапкой, где единственная кнопка «Закрыть», — выхода не оставалось.
+     Прокручиваем содержимое внутри панели. */
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Шапка с кнопкой «Закрыть» всегда на виду при прокрутке содержимого.
+   Карточка адреса исключена — у неё своя шапка и кнопка «наверх». */
+.modal-panel:not(.ds-address-detail) > header {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  margin: -20px -20px 0;
+  padding: 20px 20px 12px;
+  background: #ffffff;
 }
 
 .modal-panel h2,
@@ -1013,4 +1030,65 @@ h1 {
   grid-column: 1 / -1;
   color: var(--ds-danger-fg);
   font-size: 12px;
+}
+
+/* === Навигация: логотип как ссылка «на главную» + крошки «Назад» === */
+
+/* Логотип в сайдбаре и на экране входа теперь кнопка. Сбрасываем кнопочные
+   умолчания, чтобы блок бренда выглядел ровно как раньше. */
+.brand--link,
+.auth-brand--link {
+  appearance: none;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--ds-radius-md);
+  transition: opacity 0.15s ease;
+}
+
+.brand--link:hover,
+.auth-brand--link:hover {
+  opacity: 0.82;
+}
+
+.brand--link:focus-visible,
+.auth-brand--link:focus-visible {
+  outline: 2px solid var(--ds-indigo-600);
+  outline-offset: 3px;
+}
+
+/* «Назад» и «На главную» над заголовком раздела кабинета. */
+.nav-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.nav-crumbs .text-action {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ds-slate-500);
+}
+
+.nav-crumbs .text-action:hover {
+  color: var(--ds-indigo-600);
+}
+
+/* Те же кнопки на экране входа — по центру под логотипом. */
+.auth-nav {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: -4px;
+}
+
+.auth-nav .text-action {
+  font-size: 12px;
+  font-weight: 600;
 }

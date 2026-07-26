@@ -259,7 +259,9 @@ async def _notify_offline(
                 user_id=user.id,
                 title=push_title,
                 body=short_body,
-                url="/",
+                # «/» — публичная главная, поэтому ведём сразу в чаты кабинета:
+                # раздел один и тот же у клиента, собственника и админа.
+                url="/app/chats",
                 tag=f"chat:{chat.id}",
             )
         except Exception:  # noqa: BLE001

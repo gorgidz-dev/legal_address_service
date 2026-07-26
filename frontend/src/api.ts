@@ -99,6 +99,14 @@ async function doFetch(path: string, init?: RequestInit): Promise<Response> {
   });
 }
 
+/**
+ * Сессия окончательно протухла (refresh не помог). Слушает App: сбрасывает
+ * пользователя и уводит на вход. Через событие, а не колбэк, — иначе пришлось бы
+ * ловить 401 в каждом из полусотни .catch по экранам, и половина из них
+ * оставляла бы «зомби-кабинет» с бесконечной ошибкой.
+ */
+export const SESSION_EXPIRED_EVENT = "uradres:session-expired";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response = await doFetch(path, init);
 
@@ -106,6 +114,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const refreshed = await attemptRefresh();
     if (refreshed) {
       response = await doFetch(path, init);
+    } else if (path !== "/auth/me") {
+      // /auth/me — штатная проверка «есть ли сессия» при загрузке, её 401
+      // означает «гость», а не «выбросило».
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     }
   }
 
@@ -258,6 +270,14 @@ export const api = {
       page_size: number;
     }>(`/marketplace/addresses/search?${p.toString()}`);
   },
+
+  /** Одна карточка каталога по id — для прямой ссылки /address/<id>. */
+  publicAddress: (addressId: string, termMonths?: 6 | 11) =>
+    request<PublicAddress>(
+      `/marketplace/addresses/${encodeURIComponent(addressId)}${
+        termMonths ? `?term_months=${termMonths}` : ""
+      }`
+    ),
 
   publicAddresses: (filters?: {
     city?: string;
@@ -510,6 +530,12 @@ export function packageDownloadUrl(applicationId: string): string {
   return `${API_BASE}/applications/${applicationId}/download-package`;
 }
 
-export function paymentDocumentDownloadUrl(path: string): string {
+/**
+ * Путь download_url, который отдаёт бэк, — относительный от версии API
+ * («/workflow/...»), без префикса. В проде nginx проксирует на бэкенд только
+ * /api/, поэтому ссылка без префикса попадала в SPA-fallback и «скачивался»
+ * index.html вместо документа.
+ */
+export function apiDownloadUrl(path: string): string {
   return `${API_BASE}${path}`;
 }

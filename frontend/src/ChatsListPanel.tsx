@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { Loader2, MessageSquare, RefreshCw } from "lucide-react";
 import { AddressChatPanel } from "./AddressChatPanel";
 import { api } from "./api";
+import { useModalDismiss } from "./useModalDismiss";
 import type { AddressChat, CurrentUser } from "./types";
 
 type Props = {
@@ -43,6 +44,8 @@ export function ChatsListPanel({ currentUser, limit = null, autoOpenChatId, onCh
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<AddressChat | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useModalDismiss(!!selected, () => setSelected(null));
 
   useEffect(() => {
     let alive = true;
