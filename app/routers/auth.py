@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import timedelta
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
@@ -25,6 +27,8 @@ from app.schemas.auth import (
     InvitationRead,
     LoginRequest,
     SessionRead,
+    UserActiveUpdate,
+    UserAdminRead,
 )
 from app.services.auth_security import (
     dummy_verify_async,
@@ -46,6 +50,8 @@ from app.services.rate_limit import (
     record_attempt,
 )
 from app.services.user_create import try_persist_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -234,6 +240,70 @@ async def list_my_sessions(
 
 @router.get("/me", response_model=CurrentUserRead)
 async def me(user: User = Depends(get_current_user)) -> User:
+    return user
+
+
+@router.get("/users", response_model=list[UserAdminRead])
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> list[User]:
+    """Все учётные записи — для раздела «Доступ»."""
+    result = await db.execute(select(User).order_by(User.role, User.email))
+    return list(result.scalars().all())
+
+
+@router.patch("/users/{user_id}", response_model=UserAdminRead)
+async def set_user_active(
+    user_id: UUID,
+    payload: UserActiveUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> User:
+    """Включить или отключить учётную запись.
+
+    Отключение действует сразу: get_current_user проверяет is_active на каждом
+    запросе, а живые сессии здесь же отзываются, чтобы refresh-токен не выдал
+    новый доступ.
+    """
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+
+    # Запрет на самоотключение заодно охраняет главный инвариант: отключить
+    # можно только чужую запись, а значит сам отключающий остаётся активным
+    # администратором и система без админов не остаётся.
+    if not payload.is_active and user.id == admin.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Нельзя отключить самого себя — попросите другого администратора",
+        )
+
+    if user.is_active == payload.is_active:
+        return user
+
+    user.is_active = payload.is_active
+
+    if not payload.is_active:
+        now = utcnow()
+        sessions = await db.execute(
+            select(UserSession).where(
+                UserSession.user_id == user.id,
+                UserSession.revoked_at.is_(None),
+            )
+        )
+        for session in sessions.scalars().all():
+            session.revoked_at = now
+
+    await db.commit()
+    await db.refresh(user)
+    logger.info(
+        "admin %s set user %s (%s) is_active=%s",
+        admin.email,
+        user.id,
+        user.email,
+        payload.is_active,
+    )
     return user
 
 

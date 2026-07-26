@@ -33,7 +33,7 @@ import {
   X,
   XCircle
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   SESSION_EXPIRED_EVENT,
@@ -55,6 +55,7 @@ import {
 } from "./sections/PaymentAttachmentsPanel";
 import type {
   ActiveClientRegistryItem,
+  AdminUser,
   Address,
   AddressPhotoAdmin,
   AddressServiceAdmin,
@@ -337,16 +338,25 @@ function Button({
   variant = "primary",
   disabled,
   onClick,
+  title,
   type = "button"
 }: {
   children: React.ReactNode;
   variant?: "primary" | "secondary" | "ghost";
   disabled?: boolean;
   onClick?: () => void;
+  /** Подсказка при наведении — нужна, чтобы объяснить, почему кнопка выключена. */
+  title?: string;
   type?: "button" | "submit";
 }) {
   return (
-    <button className={`btn ${variant}`} disabled={disabled} onClick={onClick} type={type}>
+    <button
+      className={`btn ${variant}`}
+      disabled={disabled}
+      onClick={onClick}
+      title={title}
+      type={type}
+    >
       {children}
     </button>
   );
@@ -355,6 +365,25 @@ function Button({
 function InlineError({ message }: { message: string | null }) {
   if (!message) return null;
   return <div className="inline-error">{message}</div>;
+}
+
+/** Нейтральное сообщение — не ошибка, но и молчать нельзя. */
+function InlineNotice({
+  message,
+  onDismiss
+}: {
+  message: string | null;
+  onDismiss: () => void;
+}) {
+  if (!message) return null;
+  return (
+    <div className="inline-notice">
+      <span>{message}</span>
+      <button aria-label="Скрыть" className="text-action" onClick={onDismiss} type="button">
+        <X size={14} />
+      </button>
+    </div>
+  );
 }
 
 function EmptyState({ title, text }: { title: string; text: string }) {
@@ -464,8 +493,27 @@ function NotificationCenter({
     }
   }
 
+  // Поповер закрывается кликом мимо и по Escape. Раньше не закрывался вообще:
+  // оставался поверх нового раздела и перекрывал правую часть экрана.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div className="notification-center">
+    <div className="notification-center" ref={rootRef}>
       <button
         aria-label="Уведомления"
         className={open ? "notification-button active" : "notification-button"}
@@ -765,7 +813,101 @@ function SessionsView() {
   );
 }
 
-function AccessView() {
+/**
+ * Учётные записи: включить/отключить доступ. Отключение действует сразу —
+ * бэкенд проверяет is_active на каждом запросе и отзывает живые сессии.
+ */
+function UsersAccessPanel({ currentUserId }: { currentUserId: string }) {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    api
+      .adminUsers()
+      .then(setUsers)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function toggle(user: AdminUser) {
+    if (user.is_active && !window.confirm(`Отключить доступ для ${user.email}?`)) return;
+    setBusyId(user.id);
+    setError(null);
+    try {
+      const updated = await api.adminSetUserActive(user.id, !user.is_active);
+      setUsers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="table-panel">
+      <div className="panel-title">
+        <ShieldCheck size={20} />
+        <div>
+          <strong>Учётные записи</strong>
+          <span>Отключённый пользователь теряет доступ сразу, данные остаются.</span>
+        </div>
+      </div>
+
+      <InlineError message={error} />
+
+      {loading ? (
+        <LoadingRows />
+      ) : users.length === 0 ? (
+        <EmptyState title="Пользователей нет" text="Пригласите сотрудника формой ниже." />
+      ) : (
+        <div className="simple-list">
+          {users.map((user) => {
+            const isSelf = user.id === currentUserId;
+            return (
+              <div className="simple-row" key={user.id}>
+                <div>
+                  <strong>{user.email}</strong>
+                  <span>
+                    {user.full_name} · {roleLabels[user.role] || user.role}
+                    {user.is_active ? "" : " · отключён"}
+                  </span>
+                </div>
+                <div className="row-actions">
+                  <span className={user.is_active ? "status active" : "status archived"}>
+                    {user.is_active ? "Активен" : "Отключён"}
+                  </span>
+                  <Button
+                    disabled={isSelf || busyId === user.id}
+                    onClick={() => toggle(user)}
+                    title={isSelf ? "Нельзя отключить самого себя" : undefined}
+                    variant="secondary"
+                  >
+                    {busyId === user.id ? (
+                      <Loader2 className="spin" size={16} />
+                    ) : user.is_active ? (
+                      <XCircle size={16} />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    {user.is_active ? "Отключить" : "Включить"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AccessView({ currentUserId }: { currentUserId: string }) {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [form, setForm] = useState({ email: "", full_name: "", role: "manager" });
   const [created, setCreated] = useState<InvitationCreateResult | null>(null);
@@ -831,6 +973,8 @@ function AccessView() {
 
   return (
     <section className="stack">
+      <UsersAccessPanel currentUserId={currentUserId} />
+
       <div className="demo-seed-panel">
         <div className="panel-title">
           <Database size={20} />
@@ -1167,6 +1311,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  /** Справочники уже приезжали хотя бы раз — второй скелет не нужен. */
+  const staffDataLoaded = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -1217,7 +1363,11 @@ export default function App() {
       return;
     }
     let alive = true;
-    setLoading(true);
+    // Скелет показываем только при первой загрузке. Раньше любое «Обновить»
+    // (в т.ч. автоматическое после действия) подменяло рабочую область
+    // скелетом — раздел размонтировался, а открытая модалка закрывалась
+    // вместе с заполненной формой.
+    if (!staffDataLoaded.current) setLoading(true);
     setError(null);
     Promise.all([api.providers(), api.addresses(), api.applications()])
       .then(([providersResult, addressesResult, applicationsResult]) => {
@@ -1225,6 +1375,7 @@ export default function App() {
         setProviders(providersResult);
         setAddresses(addressesResult);
         setApplications(applicationsResult);
+        staffDataLoaded.current = true;
       })
       .catch((err: Error) => {
         if (!alive) return;
@@ -1547,7 +1698,7 @@ export default function App() {
               <AdminAddressServicesView />
             )}
             {view === "address-chats" && currentUser.role === "admin" && (
-              <ChatsListPanel currentUser={currentUser} />
+              <ChatsListPanel currentUser={currentUser} refreshToken={refreshKey} />
             )}
             {view === "review-moderation" && currentUser.role === "admin" && (
               <AdminReviewModeration />
@@ -1555,7 +1706,7 @@ export default function App() {
             {view === "access" && currentUser.role === "admin" && (
               <>
                 <SessionsView />
-                <AccessView />
+                <AccessView currentUserId={currentUser.id} />
               </>
             )}
           </>
@@ -1575,6 +1726,7 @@ function SbpPaymentPanel({
   const [payment, setPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   // Initiate (or fetch existing active) payment on mount.
   useEffect(() => {
@@ -1589,7 +1741,7 @@ function SbpPaymentPanel({
     return () => {
       alive = false;
     };
-  }, [applicationId]);
+  }, [applicationId, retryKey]);
 
   // Poll status every 3s while awaiting_user or pending.
   useEffect(() => {
@@ -1632,7 +1784,19 @@ function SbpPaymentPanel({
       </div>
     );
   }
-  if (error) return <InlineError message={error} />;
+  if (error) {
+    // Без «Повторить» экран оплаты залипал: единственным выходом был F5.
+    return (
+      <div style={cardStyle}>
+        <InlineError message={error} />
+        <div className="row-actions">
+          <Button onClick={() => setRetryKey((value) => value + 1)} variant="secondary">
+            <RefreshCw size={16} /> Повторить
+          </Button>
+        </div>
+      </div>
+    );
+  }
   if (!payment) return null;
 
   if (payment.status === "succeeded") {
@@ -1737,6 +1901,7 @@ function ClientDashboardView({
 }) {
   const [applications, setApplications] = useState<ClientApplication[]>([]);
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -1750,9 +1915,13 @@ function ClientDashboardView({
       .then((result) => {
         if (!alive) return;
         setApplications(result);
-        // Заявки из URL может не быть в списке (чужая ссылка, удалённая заявка) —
-        // тогда мягко переключаемся на первую доступную.
-        if (!selectedId || !result.some((application) => application.id === selectedId)) {
+        // Заявки из URL может не быть в списке (чужая ссылка, удалённая заявка).
+        if (!selectedId) {
+          onSelect(result[0]?.id || null);
+        } else if (!result.some((application) => application.id === selectedId)) {
+          // Молча подставлять первую нельзя: по ссылке из уведомления человек
+          // открыл бы чужую заявку и решил, что смотрит нужную.
+          setNotice("Заявка не найдена — возможно, её удалили. Показан список.");
           onSelect(result[0]?.id || null);
         }
       })
@@ -1850,6 +2019,7 @@ function ClientDashboardView({
         </section>
 
         <InlineError message={error} />
+        <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
 
       {view === "applications" && (loading ? (
         <LoadingRows />
@@ -1961,6 +2131,7 @@ function ClientDashboardView({
       {view === "chats" && (
         <ChatsListPanel
           currentUser={user}
+          refreshToken={refreshKey}
           autoOpenChatId={pendingChatId}
           onChatOpened={() => setPendingChatId(null)}
         />
@@ -1995,6 +2166,7 @@ function OwnerDashboardView({
   canGoBack: boolean;
 }) {
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<OwnerDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2023,8 +2195,12 @@ function OwnerDashboardView({
       .then((result) => {
         if (!alive) return;
         setDashboard(result);
-        // Заявки из URL может не быть в списке — тогда берём первую доступную.
-        if (!selectedId || !result.applications.some((application) => application.id === selectedId)) {
+        // Заявки из URL может не быть в списке (ссылка из уведомления на уже
+        // удалённую заявку) — сообщаем, а не подменяем молча чужой.
+        if (!selectedId) {
+          onSelect(result.applications[0]?.id || null);
+        } else if (!result.applications.some((application) => application.id === selectedId)) {
+          setNotice("Заявка не найдена — возможно, её удалили. Показан список.");
           onSelect(result.applications[0]?.id || null);
         }
       })
@@ -2203,6 +2379,7 @@ function OwnerDashboardView({
         </section>
 
         <InlineError message={error} />
+        <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
 
         {(view === "applications" || view === "addresses") && (loading ? (
           <LoadingRows />
@@ -2472,6 +2649,7 @@ function OwnerDashboardView({
         {view === "chats" && (
           <ChatsListPanel
             currentUser={user}
+            refreshToken={refreshKey}
             autoOpenChatId={pendingChatId}
             onChatOpened={() => setPendingChatId(null)}
           />

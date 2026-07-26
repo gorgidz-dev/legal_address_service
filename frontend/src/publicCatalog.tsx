@@ -11,6 +11,7 @@ import {
   Loader2,
   Mail,
   MapPin,
+  Menu,
   Search,
   Send,
   Sparkles,
@@ -25,6 +26,7 @@ import { HomeConfigurator } from "./sections/HomeConfigurator";
 import { HomeFAQ } from "./sections/HomeFAQ";
 import { HomeForOwners } from "./sections/HomeForOwners";
 import { HomeCases } from "./sections/HomeCases";
+import { HomeSteps } from "./sections/HomeSteps";
 import { StarRating } from "./sections/StarRating";
 import { AddressReviews } from "./sections/AddressReviews";
 import { useModalDismiss } from "./useModalDismiss";
@@ -87,6 +89,20 @@ const initialFilters: CatalogFilters = {
   budgetUnder30k: false,
   premium11: false,
 };
+
+/**
+ * Пункты верхнего меню. Один список на десктоп и на мобильный бургер, чтобы
+ * они не разъезжались.
+ *
+ * «Для собственников» ведёт в секцию, а не сразу в форму: раньше клик открывал
+ * модалку минуя описание условий, а Ctrl+клик по той же ссылке уводил в секцию —
+ * поведение зависело от того, как нажали.
+ */
+const MENU_LINKS: Array<{ href: string; label: string }> = [
+  { href: "#catalog", label: "Каталог" },
+  { href: "#how", label: "Как это работает" },
+  { href: "#owners", label: "Для собственников" },
+];
 
 const VALID_SORTS: CatalogSort[] = ["default", "price_asc", "price_desc", "newest"];
 
@@ -399,6 +415,8 @@ export default function PublicCatalog({
 
   // Расширенный поиск — модалка с фильтрами (город + ИФНС).
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Мобильное меню (бургер).
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Детальная карточка адреса (фото-галерея + услуги). Что открыто, решает URL:
   // openAddressId приходит сверху, здесь только кешируется сам объект.
@@ -702,28 +720,41 @@ export default function PublicCatalog({
   );
 
   // Compare state — выбранные адреса для сравнения.
-  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  // Храним сами объекты, а не только id: список сравнения раньше строился
+  // из текущей выдачи, и после смены страницы или фильтра кнопка «Открыть
+  // сравнение» оставалась активной, а модалка молча не открывалась.
+  const [compared, setCompared] = useState<Map<string, PublicAddress>>(new Map());
   const [compareOpen, setCompareOpen] = useState(false);
-  const compareList = useMemo(
-    () => filteredAddresses.filter((a) => compareIds.has(a.id)),
-    [filteredAddresses, compareIds],
-  );
+  const compareList = useMemo(() => [...compared.values()], [compared]);
   const COMPARE_MAX = 4;
-  function toggleCompare(id: string) {
-    setCompareIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < COMPARE_MAX) next.add(id);
+  function toggleCompare(address: PublicAddress) {
+    setCompared((prev) => {
+      const next = new Map(prev);
+      if (next.has(address.id)) next.delete(address.id);
+      else if (next.size < COMPARE_MAX) next.set(address.id, address);
       return next;
     });
   }
   function clearCompare() {
-    setCompareIds(new Set());
+    setCompared(new Map());
     setCompareOpen(false);
   }
 
   function resetFilters() {
     setFilters(initialFilters);
+  }
+
+  /**
+   * Смена страницы с возвратом к началу выдачи: без этого пользователь
+   * оставался внизу и видел хвост уже НОВОЙ страницы — переход выглядел так,
+   * будто ничего не произошло.
+   */
+  function goToPage(next: number) {
+    const lastPage = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+    const target = Math.min(Math.max(1, next), lastPage);
+    if (target === page) return;
+    setPage(target);
+    document.getElementById("catalog-grid")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // Escape закрывает верхнюю модалку, фон под ней не прокручивается.
@@ -740,6 +771,16 @@ export default function PublicCatalog({
   });
   useModalDismiss(!!activeChat, () => setActiveChat(null));
   useModalDismiss(compareOpen, () => setCompareOpen(false));
+  // Мобильное меню закрывается по Escape, но фон не блокируем: это выпадающая
+  // панель, а не модалка — со страницы под ней уходить нормально.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   async function submitOwnerRequest(event: FormEvent) {
     event.preventDefault();
@@ -843,18 +884,24 @@ export default function PublicCatalog({
           </span>
         </a>
         <nav className="ds-topnav__links" aria-label="Главное меню">
-          <a href="#catalog">Каталог</a>
-          <a href="#how">Как это работает</a>
-          <a
-            href="#owners"
-            onClick={(e) => {
-              e.preventDefault();
-              setOwnerOpen(true);
-            }}
-          >
-            Для собственников
-          </a>
+          {MENU_LINKS.map((link) => (
+            <a href={link.href} key={link.href}>
+              {link.label}
+            </a>
+          ))}
         </nav>
+        {/* Бургер вместо скрытого на мобильном меню: до этого при ширине
+            <1024px пункты просто пропадали и попасть в них было нельзя. */}
+        <button
+          className="ds-topnav__burger"
+          type="button"
+          aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"}
+          aria-expanded={menuOpen}
+          aria-controls="topnav-mobile"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
         <div className="ds-topnav__actions">
           {currentUser && onOpenDashboard ? (
             <button className="ds-btn ds-btn--ghost ds-btn--md" onClick={onOpenDashboard} type="button">
@@ -877,6 +924,16 @@ export default function PublicCatalog({
           </button>
         </div>
        </div>
+
+        {menuOpen ? (
+          <nav className="ds-topnav__mobile" id="topnav-mobile" aria-label="Меню">
+            {MENU_LINKS.map((link) => (
+              <a href={link.href} key={link.href} onClick={() => setMenuOpen(false)}>
+                {link.label}
+              </a>
+            ))}
+          </nav>
+        ) : null}
       </header>
 
       <motion.section
@@ -1169,20 +1226,20 @@ export default function PublicCatalog({
               const hasCorr = address.correspondence_price !== null && address.correspondence_price !== undefined;
               return (
                 <motion.div
-                  className={`ds-card${compareIds.has(address.id) ? " ds-card--compared" : ""}`}
+                  className={`ds-card${compared.has(address.id) ? " ds-card--compared" : ""}`}
                   variants={cardMotion}
                   key={address.id}
                 >
                   <label
-                    className={`ds-card__compare${compareIds.has(address.id) ? " selected" : ""}`}
+                    className={`ds-card__compare${compared.has(address.id) ? " selected" : ""}`}
                     title="Добавить к сравнению"
                   >
                     <input
                       type="checkbox"
-                      checked={compareIds.has(address.id)}
-                      onChange={() => toggleCompare(address.id)}
+                      checked={compared.has(address.id)}
+                      onChange={() => toggleCompare(address)}
                       disabled={
-                        !compareIds.has(address.id) && compareIds.size >= COMPARE_MAX
+                        !compared.has(address.id) && compared.size >= COMPARE_MAX
                       }
                     />
                     <span>Сравнить</span>
@@ -1311,7 +1368,7 @@ export default function PublicCatalog({
             <button
               type="button"
               className="ds-btn ds-btn--ghost ds-btn--sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => goToPage(page - 1)}
               disabled={page <= 1}
             >
               ← Назад
@@ -1322,7 +1379,7 @@ export default function PublicCatalog({
             <button
               type="button"
               className="ds-btn ds-btn--ghost ds-btn--sm"
-              onClick={() => setPage((p) => p + 1)}
+              onClick={() => goToPage(page + 1)}
               disabled={page >= Math.ceil(totalCount / PAGE_SIZE)}
             >
               Вперёд →
@@ -1331,6 +1388,7 @@ export default function PublicCatalog({
         )}
       </div>
 
+      <HomeSteps />
       <HomeForOwners onCTAClick={() => setOwnerOpen(true)} />
       <HomeCases />
       <HomeFAQ />
@@ -2001,16 +2059,16 @@ export default function PublicCatalog({
         </div>
       )}
 
-      {compareIds.size > 0 && (
+      {compared.size > 0 && (
         <div className="ds-compare-bar">
           <div className="ds-compare-bar__count">
-            <strong>{compareIds.size}</strong> / {COMPARE_MAX} к сравнению
+            <strong>{compared.size}</strong> / {COMPARE_MAX} к сравнению
           </div>
           <button
             type="button"
             className="ds-btn ds-btn--primary ds-btn--sm"
             onClick={() => setCompareOpen(true)}
-            disabled={compareIds.size < 2}
+            disabled={compared.size < 2}
           >
             Открыть сравнение
           </button>

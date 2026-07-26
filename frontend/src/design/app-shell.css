@@ -1092,3 +1092,24 @@ h1 {
   font-size: 12px;
   font-weight: 600;
 }
+
+/* Нейтральное сообщение (не ошибка): «заявка не найдена», подсказки. */
+.inline-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1280px;
+  margin: 0 auto 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--ds-border-soft);
+  border-left: 3px solid var(--ds-indigo-600);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-950);
+  font-size: 13px;
+}
+
+.inline-notice .text-action {
+  color: var(--ds-slate-500);
+}
