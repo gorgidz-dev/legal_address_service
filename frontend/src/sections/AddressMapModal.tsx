@@ -14,7 +14,12 @@ import type { PublicAddress } from "../types";
 
 type Props = {
   open: boolean;
+  /** Выборка под текущие фильтры, а не страница выдачи. */
   addresses: PublicAddress[];
+  /** Выборка ещё грузится — счётчик не должен врать нулём. */
+  loading?: boolean;
+  /** Сколько адресов всего под фильтрами: часть может не влезть в выборку. */
+  totalCount?: number;
   onClose: () => void;
   onSelectAddress: (address: PublicAddress) => void;
 };
@@ -59,9 +64,12 @@ function formatPrice(value: string): string {
 export function AddressMapModal({
   open,
   addresses,
+  loading = false,
+  totalCount,
   onClose,
   onSelectAddress,
 }: Props) {
+  const total = totalCount ?? addresses.length;
   const containerRef = useRef<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null);
@@ -175,7 +183,11 @@ export function AddressMapModal({
             <MapPin size={18} /> Адреса на карте
           </h3>
           <span className="ds-mapmodal__count">
-            {placedCount} из {addresses.length} на карте
+            {loading
+              ? "Загружаем адреса…"
+              : total > addresses.length
+                ? `${placedCount} на карте · показаны первые ${addresses.length} из ${total} — сузьте фильтры`
+                : `${placedCount} из ${addresses.length} на карте`}
           </span>
           <button
             type="button"

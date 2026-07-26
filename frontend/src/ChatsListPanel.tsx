@@ -8,7 +8,7 @@
  *
  * При клике на строку открывается `AddressChatPanel` в модалке поверх.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, MessageSquare, RefreshCw } from "lucide-react";
 import { AddressChatPanel } from "./AddressChatPanel";
 import { api } from "./api";
@@ -77,13 +77,28 @@ export function ChatsListPanel({
   }, [refreshKey, refreshToken, limit]);
 
   // Авто-открытие чата по id из уведомления.
+  //
+  // Если чата нет в загруженном списке (он создан только что, а список
+  // подтягивался при монтировании), один раз перезапрашиваем. Не нашли и после
+  // этого — сбрасываем pending и говорим об этом: раньше он оставался навсегда
+  // и чат внезапно открывался сам через полчаса, при следующем обновлении.
+  const chatLookupRetried = useRef<string | null>(null);
   useEffect(() => {
     if (!autoOpenChatId || loading) return;
     const target = items.find((c) => c.id === autoOpenChatId);
     if (target) {
+      chatLookupRetried.current = null;
       setSelected(target);
       onChatOpened?.();
+      return;
     }
+    if (chatLookupRetried.current !== autoOpenChatId) {
+      chatLookupRetried.current = autoOpenChatId;
+      setRefreshKey((key) => key + 1);
+      return;
+    }
+    setError("Чат не найден — возможно, он уже закрыт.");
+    onChatOpened?.();
   }, [autoOpenChatId, items, loading, onChatOpened]);
 
   return (

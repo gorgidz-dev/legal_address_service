@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Download, FileText, Upload } from "lucide-react";
 import { api, ApiError, apiDownloadUrl } from "../api";
+import { DownloadLink } from "../DownloadLink";
 import type {
   Payment,
   PaymentAttachment,
@@ -107,14 +108,12 @@ export function PaymentAttachmentsPanel({
         <div className="ds-payatt__body">
           <span className="ds-payatt__label">Счёт на оплату</span>
           {invoice ? (
-            <a
+            <DownloadLink
               className="ds-payatt__file"
               href={apiDownloadUrl(invoice.download_url)}
-              target="_blank"
-              rel="noreferrer"
             >
               <Download size={13} /> {invoice.original_filename}
-            </a>
+            </DownloadLink>
           ) : (
             <span className="ds-payatt__muted">
               {viewerRole === "owner"
@@ -141,14 +140,12 @@ export function PaymentAttachmentsPanel({
         <div className="ds-payatt__body">
           <span className="ds-payatt__label">Платёжное поручение</span>
           {paymentOrder ? (
-            <a
+            <DownloadLink
               className="ds-payatt__file"
               href={apiDownloadUrl(paymentOrder.download_url)}
-              target="_blank"
-              rel="noreferrer"
             >
               <Download size={13} /> {paymentOrder.original_filename}
-            </a>
+            </DownloadLink>
           ) : (
             <span className="ds-payatt__muted">
               {viewerRole === "client"
