@@ -502,6 +502,48 @@ async def public_addresses(
     ]
 
 
+@router.get("/addresses/{address_id}", response_model=PublicAddressRead)
+async def public_address_detail(
+    address_id: UUID,
+    term_months: Annotated[int, Query()] = 11,
+    db: AsyncSession = Depends(get_db),
+) -> PublicAddressRead:
+    """Одна карточка каталога по id — под прямую ссылку вида /address/<id>.
+
+    Отдаёт только опубликованные адреса активных собственников: те же условия,
+    что и в списке, чтобы ссылка не раскрывала снятое с публикации.
+    """
+    if term_months not in (6, 11):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="term_months must be 6 or 11")
+
+    stmt = (
+        select(Address, Provider)
+        .join(Provider, Provider.id == Address.provider_id)
+        .where(
+            Address.id == address_id,
+            Provider.is_active.is_(True),
+            Address.is_available.is_(True),
+            Address.publication_status == AddressPublicationStatus.PUBLISHED.value,
+        )
+    )
+    row = (await db.execute(stmt)).first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес не найден")
+
+    address, provider = row
+    photos_by_address = await _load_approved_photos_for(db, [address.id])
+    services_by_address = await _load_active_services_for(db, [address.id])
+    ratings_by_address = await _load_rating_aggregates_for(db, [address.id])
+    return public_address_from_row(
+        address=address,
+        provider=provider,
+        term_months=6 if term_months == 6 else 11,
+        photos=photos_by_address.get(address.id),
+        services=services_by_address.get(address.id),
+        rating=ratings_by_address.get(address.id, (None, 0)),
+    )
+
+
 @router.post(
     "/provider-requests",
     response_model=ProviderConnectionRequestRead,

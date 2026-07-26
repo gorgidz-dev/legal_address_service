@@ -3,6 +3,7 @@ import {
   Building2,
   Camera,
   CheckCircle2,
+  ChevronLeft,
   Copy,
   Database,
   Download,
@@ -32,10 +33,18 @@ import {
   X,
   XCircle
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ApiError, api, packageDownloadUrl, paymentDocumentDownloadUrl } from "./api";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ApiError,
+  SESSION_EXPIRED_EVENT,
+  api,
+  packageDownloadUrl,
+  apiDownloadUrl
+} from "./api";
 import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
+import { parsePath, routeToPath, useRouter } from "./router";
+import { useModalDismiss } from "./useModalDismiss";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { OwnerAddressEditor } from "./OwnerAddressEditor";
 import { PushToggle } from "./PushToggle";
@@ -90,6 +99,27 @@ type View =
   | "address-services"
   | "address-chats"
   | "review-moderation";
+
+/**
+ * Разделы кабинетов клиента и собственника — они же сегменты URL /app/<section>.
+ * Первый в списке считается разделом по умолчанию для «/app».
+ */
+const CLIENT_SECTIONS = ["applications", "chats"] as const;
+const OWNER_SECTIONS = ["applications", "addresses", "chats"] as const;
+
+/**
+ * Синонимы разделов: один и тот же экран у разных ролей называется по-разному.
+ * Нужно, чтобы общая ссылка (push-уведомление про чат) вела куда надо и клиенту,
+ * и админу.
+ */
+const SECTION_ALIASES: Record<string, string> = { chats: "address-chats" };
+
+function resolveSection(raw: string | null, allowed: string[]): string | null {
+  if (!raw) return null;
+  if (allowed.includes(raw)) return raw;
+  const alias = SECTION_ALIASES[raw];
+  return alias && allowed.includes(alias) ? alias : null;
+}
 
 const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "applications", label: "Заявки", icon: FolderOpen },
@@ -347,6 +377,34 @@ function LoadingRows() {
   );
 }
 
+/**
+ * «Назад» и «На главную» над заголовком раздела. «Назад» показываем только
+ * когда внутри приложения действительно есть куда вернуться, иначе кнопка
+ * увела бы пользователя на предыдущий сайт.
+ */
+function NavCrumbs({
+  canGoBack,
+  onBack,
+  onHome
+}: {
+  canGoBack: boolean;
+  onBack: () => void;
+  onHome: () => void;
+}) {
+  return (
+    <div className="nav-crumbs">
+      {canGoBack ? (
+        <button className="text-action" onClick={onBack} type="button">
+          <ChevronLeft size={15} /> Назад
+        </button>
+      ) : null}
+      <button className="text-action" onClick={onHome} type="button">
+        <Home size={15} /> На главную
+      </button>
+    </div>
+  );
+}
+
 function NotificationCenter({
   refreshKey = 0,
   onNavigate,
@@ -476,21 +534,27 @@ function NotificationCenter({
 
 function AuthView({
   canBootstrap,
+  initialToken,
   onAuthenticated,
-  onBack
+  onHome,
+  onBack,
+  canGoBack
 }: {
   canBootstrap: boolean;
+  /** Токен из ссылки /invite/<token> — сразу открывает вкладку «Приглашение». */
+  initialToken?: string;
   onAuthenticated: (user: CurrentUser) => void;
-  onBack?: () => void;
+  onHome: () => void;
+  onBack: () => void;
+  canGoBack: boolean;
 }) {
-  const inviteFromPath = window.location.pathname.startsWith("/invite/")
-    ? decodeURIComponent(window.location.pathname.replace("/invite/", ""))
-    : "";
-  const [mode, setMode] = useState<"login" | "bootstrap" | "invite">(canBootstrap ? "bootstrap" : inviteFromPath ? "invite" : "login");
+  const [mode, setMode] = useState<"login" | "bootstrap" | "invite">(
+    initialToken ? "invite" : canBootstrap ? "bootstrap" : "login"
+  );
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
-  const [inviteToken, setInviteToken] = useState(inviteFromPath);
+  const [inviteToken, setInviteToken] = useState(initialToken || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -505,8 +569,8 @@ function AuthView({
           : mode === "invite"
             ? await api.acceptInvitation(inviteToken.trim(), { full_name: fullName, password })
             : await api.login({ email, password });
+      // Куда уйти после входа, решает роутер в App (учитывает ?next=).
       onAuthenticated(response.user);
-      window.history.replaceState(null, "", "/");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -517,19 +581,24 @@ function AuthView({
   return (
     <main className="auth-shell">
       <form className="auth-panel" onSubmit={submit}>
-        <div className="brand auth-brand">
+        <button className="brand auth-brand auth-brand--link" onClick={onHome} type="button">
           <div className="brand-mark">UR</div>
           <div>
             <strong>uradres.net</strong>
             <span>онлайн-доступ к сервису</span>
           </div>
-        </div>
+        </button>
 
-        {onBack ? (
-          <button className="text-action auth-back" onClick={onBack} type="button">
-            Вернуться в каталог
+        <div className="auth-nav">
+          {canGoBack ? (
+            <button className="text-action" onClick={onBack} type="button">
+              <ChevronLeft size={15} /> Назад
+            </button>
+          ) : null}
+          <button className="text-action" onClick={onHome} type="button">
+            <Home size={15} /> На главную
           </button>
-        ) : null}
+        </div>
 
         <div className="segmented">
           <button className={mode === "login" ? "selected" : ""} onClick={() => setMode("login")} type="button">
@@ -880,13 +949,17 @@ function ProviderRequestsView() {
   useEffect(load, [statusFilter]);
 
   async function changeStatus(req: ProviderConnectionRequest, status: "reviewing" | "rejected") {
+    // Отмена в prompt возвращает null и раньше всё равно отклоняла заявку —
+    // спрашиваем ДО того, как что-то менять, и на отмене выходим.
+    let comment: string | undefined;
+    if (status === "rejected") {
+      const answer = window.prompt("Комментарий (необязательно)");
+      if (answer === null) return;
+      comment = answer.trim() || undefined;
+    }
     setBusyId(req.id);
     setError(null);
     try {
-      const comment =
-        status === "rejected"
-          ? window.prompt("Комментарий (необязательно)") ?? undefined
-          : undefined;
       await api.adminUpdateProviderRequestStatus(req.id, {
         status,
         admin_comment: comment ?? null
@@ -1022,6 +1095,8 @@ function ApproveProviderRequestModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useModalDismiss(true, onCancel);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -1078,20 +1153,20 @@ function ApproveProviderRequestModal({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("applications");
+  // Экран определяется адресом в строке браузера, а не внутренним состоянием:
+  // «/» — всегда публичная главная, «/app/...» — кабинет. Раньше залогиненный
+  // пользователь на «/» видел кабинет, из-за чего клик по логотипу и F5
+  // возвращали в «Заявки».
+  const { route, navigate, back, canGoBack } = useRouter();
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [canBootstrap, setCanBootstrap] = useState(false);
-  // viewMode = "catalog" → залогиненный юзер открыл публичный каталог из кабинета.
-  // По умолчанию "dashboard" — после логина показываем кабинет.
-  const [viewMode, setViewMode] = useState<"dashboard" | "catalog">("dashboard");
   const [providers, setProviders] = useState<Provider[]>([]);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -1100,7 +1175,6 @@ export default function App() {
       .then((user) => {
         if (!alive) return;
         setCurrentUser(user);
-        setShowAuth(false);
       })
       .catch(async () => {
         if (!alive) return;
@@ -1118,8 +1192,23 @@ export default function App() {
     };
   }, []);
 
+  // Сессия протухла где угодно (в т.ч. в фоновом поллинге уведомлений) —
+  // сбрасываем пользователя, а охрана маршрутов ниже уведёт на вход. Без этого
+  // кабинет оставался открытым и молча сыпал ошибками на каждое действие.
   useEffect(() => {
-    if (!currentUser) {
+    function handleExpired() {
+      setCurrentUser(null);
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired);
+  }, []);
+
+  // Справочники нужны только админской части кабинета — на публичной главной
+  // залогиненного сотрудника их тянуть незачем.
+  const needsStaffData = route.name === "cabinet";
+
+  useEffect(() => {
+    if (!currentUser || !needsStaffData) {
       setLoading(false);
       return;
     }
@@ -1149,31 +1238,83 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [currentUser, refreshKey]);
+  }, [currentUser, needsStaffData, refreshKey]);
 
-  const navItems =
-    currentUser?.role === "admin"
-      ? [
-          ...baseNavItems,
-          adminProviderRequestsNavItem,
-          adminAddressModerationNavItem,
-          adminAddressServicesNavItem,
-          adminAddressChatsNavItem,
-          adminReviewModerationNavItem,
-          adminPhotosNavItem,
-          adminNavItem
-        ]
-      : baseNavItems;
+  const navItems = useMemo(
+    () =>
+      currentUser?.role === "admin"
+        ? [
+            ...baseNavItems,
+            adminProviderRequestsNavItem,
+            adminAddressModerationNavItem,
+            adminAddressServicesNavItem,
+            adminAddressChatsNavItem,
+            adminReviewModerationNavItem,
+            adminPhotosNavItem,
+            adminNavItem
+          ]
+        : baseNavItems,
+    [currentUser?.role]
+  );
+
+  // Разделы кабинета = сегменты URL /app/<section>. Список зависит от роли:
+  // чужой раздел в адресе не должен открывать чужой экран.
+  const sections = useMemo<string[]>(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === "client") return [...CLIENT_SECTIONS];
+    if (currentUser.role === "owner") return [...OWNER_SECTIONS];
+    return navItems.map((item) => item.id);
+  }, [currentUser, navItems]);
+
+  const section =
+    (route.name === "cabinet" ? resolveSection(route.section, sections) : null) ||
+    sections[0] ||
+    "applications";
+  const selectedId = route.name === "cabinet" ? route.id : null;
+  const view = section as View;
   const selectedTitle = navItems.find((item) => item.id === view)?.label || "Сервис";
+
+  const goHome = useCallback(() => navigate({ name: "home" }), [navigate]);
+  const openCabinet = useCallback(
+    (nextSection: string | null = null, id: string | null = null) =>
+      navigate({ name: "cabinet", section: nextSection, id }),
+    [navigate]
+  );
+  /** Выбор карточки внутри раздела — это не «переход», историю не засоряем. */
+  const selectInSection = useCallback(
+    (id: string | null) => navigate({ name: "cabinet", section, id }, { replace: true }),
+    [navigate, section]
+  );
+
+  // Охрана маршрутов: неавторизованного — на вход (с запоминанием куда он шёл),
+  // авторизованного со страницы входа — туда, куда он собирался.
+  useEffect(() => {
+    if (!authChecked) return;
+    if (route.name === "cabinet") {
+      if (!currentUser) {
+        navigate({ name: "login", next: routeToPath(route) }, { replace: true });
+      } else if (route.section && route.section !== section) {
+        // Раздел не существует у этой роли (или это синоним) — нормализуем URL.
+        navigate({ name: "cabinet", section, id: route.id }, { replace: true });
+      }
+      return;
+    }
+    if (route.name === "login" && currentUser) {
+      const target = route.next ? parsePath(route.next) : null;
+      navigate(
+        target && target.name !== "login" ? target : { name: "cabinet", section: null, id: null },
+        { replace: true }
+      );
+    }
+  }, [authChecked, route, currentUser, section, navigate]);
 
   async function handleLogout() {
     await api.logout().catch(() => undefined);
     setCurrentUser(null);
-    setShowAuth(false);
-    setViewMode("dashboard");
     setProviders([]);
     setAddresses([]);
     setApplications([]);
+    navigate({ name: "home" }, { replace: true });
   }
 
   if (!authChecked) {
@@ -1184,46 +1325,74 @@ export default function App() {
     );
   }
 
-  if (!currentUser) {
-    if (showAuth) {
-      return (
-        <AuthView
-          canBootstrap={canBootstrap}
-          onAuthenticated={(user) => {
-            setCurrentUser(user);
-            setShowAuth(false);
-          }}
-          onBack={() => setShowAuth(false)}
-        />
-      );
-    }
-
+  // Приглашение принимаем на любом состоянии сессии: иначе ссылка из письма,
+  // открытая в браузере с чужим активным входом, молча терялась.
+  if (route.name === "invite") {
     return (
-      <PublicCatalog
+      <AuthView
         canBootstrap={canBootstrap}
-        currentUser={currentUser}
-        onAuthenticated={(user) => setCurrentUser(user)}
-        onLoginClick={() => {
-          // Запомнить, что юзер был на каталоге, — чтобы после логина
-          // вернуться сюда (а не в кабинет). Используется auto-open чата.
-          setViewMode("catalog");
-          setShowAuth(true);
+        initialToken={route.token}
+        onAuthenticated={(user) => {
+          setCurrentUser(user);
+          navigate({ name: "cabinet", section: null, id: null }, { replace: true });
         }}
-        onOpenDashboard={() => setViewMode("dashboard")}
+        onHome={goHome}
+        onBack={back}
+        canGoBack={canGoBack}
       />
     );
   }
 
-  // Авторизованный пользователь явно открыл публичный каталог.
-  if (viewMode === "catalog") {
+  if (route.name === "login") {
+    // Уже авторизован — редирект отработает в эффекте выше.
+    if (currentUser) {
+      return (
+        <div className="auth-shell">
+          <LoadingRows />
+        </div>
+      );
+    }
+    return (
+      <AuthView
+        canBootstrap={canBootstrap}
+        onAuthenticated={(user) => setCurrentUser(user)}
+        onHome={goHome}
+        onBack={back}
+        canGoBack={canGoBack}
+      />
+    );
+  }
+
+  if (route.name !== "cabinet") {
+    // «/» и «/address/<id>» — публичная главная, одинаково для гостя и для
+    // залогиненного. Это и есть починка «логотип уводит в Заявки».
     return (
       <PublicCatalog
         canBootstrap={canBootstrap}
         currentUser={currentUser}
         onAuthenticated={(user) => setCurrentUser(user)}
-        onLoginClick={() => setShowAuth(true)}
-        onOpenDashboard={() => setViewMode("dashboard")}
+        onLoginClick={() => navigate({ name: "login", next: routeToPath(route) })}
+        onOpenDashboard={() => openCabinet()}
+        openAddressId={route.name === "address" ? route.id : null}
+        onOpenAddress={(id) => {
+          if (id) {
+            navigate({ name: "address", id });
+          } else if (canGoBack) {
+            back();
+          } else {
+            navigate({ name: "home" }, { replace: true });
+          }
+        }}
       />
+    );
+  }
+
+  // Кабинет: без сессии редирект на вход отработает в эффекте выше.
+  if (!currentUser) {
+    return (
+      <div className="auth-shell">
+        <LoadingRows />
+      </div>
     );
   }
 
@@ -1231,8 +1400,14 @@ export default function App() {
     return (
       <ClientDashboardView
         user={currentUser}
+        view={section as (typeof CLIENT_SECTIONS)[number]}
+        onView={(next, id) => openCabinet(next, id ?? null)}
+        selectedId={selectedId}
+        onSelect={selectInSection}
         onLogout={handleLogout}
-        onOpenCatalog={() => setViewMode("catalog")}
+        onOpenCatalog={goHome}
+        onBack={back}
+        canGoBack={canGoBack}
       />
     );
   }
@@ -1241,8 +1416,14 @@ export default function App() {
     return (
       <OwnerDashboardView
         user={currentUser}
+        view={section as (typeof OWNER_SECTIONS)[number]}
+        onView={(next, id) => openCabinet(next, id ?? null)}
+        selectedId={selectedId}
+        onSelect={selectInSection}
         onLogout={handleLogout}
-        onOpenCatalog={() => setViewMode("catalog")}
+        onOpenCatalog={goHome}
+        onBack={back}
+        canGoBack={canGoBack}
       />
     );
   }
@@ -1250,19 +1431,19 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
+        <button className="brand brand--link" onClick={goHome} type="button" title="На главную">
           <div className="brand-mark">UR</div>
           <div>
             <strong>uradres.net</strong>
             <span>договоры и гарантийки</span>
           </div>
-        </div>
+        </button>
 
         <nav className="nav">
           <button
             className="nav-item"
             type="button"
-            onClick={() => setViewMode("catalog")}
+            onClick={goHome}
             title="Открыть публичный каталог"
           >
             <Home size={18} strokeWidth={1.8} />
@@ -1274,7 +1455,7 @@ export default function App() {
               <button
                 className={view === item.id ? "nav-item active" : "nav-item"}
                 key={item.id}
-                onClick={() => setView(item.id)}
+                onClick={() => openCabinet(item.id)}
               >
                 <Icon size={18} strokeWidth={1.8} />
                 <span>{item.label}</span>
@@ -1295,6 +1476,7 @@ export default function App() {
       <main className="workspace">
         <header className="topbar">
           <div>
+            <NavCrumbs canGoBack={canGoBack} onBack={back} onHome={goHome} />
             <span className="eyebrow">Рабочая область</span>
             <h1>{selectedTitle}</h1>
           </div>
@@ -1303,12 +1485,12 @@ export default function App() {
               refreshKey={refreshKey}
               onNavigate={(n) => {
                 if (n.link_type === "application" && n.link_id) {
-                  setView("applications");
+                  openCabinet("applications");
                   // Админский список заявок сам управляет selected — внешнего
                   // пробрасывания selected пока нет; пользователь увидит список
                   // и сможет найти нужную. Линк хотя бы переключит раздел.
                 } else if (n.link_type === "chat") {
-                  setView("address-chats");
+                  openCabinet("address-chats");
                 }
               }}
             />
@@ -1339,7 +1521,7 @@ export default function App() {
                 addresses={addresses}
                 onCreated={() => {
                   setRefreshKey((value) => value + 1);
-                  setView("applications");
+                  openCabinet("applications");
                 }}
               />
             )}
@@ -1529,20 +1711,31 @@ const paymentStatusLabels: Record<string, string> = {
   refunded: "возвращён"
 };
 
-type ClientCabinetView = "applications" | "chats";
+type ClientCabinetView = (typeof CLIENT_SECTIONS)[number];
 
 function ClientDashboardView({
   user,
+  view,
+  onView,
+  selectedId,
+  onSelect,
   onLogout,
   onOpenCatalog,
+  onBack,
+  canGoBack,
 }: {
   user: CurrentUser;
+  /** Раздел и выбранная заявка приходят из URL — F5 их больше не сбрасывает. */
+  view: ClientCabinetView;
+  onView: (view: ClientCabinetView, id?: string | null) => void;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
   onLogout: () => void;
   onOpenCatalog: () => void;
+  onBack: () => void;
+  canGoBack: boolean;
 }) {
-  const [view, setView] = useState<ClientCabinetView>("applications");
   const [applications, setApplications] = useState<ClientApplication[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1557,10 +1750,11 @@ function ClientDashboardView({
       .then((result) => {
         if (!alive) return;
         setApplications(result);
-        setSelectedId((current) => {
-          if (current && result.some((application) => application.id === current)) return current;
-          return result[0]?.id || null;
-        });
+        // Заявки из URL может не быть в списке (чужая ссылка, удалённая заявка) —
+        // тогда мягко переключаемся на первую доступную.
+        if (!selectedId || !result.some((application) => application.id === selectedId)) {
+          onSelect(result[0]?.id || null);
+        }
       })
       .catch((err: Error) => {
         if (alive) setError(err.message);
@@ -1569,6 +1763,9 @@ function ClientDashboardView({
     return () => {
       alive = false;
     };
+    // selectedId намеренно не в зависимостях: список перезагружается только по
+    // refreshKey, иначе смена выбранной заявки дёргала бы сеть.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
   const selectedApplication = useMemo(
@@ -1579,13 +1776,13 @@ function ClientDashboardView({
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
+        <button className="brand brand--link" onClick={onOpenCatalog} type="button" title="На главную">
           <div className="brand-mark">UR</div>
           <div>
             <strong>Личный кабинет</strong>
             <span>клиент</span>
           </div>
-        </div>
+        </button>
         <nav className="nav">
           <button type="button" className="nav-item" onClick={onOpenCatalog} title="Открыть публичный каталог">
             <Home size={18} strokeWidth={1.8} />
@@ -1594,7 +1791,7 @@ function ClientDashboardView({
           <button
             type="button"
             className={view === "applications" ? "nav-item active" : "nav-item"}
-            onClick={() => setView("applications")}
+            onClick={() => onView("applications")}
           >
             <FolderOpen size={18} strokeWidth={1.8} />
             <span>Заявки</span>
@@ -1602,7 +1799,7 @@ function ClientDashboardView({
           <button
             type="button"
             className={view === "chats" ? "nav-item active" : "nav-item"}
-            onClick={() => setView("chats")}
+            onClick={() => onView("chats")}
           >
             <MessageSquare size={18} strokeWidth={1.8} />
             <span>Чаты</span>
@@ -1619,16 +1816,17 @@ function ClientDashboardView({
 
       <main className="client-shell">
         <header className="client-topbar">
-          <div className="brand" style={{ visibility: "hidden" }} />
+          <NavCrumbs canGoBack={canGoBack} onBack={onBack} onHome={onOpenCatalog} />
           <div className="actions">
             <NotificationCenter
               refreshKey={refreshKey}
               onNavigate={(n) => {
                 if (n.link_type === "application" && n.link_id) {
-                  setView("applications");
-                  setSelectedId(n.link_id);
+                  // Раздел и заявка одним переходом: два подряд ушли бы
+                  // в историю двумя записями и второй перетёр бы первый.
+                  onView("applications", n.link_id);
                 } else if (n.link_type === "chat" && n.link_id) {
-                  setView("chats");
+                  onView("chats");
                   setPendingChatId(n.link_id);
                 }
               }}
@@ -1664,7 +1862,7 @@ function ClientDashboardView({
               <button
                 className={application.id === selectedApplication?.id ? "client-application active" : "client-application"}
                 key={application.id}
-                onClick={() => setSelectedId(application.id)}
+                onClick={() => onSelect(application.id)}
                 type="button"
               >
                 <span className={`status ${application.status}`}>
@@ -1772,21 +1970,32 @@ function ClientDashboardView({
   );
 }
 
-type OwnerCabinetView = "applications" | "addresses" | "chats";
+type OwnerCabinetView = (typeof OWNER_SECTIONS)[number];
 
 function OwnerDashboardView({
   user,
+  view,
+  onView,
+  selectedId,
+  onSelect,
   onLogout,
   onOpenCatalog,
+  onBack,
+  canGoBack,
 }: {
   user: CurrentUser;
+  /** Раздел и выбранная заявка приходят из URL — F5 их больше не сбрасывает. */
+  view: OwnerCabinetView;
+  onView: (view: OwnerCabinetView, id?: string | null) => void;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
   onLogout: () => void;
   onOpenCatalog: () => void;
+  onBack: () => void;
+  canGoBack: boolean;
 }) {
-  const [view, setView] = useState<OwnerCabinetView>("applications");
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<OwnerDashboard | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -1814,10 +2023,10 @@ function OwnerDashboardView({
       .then((result) => {
         if (!alive) return;
         setDashboard(result);
-        setSelectedId((current) => {
-          if (current && result.applications.some((application) => application.id === current)) return current;
-          return result.applications[0]?.id || null;
-        });
+        // Заявки из URL может не быть в списке — тогда берём первую доступную.
+        if (!selectedId || !result.applications.some((application) => application.id === selectedId)) {
+          onSelect(result.applications[0]?.id || null);
+        }
       })
       .catch((err: Error) => {
         if (alive) setError(err.message);
@@ -1826,6 +2035,9 @@ function OwnerDashboardView({
     return () => {
       alive = false;
     };
+    // selectedId намеренно не в зависимостях — иначе смена выбранной заявки
+    // перезапрашивала бы весь дашборд.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
   const applications = dashboard?.applications || [];
@@ -1903,13 +2115,13 @@ function OwnerDashboardView({
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
+        <button className="brand brand--link" onClick={onOpenCatalog} type="button" title="На главную">
           <div className="brand-mark">UR</div>
           <div>
             <strong>Кабинет</strong>
             <span>исполнитель</span>
           </div>
-        </div>
+        </button>
         <nav className="nav">
           <button type="button" className="nav-item" onClick={onOpenCatalog} title="Открыть публичный каталог">
             <Home size={18} strokeWidth={1.8} />
@@ -1918,7 +2130,7 @@ function OwnerDashboardView({
           <button
             type="button"
             className={view === "applications" ? "nav-item active" : "nav-item"}
-            onClick={() => setView("applications")}
+            onClick={() => onView("applications")}
           >
             <FolderOpen size={18} strokeWidth={1.8} />
             <span>Заявки</span>
@@ -1926,7 +2138,7 @@ function OwnerDashboardView({
           <button
             type="button"
             className={view === "addresses" ? "nav-item active" : "nav-item"}
-            onClick={() => setView("addresses")}
+            onClick={() => onView("addresses")}
           >
             <Home size={18} strokeWidth={1.8} />
             <span>Адреса</span>
@@ -1934,7 +2146,7 @@ function OwnerDashboardView({
           <button
             type="button"
             className={view === "chats" ? "nav-item active" : "nav-item"}
-            onClick={() => setView("chats")}
+            onClick={() => onView("chats")}
           >
             <MessageSquare size={18} strokeWidth={1.8} />
             <span>Чаты</span>
@@ -1951,16 +2163,17 @@ function OwnerDashboardView({
 
       <main className="owner-shell">
         <header className="owner-topbar">
-          <div className="brand" style={{ visibility: "hidden" }} />
+          <NavCrumbs canGoBack={canGoBack} onBack={onBack} onHome={onOpenCatalog} />
           <div className="actions">
             <NotificationCenter
               refreshKey={refreshKey}
               onNavigate={(n) => {
                 if (n.link_type === "application" && n.link_id) {
-                  setView("applications");
-                  setSelectedId(n.link_id);
+                  // Раздел и заявка одним переходом — иначе вторая навигация
+                  // затирает первую.
+                  onView("applications", n.link_id);
                 } else if (n.link_type === "chat" && n.link_id) {
-                  setView("chats");
+                  onView("chats");
                   setPendingChatId(n.link_id);
                 }
               }}
@@ -2074,7 +2287,7 @@ function OwnerDashboardView({
                   <button
                     className={application.id === selectedApplication?.id ? "owner-application active" : "owner-application"}
                     key={application.id}
-                    onClick={() => setSelectedId(application.id)}
+                    onClick={() => onSelect(application.id)}
                     type="button"
                   >
                     <span className={`status ${application.status}`}>
@@ -2212,7 +2425,7 @@ function OwnerDashboardView({
                   ) : documents.length ? (
                     <div className="owner-document-list">
                       {documents.map((document) => (
-                        <a className="owner-document-item" href={document.download_url} key={document.id}>
+                        <a className="owner-document-item" href={apiDownloadUrl(document.download_url)} key={document.id}>
                           <FileText size={17} />
                           <span>
                             <strong>{document.original_filename}</strong>
@@ -2304,6 +2517,8 @@ function AddressPhotosModal({
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
+
+  useModalDismiss(true, onClose);
   const [refreshKey, setRefreshKey] = useState(0);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
 
@@ -2758,6 +2973,8 @@ function DocumentModerationPanel({
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
 
+  useModalDismiss(!!application, onClose);
+
   useEffect(() => {
     if (!application) return;
     let alive = true;
@@ -2839,7 +3056,7 @@ function DocumentModerationPanel({
               {documents.length ? (
                 <div className="owner-document-list">
                   {documents.map((document) => (
-                    <a className="owner-document-item" href={document.download_url} key={document.id}>
+                    <a className="owner-document-item" href={apiDownloadUrl(document.download_url)} key={document.id}>
                       <FileText size={17} />
                       <span>
                         <strong>{document.original_filename}</strong>
@@ -2908,6 +3125,8 @@ function PromoteContractPanel({
   const [contactPhone, setContactPhone] = useState(formatRuPhone(application?.contact_phone || ""));
   const [contactEmail, setContactEmail] = useState(application?.contact_email || "");
   const [busy, setBusy] = useState(false);
+
+  useModalDismiss(!!application, null);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
@@ -3397,6 +3616,8 @@ function PaymentDocumentsPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useModalDismiss(true, null);
+
   function load() {
     setLoading(true);
     setError(null);
@@ -3479,7 +3700,7 @@ function PaymentDocumentsPanel({
                     {document.comment ? ` · ${document.comment}` : ""}
                   </span>
                 </div>
-                <a className="download-link" href={paymentDocumentDownloadUrl(document.download_url)}>
+                <a className="download-link" href={apiDownloadUrl(document.download_url)}>
                   <Download size={16} /> Скачать
                 </a>
               </div>

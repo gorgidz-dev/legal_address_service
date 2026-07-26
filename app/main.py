@@ -123,6 +123,15 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path == f"{API_PREFIX}/marketplace/geo" and method == "GET":
         return True
+    # Одна карточка каталога по прямой ссылке: /marketplace/addresses/{id}.
+    # Ровно один сегмент после addresses/ — вложенные пути (photos, services,
+    # chats) сюда не попадают и остаются под авторизацией.
+    if (
+        path.startswith(f"{API_PREFIX}/marketplace/addresses/")
+        and method == "GET"
+        and "/" not in path[len(f"{API_PREFIX}/marketplace/addresses/"):]
+    ):
+        return True
     # Публичная лента отзывов по адресу: /marketplace/addresses/{id}/reviews
     if (
         path.startswith(f"{API_PREFIX}/marketplace/addresses/")

@@ -8,6 +8,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { api } from "./api";
+import { useModalDismiss } from "./useModalDismiss";
 import type { AddressServiceAdmin } from "./types";
 
 type Props = {
@@ -38,6 +39,8 @@ export function OwnerAddressEditor({
   onClose,
   onSaved
 }: Props) {
+  useModalDismiss(true, onClose);
+
   // --- Описание ---
   const [description, setDescription] = useState(initialDescription || "");
   const [descBusy, setDescBusy] = useState(false);

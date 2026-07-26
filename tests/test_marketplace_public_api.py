@@ -20,6 +20,23 @@ def test_marketplace_public_paths_do_not_require_auth() -> None:
     assert not _is_public_path("/api/v1/marketplace/provider-requests", "GET")
 
 
+def test_single_address_is_public_but_nested_paths_are_not() -> None:
+    """Прямая ссылка /address/<id> должна открываться без входа.
+
+    Публичен ровно один сегмент после addresses/ — вложенные ресурсы (фото,
+    услуги, чужие отзывы) остаются под авторизацией.
+    """
+    address_id = "0e2a3d4c-1111-2222-3333-444455556666"
+    assert _is_public_path(f"/api/v1/marketplace/addresses/{address_id}", "GET")
+    # Изменять адрес анонимно нельзя.
+    assert not _is_public_path(f"/api/v1/marketplace/addresses/{address_id}", "PATCH")
+    # Вложенные пути — только отзывы (по отдельному правилу), остальное закрыто.
+    assert _is_public_path(f"/api/v1/marketplace/addresses/{address_id}/reviews", "GET")
+    assert not _is_public_path(f"/api/v1/marketplace/addresses/{address_id}/photos", "GET")
+    assert not _is_public_path(f"/api/v1/marketplace/addresses/{address_id}/services", "GET")
+    assert not _is_public_path(f"/api/v1/marketplace/addresses/{address_id}/reviews/mine", "GET")
+
+
 def test_public_address_from_row_uses_selected_term_price() -> None:
     address_id = uuid4()
     provider_id = uuid4()

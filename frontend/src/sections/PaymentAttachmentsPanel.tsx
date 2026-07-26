@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Download, FileText, Upload } from "lucide-react";
-import { api, ApiError, paymentDocumentDownloadUrl } from "../api";
+import { api, ApiError, apiDownloadUrl } from "../api";
 import type {
   Payment,
   PaymentAttachment,
@@ -109,7 +109,7 @@ export function PaymentAttachmentsPanel({
           {invoice ? (
             <a
               className="ds-payatt__file"
-              href={paymentDocumentDownloadUrl(invoice.download_url)}
+              href={apiDownloadUrl(invoice.download_url)}
               target="_blank"
               rel="noreferrer"
             >
@@ -143,7 +143,7 @@ export function PaymentAttachmentsPanel({
           {paymentOrder ? (
             <a
               className="ds-payatt__file"
-              href={paymentDocumentDownloadUrl(paymentOrder.download_url)}
+              href={apiDownloadUrl(paymentOrder.download_url)}
               target="_blank"
               rel="noreferrer"
             >
