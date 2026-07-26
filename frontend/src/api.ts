@@ -1,4 +1,5 @@
 import type {
+  AdminUser,
   Address,
   AddressPublicationStatus,
   ActiveClientRegistryItem,
@@ -152,6 +153,12 @@ export const api = {
   logoutAll: () => request<void>("/auth/logout-all", { method: "POST" }),
   listSessions: () => request<UserSessionInfo[]>("/auth/sessions"),
   refreshSession: () => request<{ user: CurrentUser }>("/auth/refresh", { method: "POST" }),
+  adminUsers: () => request<AdminUser[]>("/auth/users"),
+  adminSetUserActive: (userId: string, isActive: boolean) =>
+    request<AdminUser>(`/auth/users/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_active: isActive })
+    }),
   invitations: () => request<Invitation[]>("/auth/invitations"),
   createInvitation: (payload: unknown) =>
     request<InvitationCreateResult>("/auth/invitations", { method: "POST", body: JSON.stringify(payload) }),

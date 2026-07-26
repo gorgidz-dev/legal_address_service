@@ -160,7 +160,7 @@ legend.ds-configurator__label {
   padding: 0 16px;
   border: 1px solid var(--ds-indigo-500);
   border-radius: var(--ds-radius-lg);
-  background: var(--ds-indigo-50, #eef0fb);
+  background: var(--ds-indigo-50);
   color: var(--ds-indigo-700, #3d3da8);
   font: inherit;
   font-size: 14px;
@@ -1032,4 +1032,108 @@ legend.ds-configurator__label {
   font-weight: 600;
   color: var(--ds-indigo-950);
   margin: 0;
+}
+
+/* =====================================================================
+   КАК ЭТО РАБОТАЕТ (#how)
+   ===================================================================== */
+.ds-steps {
+  max-width: var(--ds-page-max-width);
+  margin: var(--ds-space-20) auto;
+  width: 100%;
+  box-sizing: border-box;
+  /* Якорь из верхнего меню: фиксированной шапки нет, но отступ спасает
+     от «заголовок вплотную к краю» после перехода. */
+  scroll-margin-top: var(--ds-space-8);
+}
+.ds-steps__inner {
+  padding: 0 var(--ds-page-pad-x);
+}
+.ds-steps__intro {
+  text-align: center;
+  margin-bottom: var(--ds-space-8);
+}
+.ds-steps__eyebrow {
+  display: inline-block;
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-indigo-600);
+  margin-bottom: var(--ds-space-2);
+}
+.ds-steps__title {
+  font-size: var(--ds-text-display-md);
+  font-weight: 700;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-tight);
+  margin: 0;
+}
+.ds-steps__sub {
+  max-width: 640px;
+  margin: var(--ds-space-3) auto 0;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-md);
+  line-height: 1.55;
+}
+.ds-steps__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ds-space-4);
+  counter-reset: step;
+}
+.ds-steps__item {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-xl);
+  padding: var(--ds-space-6);
+  box-shadow: var(--ds-shadow-sm);
+}
+.ds-steps__num {
+  position: absolute;
+  top: var(--ds-space-5);
+  right: var(--ds-space-6);
+  font-family: var(--ds-font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ds-slate-200);
+}
+.ds-steps__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-600);
+  margin-bottom: var(--ds-space-4);
+}
+.ds-steps__item h3 {
+  margin: 0 0 var(--ds-space-2);
+  font-size: var(--ds-text-heading-sm);
+  font-weight: 650;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-snug);
+}
+.ds-steps__item p {
+  margin: 0;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+  line-height: 1.55;
+}
+
+@media (min-width: 640px) {
+  .ds-steps__list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1024px) {
+  .ds-steps__list {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }

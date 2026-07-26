@@ -21,6 +21,8 @@ type Props = {
   limit?: number | null;
   /** Если задано — автоматически открыть указанный chat_id при появлении в списке. */
   autoOpenChatId?: string | null;
+  /** Внешний ключ обновления — кнопка «Обновить» в топбаре кабинета. */
+  refreshToken?: number;
   /** Колбэк после авто-открытия (родитель сбрасывает pending). */
   onChatOpened?: () => void;
 };
@@ -38,7 +40,13 @@ function formatTime(value: string | null): string {
   });
 }
 
-export function ChatsListPanel({ currentUser, limit = null, autoOpenChatId, onChatOpened }: Props) {
+export function ChatsListPanel({
+  currentUser,
+  limit = null,
+  refreshToken = 0,
+  autoOpenChatId,
+  onChatOpened
+}: Props) {
   const [items, setItems] = useState<AddressChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +74,7 @@ export function ChatsListPanel({ currentUser, limit = null, autoOpenChatId, onCh
     return () => {
       alive = false;
     };
-  }, [refreshKey, limit]);
+  }, [refreshKey, refreshToken, limit]);
 
   // Авто-открытие чата по id из уведомления.
   useEffect(() => {

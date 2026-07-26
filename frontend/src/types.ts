@@ -75,6 +75,17 @@ export interface Invitation {
   created_by: string | null;
 }
 
+/** Учётная запись в админском разделе «Доступ». */
+export interface AdminUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+  provider_id: string | null;
+  created_at: string;
+}
+
 export interface InvitationCreateResult {
   id: string;
   email: string;

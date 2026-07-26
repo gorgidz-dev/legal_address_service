@@ -110,3 +110,21 @@ class InvitationRead(BaseModel):
     accepted_at: Optional[datetime]
     created_at: datetime
     created_by: Optional[UUID]
+
+
+class UserAdminRead(BaseModel):
+    """Пользователь в админском списке доступа."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: EmailStr
+    full_name: str
+    role: UserRole
+    is_active: bool
+    provider_id: Optional[UUID] = None
+    created_at: datetime
+
+
+class UserActiveUpdate(BaseModel):
+    is_active: bool

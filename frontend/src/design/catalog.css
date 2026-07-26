@@ -104,8 +104,64 @@
   gap: var(--ds-space-2);
   align-items: center;
 }
+/* Бургер: только на узких экранах, где горизонтальное меню не помещается. */
+.ds-topnav__burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-md);
+  background: #ffffff;
+  color: var(--ds-indigo-950);
+  cursor: pointer;
+}
+.ds-topnav__burger:hover {
+  border-color: var(--ds-indigo-600);
+  color: var(--ds-indigo-600);
+}
+
+/* Выпадающая панель с теми же пунктами меню. */
+.ds-topnav__mobile {
+  display: none;
+  flex-direction: column;
+  gap: var(--ds-space-1);
+  padding: var(--ds-space-2) var(--ds-page-pad-x) var(--ds-space-4);
+  border-top: 1px solid var(--ds-border-soft);
+  background: #ffffff;
+}
+.ds-topnav__mobile a {
+  padding: var(--ds-space-3) 0;
+  color: var(--ds-indigo-950);
+  font-size: var(--ds-text-heading-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+.ds-topnav__mobile a:active {
+  color: var(--ds-indigo-600);
+}
+
 @media (max-width: 1023px) {
   .ds-topnav__links {
+    display: none;
+  }
+  .ds-topnav__burger {
+    display: inline-flex;
+    /* Прижимаем бургер к правой группе кнопок: без этого space-between
+       оставляет его висеть посреди шапки. */
+    margin-left: auto;
+  }
+  .ds-topnav__mobile {
+    display: flex;
+  }
+}
+
+/* На узком телефоне «Подобрать адрес» не помещается рядом с «Войти» —
+   этот CTA дублируется в конфигураторе прямо под первым экраном. */
+@media (max-width: 560px) {
+  .ds-topnav__actions .ds-btn--primary {
     display: none;
   }
 }
