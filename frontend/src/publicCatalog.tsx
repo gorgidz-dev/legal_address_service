@@ -814,9 +814,15 @@ export default function PublicCatalog({
     return set.size;
   }, [addresses]);
 
-  /* Подсказки городов вынимались регуляркой из строки адреса и жили только в
-     datalist свободного поля «Город». Поле убрано — города берутся из
-     справочника ИФНС в каскаде, где они настоящие, а не выкушенные из текста. */
+  /** Подсказки для свободного поля «Город» — вынимаются из строк адресов. */
+  const cities = useMemo(() => {
+    const values = new Set<string>(["Москва"]);
+    for (const address of addresses) {
+      const match = address.full_address.match(/г\.\s*([^,]+)/i);
+      if (match?.[1]) values.add(match[1].trim());
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, "ru"));
+  }, [addresses]);
 
   const hasActiveFilters = Boolean(
     filters.query.trim() ||
@@ -1093,16 +1099,52 @@ export default function PublicCatalog({
       </motion.section>
 
       {/*
-        Раньше здесь стоял конфигуратор — вторая форма про то же, что и
-        расширенный поиск: город, срок, цена и корреспонденция задавались в
-        двух местах одной страницы. Теперь на странице ряд пресетов, а полная
-        форма живёт в модалке «Подобрать адрес» (кнопка справа и в шапке).
+        Форма подбора на странице. Дизайн-пакет предлагал убрать её и оставить
+        только пресеты, но по ней ищут — вернули по просьбе владельца.
+        Пресеты ниже остаются как быстрые ярлыки к тем же фильтрам.
 
-        В ряду только те пресеты, которые действительно работают. «Готово к
+        В ряду пресетов только то, что действительно работает. «Готово к
         регистрации» и «Рядом с метро» из макета не выведены: первого нет в
         API (клиентская фильтрация разошлась бы со счётчиком и пагинацией),
         для второго нет данных о станциях ни в модели, ни в выдаче.
       */}
+      <HomeConfigurator
+        filters={{
+          query: filters.query,
+          region: filters.region,
+          geoCity: filters.geoCity,
+          fnsOfficeId: filters.fnsOfficeId,
+          priceFrom: filters.priceFrom,
+          priceTo: filters.priceTo,
+          withCorr: filters.withCorr,
+        }}
+        onChange={(next) =>
+          setFilters({
+            ...filters,
+            ...next,
+            // Ручной ввод «цена до» отменяет пресет: иначе поле показывало бы
+            // одно число, а выдача фильтровалась по другому.
+            ...(next.priceTo !== undefined && next.priceTo !== filters.priceTo
+              ? { budgetPreset: "" as const }
+              : {}),
+          })
+        }
+        termMonths={11}
+        onTermChange={() => {
+          /* MVP: срок выбирается в карточке адреса — там же меняется цена. */
+        }}
+        geoTree={geoTree}
+        totalCount={totalCount}
+        loading={loading}
+        onShowResults={() => {
+          document
+            .getElementById("catalog-grid")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+        onReset={resetFilters}
+        onOpenMap={() => setMapOpen(true)}
+      />
+
       <div className="ds-quickchips ds-quickchips--standalone">
         <span className="ds-quickchips__label">Подбор</span>
         <button
@@ -1159,20 +1201,8 @@ export default function PublicCatalog({
             Сбросить
           </button>
         ) : null}
-        <button
-          className="ds-btn ds-btn--secondary ds-btn--sm"
-          onClick={() => setAdvancedOpen(true)}
-          type="button"
-        >
-          <Search size={13} /> Подобрать адрес
-        </button>
-        <button
-          className="ds-btn ds-btn--secondary ds-btn--sm"
-          onClick={() => setMapOpen(true)}
-          type="button"
-        >
-          На карте
-        </button>
+        {/* Кнопок «Подобрать адрес» и «На карте» здесь нет: обе есть в форме
+            подбора выше и в верхнем меню — третий раз подряд одно и то же. */}
       </div>
 
       <AddressMapModal
@@ -2098,17 +2128,23 @@ export default function PublicCatalog({
               Срок и подключение корреспонденции выбираются прямо в карточке адреса —
               цена обновится автоматически.
             </p>
-            {/*
-              Свободного поля «Город» здесь больше нет: город выбирается ниже,
-              в каскаде «Регион → Город → ИФНС», где значения приходят из
-              справочника инспекций, а не набираются руками. Два поля про город
-              в одном окне — ровно та двойственность, ради которой конфигуратор
-              и переехал со страницы. Параметр city из старых ссылок продолжает
-              работать и снимается чипом в блоке активных фильтров.
-            */}
             <div className="form-grid">
               <label className="field">
-                <span>ИФНС по номеру</span>
+                <span>Город</span>
+                <input
+                  list="ds-public-cities-modal"
+                  value={filters.city}
+                  onChange={(event) => setFilters({ ...filters, city: event.target.value })}
+                  placeholder="Москва"
+                />
+                <datalist id="ds-public-cities-modal">
+                  {cities.map((city) => (
+                    <option key={city} value={city} />
+                  ))}
+                </datalist>
+              </label>
+              <label className="field">
+                <span>ИФНС</span>
                 <select
                   value={filters.fnsNumber}
                   onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
@@ -2136,55 +2172,6 @@ export default function PublicCatalog({
                   placeholder="часть адреса, например «Тверская»"
                 />
               </label>
-            </div>
-
-            {/*
-              Конфигуратор переехал сюда со страницы. Без него из подбора
-              пропали бы гео-каскад «регион → город → ИФНС», диапазон цены и
-              фильтр корреспонденции — всё это бэкенд поддерживает, а в модалке
-              полей под них не было.
-            */}
-            <div className="ds-configurator-embed">
-              <HomeConfigurator
-                filters={{
-                  query: filters.query,
-                  region: filters.region,
-                  geoCity: filters.geoCity,
-                  fnsOfficeId: filters.fnsOfficeId,
-                  priceFrom: filters.priceFrom,
-                  priceTo: filters.priceTo,
-                  withCorr: filters.withCorr,
-                }}
-                onChange={(next) =>
-                  setFilters({
-                    ...filters,
-                    ...next,
-                    // Ручной ввод «до» отменяет пресет: иначе поле показывало
-                    // бы одно число, а выдача фильтровалась по другому.
-                    ...(next.priceTo !== undefined && next.priceTo !== filters.priceTo
-                      ? { budgetPreset: "" as const }
-                      : {}),
-                  })
-                }
-                termMonths={11}
-                onTermChange={() => {
-                  /* MVP: срок выбирается в карточке адреса — там же меняется цена. */
-                }}
-                geoTree={geoTree}
-                totalCount={totalCount}
-                loading={loading}
-                onShowResults={() => {
-                  setAdvancedOpen(false);
-                  document
-                    .getElementById("catalog-grid")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                onReset={resetFilters}
-                onOpenMap={() => {
-                  setAdvancedOpen(false);
-                  setMapOpen(true);
-                }}
-              />
             </div>
 
             <div
