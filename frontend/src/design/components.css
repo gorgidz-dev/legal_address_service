@@ -12,7 +12,9 @@
   cursor: pointer;
   font-family: inherit;
   font-weight: 600;
-  border-radius: var(--ds-radius-pill);
+  /* Единый радиус с кабинетом: pill остаётся у чипов и бейджей, кнопки — 8px.
+     Раньше на стыке каталога и кабинета было видно два разных языка. */
+  border-radius: var(--ds-radius-md);
   transition:
     background-color var(--ds-motion-fast) var(--ds-ease-snappy),
     border-color var(--ds-motion-fast) var(--ds-ease-snappy),

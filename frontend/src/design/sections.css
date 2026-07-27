@@ -11,17 +11,39 @@
 /* =====================================================================
    КОНФИГУРАТОР
    ===================================================================== */
-/* Все секции главной выровнены по единой контентной колонке (как .ds-hero
-   и грид) — max-width страницы + центрирование. */
+/*
+ * Секции главной выровнены по контентной колонке. Ширина здесь — не та, что у
+ * сетки карточек: страница расширена до 1440, но это сделано ради четвёртой
+ * карточки, а сплошной текст на такой ширине даёт строки под 140 знаков,
+ * которые тяжело читать. Поэтому текстовые секции держим на 1180.
+ */
 .ds-configurator,
 .ds-faq,
 .ds-owners,
 .ds-cases {
-  max-width: var(--ds-page-max-width);
+  max-width: var(--ds-prose-max-width);
   margin-left: auto;
   margin-right: auto;
   width: 100%;
   box-sizing: border-box;
+}
+
+/*
+ * Конфигуратор внутри модалки «Подобрать адрес»: снимаем с него собственную
+ * карточку (фон, рамку, тень, декоративную полосу и внешние отступы), иначе
+ * получается карточка внутри карточки.
+ */
+.ds-configurator-embed .ds-configurator {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.ds-configurator-embed .ds-configurator::before {
+  display: none;
 }
 
 .ds-configurator {
@@ -1011,7 +1033,7 @@ legend.ds-configurator__label {
    КАК ЭТО РАБОТАЕТ (#how)
    ===================================================================== */
 .ds-steps {
-  max-width: var(--ds-page-max-width);
+  max-width: var(--ds-prose-max-width);
   margin: var(--ds-space-20) auto;
   width: 100%;
   box-sizing: border-box;

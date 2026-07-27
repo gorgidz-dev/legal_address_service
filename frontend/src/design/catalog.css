@@ -172,7 +172,55 @@
   max-width: var(--ds-page-max-width);
   margin: 0 auto;
   width: 100%;
+  position: relative;
 }
+
+/*
+ * Фото справа, растворяющееся в фоне страницы. Блок декоративный: маска
+ * съедает его левый край, а на узком экране он скрывается целиком — поэтому
+ * alt пустой и картинка не должна нести смысла, которого нет в тексте.
+ */
+.ds-hero__media {
+  position: absolute;
+  inset: 0 0 0 52%;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to left, #000 30%, rgba(0, 0, 0, 0.35) 62%, transparent 92%);
+  mask-image: linear-gradient(to left, #000 30%, rgba(0, 0, 0, 0.35) 62%, transparent 92%);
+  opacity: 0.9;
+}
+.ds-hero__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ds-hero__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to right,
+    var(--ds-page-bg) 0%,
+    rgba(250, 251, 252, 0.72) 38%,
+    rgba(250, 251, 252, 0) 70%
+  );
+}
+/*
+ * Текст поднимаем над фото. Исключение для самого фото обязательно: в пакете
+ * дизайна правило было записано как `.ds-hero > *`, и с равной специфичностью
+ * оно перебивало position:absolute у .ds-hero__media — фото встало бы в поток
+ * и разорвало шапку.
+ */
+.ds-hero > *:not(.ds-hero__media) {
+  position: relative;
+}
+@media (max-width: 900px) {
+  .ds-hero__media {
+    display: none;
+  }
+}
+
 .ds-hero__h1 {
   font-size: var(--ds-text-display-xl);
   font-weight: 700;
@@ -180,7 +228,8 @@
   line-height: 1.02;
   margin: 0;
   color: var(--ds-indigo-950);
-  max-width: 720px;
+  /* Уже, чем было: на 1440 заголовок в 720px заходил под фото. */
+  max-width: 640px;
 }
 .ds-hero__h1 em {
   font-style: normal;
@@ -264,6 +313,46 @@
   height: 32px;
   padding: 0 12px;
   font-size: 12px;
+}
+/*
+ * Ряд чипов сам по себе, без sticky-обёртки фильтр-бара. Нижний отступ у
+ * .ds-quickchips нулевой — он рассчитан на то, что снизу его закроет
+ * .ds-filterbar-wrap; отдельно стоящему ряду отступ нужен свой, иначе он
+ * слипается со счётчиком результатов.
+ */
+.ds-quickchips--standalone {
+  padding-bottom: var(--ds-space-2);
+  align-items: center;
+}
+/*
+ * На телефоне шесть кнопок переносом занимали четыре строки — 169px над
+ * каталогом. Прокрутка вбок компактнее и не прячет ни одной кнопки; сама
+ * страница вбок при этом не едет. «Подобрать адрес» продублирована в верхнем
+ * меню, поэтому уход её за край не отрезает вход в подбор.
+ */
+@media (max-width: 640px) {
+  .ds-quickchips--standalone {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ds-quickchips--standalone::-webkit-scrollbar {
+    display: none;
+  }
+  .ds-quickchips--standalone > * {
+    flex: 0 0 auto;
+  }
+  .ds-quickchips__label {
+    display: none;
+  }
+}
+.ds-quickchips__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ds-slate-400);
+  margin-right: 2px;
 }
 
 /* ===== Skeleton cards ===== */
@@ -455,8 +544,15 @@
 }
 .ds-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 18px;
+}
+/* На ноутбуках 1366 четвёртая колонка даёт карточки по ~310px — цена и кнопка
+   в них перестают помещаться в строку, поэтому возвращаемся к трём. */
+@media (max-width: 1400px) {
+  .ds-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 @media (max-width: 1023px) {
   .ds-grid {
