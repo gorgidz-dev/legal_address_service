@@ -1532,32 +1532,12 @@ h1 {
   white-space: nowrap;
 }
 
-.status {
-  display: inline-flex;
-  width: max-content;
-  max-width: 100%;
-  padding: 5px 8px;
-  border-radius: var(--lg-radius-pill);
-  border: 1px solid var(--lg-border-meta);
-  background: #f9faf7;
-  color: var(--lg-text-muted);
-  font-size: 12px;
-}
-
-.status.guarantee_issued,
-.status.contract_signed,
-.status.active {
-  border-color: var(--lg-success-border);
-  background: var(--lg-success-bg);
-  color: var(--lg-success-fg);
-}
-
-.status.expired,
-.status.terminated {
-  border-color: var(--lg-danger-border);
-  background: var(--lg-danger-bg);
-  color: #833024;
-}
+/*
+ * Вторая копия правил `.status` удалена вместе с первой (design/app-shell.css).
+ * Эти две копии противоречили друг другу: guarantee_issued и active были здесь
+ * зелёными, а в оверлее синими — выигрывал тот файл, который импортирован
+ * позже. Теперь тон приходит из карты статусов вместе с подписью.
+ */
 
 .download-link {
   display: inline-flex;

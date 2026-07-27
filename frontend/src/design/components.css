@@ -139,25 +139,12 @@
   border-radius: var(--ds-radius-pill);
   background: currentColor;
 }
+/* Единственный живой модификатор: плашка «Новый адрес» на фото в каталоге.
+   Остальные тона теперь у .cab-badge — второй набор модификаторов удалён,
+   чтобы не выбирать между двумя одинаковыми системами. */
 .ds-badge--new {
   background: var(--ds-success-bg);
   color: var(--ds-success-fg);
-}
-.ds-badge--warning {
-  background: var(--ds-warning-bg);
-  color: var(--ds-warning-fg);
-}
-.ds-badge--info {
-  background: var(--ds-info-bg);
-  color: var(--ds-info-fg);
-}
-.ds-badge--neutral {
-  background: var(--ds-neutral-bg);
-  color: var(--ds-neutral-fg);
-}
-.ds-badge--brand {
-  background: var(--ds-brand-bg);
-  color: var(--ds-brand-fg);
 }
 
 /* ===================== Inputs / Select ===================== */

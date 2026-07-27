@@ -273,68 +273,12 @@ h1 {
   box-shadow: 0 0 0 3px var(--ds-indigo-100);
 }
 
-/* === Status badges — семантические цвета === */
-.status {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: var(--ds-radius-pill);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0;
-  background: var(--ds-neutral-bg);
-  color: var(--ds-neutral-fg);
-  border: 1px solid transparent;
-}
-
-/* Финальные позитивные */
-.status.completed,
-.status.paid,
-.status.contract_signed,
-.status.ready_for_client {
-  background: var(--ds-success-bg);
-  color: var(--ds-success-fg);
-}
-
-/* В работе / нейтральные */
-.status.admin_review,
-.status.documents_review,
-.status.documents_preparing,
-.status.documents_uploaded,
-.status.assigned_to_owner,
-.status.accepted_by_owner,
-.status.guarantee_issued,
-.status.awaiting_contract,
-.status.active {
-  background: var(--ds-info-bg);
-  color: var(--ds-info-fg);
-}
-
-/* Ожидание оплаты — индиго brand */
-.status.awaiting_payment,
-.status.draft {
-  background: var(--ds-brand-bg);
-  color: var(--ds-brand-fg);
-}
-
-/* Внимание */
-.status.needs_client_fix,
-.status.documents_revision,
-.status.dispute {
-  background: var(--ds-warning-bg);
-  color: var(--ds-warning-fg);
-}
-
-/* Отрицательные */
-.status.cancelled,
-.status.rejected_by_owner,
-.status.refunded,
-.status.refund_pending,
-.status.expired,
-.status.terminated {
-  background: var(--ds-danger-bg);
-  color: var(--ds-danger-fg);
-}
+/*
+ * Бейджи статусов переехали в src/status.ts + ui/Badge.tsx (.cab-badge).
+ * Здесь их правил больше нет: тон задавался в CSS отдельно от подписи в
+ * App.tsx, из-за чего новый статус попадал в интерфейс без цвета, а часть
+ * значений красилась второй копией этих же правил из styles.css.
+ */
 
 /* === Client dashboard === */
 .client-shell {
@@ -752,13 +696,6 @@ h1 {
     grid-column: 1;
     grid-row: auto;
   }
-}
-
-/* ===================== Notifications ===================== */
-.notification-item .status.chat {
-  background: var(--ds-indigo-50);
-  color: var(--ds-indigo-700);
-  border-color: var(--ds-indigo-200);
 }
 
 /* ===================== Owner address editor ===================== */

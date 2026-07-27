@@ -49,6 +49,8 @@ import {
   EmailVerificationBanner,
   EmailVerificationPage
 } from "./sections/EmailVerification";
+import { statusLabel as statusText, statusMeta } from "./status";
+import { Badge, StatusBadge } from "./ui/Badge";
 import { useModalDismiss } from "./useModalDismiss";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { DownloadLink } from "./DownloadLink";
@@ -190,33 +192,6 @@ const photoModerationStatusLabels: Record<string, string> = {
   pending: "На модерации",
   approved: "Одобрено",
   rejected: "Отклонено"
-};
-
-const statusLabels: Record<string, string> = {
-  draft: "Черновик",
-  guarantee_issued: "Гарантийка выдана",
-  awaiting_contract: "Ожидает договор",
-  contract_signed: "Договор подписан",
-  active: "Активна",
-  expired: "Истекла",
-  terminated: "Расторгнута",
-  awaiting_payment: "Ожидает оплату",
-  paid: "Оплачена",
-  admin_review: "Проверка администратора",
-  needs_client_fix: "Нужны уточнения",
-  assigned_to_owner: "Передана собственнику",
-  accepted_by_owner: "Принята собственником",
-  rejected_by_owner: "Отклонена собственником",
-  documents_preparing: "Готовятся документы",
-  documents_uploaded: "Документы загружены",
-  documents_review: "Проверка документов",
-  documents_revision: "Доработка документов",
-  ready_for_client: "Готова к выдаче",
-  completed: "Завершена",
-  cancelled: "Отменена",
-  dispute: "Спор",
-  refund_pending: "Возврат готовится",
-  refunded: "Возврат выполнен"
 };
 
 const typeLabels: Record<ApplicationType, string> = {
@@ -554,9 +529,9 @@ function NotificationCenter({
             <div className="notification-list">
               {items.map((notification) => {
                 const isChat = notification.link_type === "chat";
-                const statusLabel = notification.application_status
-                  ? statusLabels[notification.application_status] || notification.application_status
-                  : isChat ? "Чат" : "Уведомление";
+                const meta = notification.application_status
+                  ? statusMeta(notification.application_status)
+                  : null;
                 const subtitle = notification.application_title
                   ? `${notification.application_title} · ${formatDateTime(notification.created_at)}`
                   : formatDateTime(notification.created_at);
@@ -567,9 +542,9 @@ function NotificationCenter({
                     onClick={() => handleClick(notification)}
                     type="button"
                   >
-                    <span className={`status ${isChat ? "chat" : notification.application_status || ""}`}>
-                      {statusLabel}
-                    </span>
+                    <Badge tone={meta ? meta.tone : isChat ? "info" : "neutral"}>
+                      {meta ? meta.label : isChat ? "Чат" : "Уведомление"}
+                    </Badge>
                     <strong>{notification.title}</strong>
                     <small>{subtitle}</small>
                     <p>{notification.message}</p>
@@ -885,9 +860,13 @@ function UsersAccessPanel({ currentUserId }: { currentUserId: string }) {
                   </span>
                 </div>
                 <div className="row-actions">
-                  <span className={user.is_active ? "status active" : "status archived"}>
+                  {/* Тон задаётся явно: это активность УЧЁТНОЙ ЗАПИСИ, а не
+                      статус заявки. Раньше класс «status active» случайно
+                      совпадал с ApplicationStatus.active и красился его
+                      правилом. */}
+                  <Badge tone={user.is_active ? "success" : "neutral"}>
                     {user.is_active ? "Активен" : "Отключён"}
-                  </span>
+                  </Badge>
                   <Button
                     disabled={isSelf || busyId === user.id}
                     onClick={() => toggle(user)}
@@ -2055,9 +2034,7 @@ function ClientDashboardView({
                 onClick={() => onSelect(application.id)}
                 type="button"
               >
-                <span className={`status ${application.status}`}>
-                  {statusLabels[application.status] || application.status}
-                </span>
+                <StatusBadge status={application.status} />
                 <strong>{application.company_name || application.planned_client_name || "Компания"}</strong>
                 <small>{application.full_address}</small>
                 <b>{formatMoney(application.selected_price)}</b>
@@ -2072,9 +2049,7 @@ function ClientDashboardView({
                   <span className="eyebrow">{typeLabels[selectedApplication.type]}</span>
                   <h2>{selectedApplication.company_name || selectedApplication.planned_client_name || "Заявка"}</h2>
                 </div>
-                <span className={`status ${selectedApplication.status}`}>
-                  {statusLabels[selectedApplication.status] || selectedApplication.status}
-                </span>
+                <StatusBadge status={selectedApplication.status} />
               </div>
 
               <div className="client-metrics">
@@ -2490,9 +2465,7 @@ function OwnerDashboardView({
                     onClick={() => onSelect(application.id)}
                     type="button"
                   >
-                    <span className={`status ${application.status}`}>
-                      {statusLabels[application.status] || application.status}
-                    </span>
+                    <StatusBadge status={application.status} />
                     <strong>{application.company_name || application.planned_client_name || "Компания"}</strong>
                     <small>{application.full_address}</small>
                     <b>{formatMoney(application.selected_price)}</b>
@@ -2510,9 +2483,7 @@ function OwnerDashboardView({
                     <span className="eyebrow">{typeLabels[selectedApplication.type]}</span>
                     <h2>{selectedApplication.company_name || selectedApplication.planned_client_name || "Заявка"}</h2>
                   </div>
-                  <span className={`status ${selectedApplication.status}`}>
-                    {statusLabels[selectedApplication.status] || selectedApplication.status}
-                  </span>
+                  <StatusBadge status={selectedApplication.status} />
                 </div>
 
                 <div className="client-metrics">
@@ -3096,7 +3067,7 @@ function ApplicationsView({
                 <b>{application.contact_name || "—"}</b>
                 <small>{[application.contact_phone, application.contact_email].filter(Boolean).join(" · ") || "нет контактов"}</small>
               </span>
-              <span className={`status ${application.status}`}>{statusLabels[application.status] || application.status}</span>
+              <StatusBadge status={application.status} />
               <span>{providerById.get(application.provider_id)?.short_name || "—"}</span>
               <span>{addressById.get(application.address_id)?.full_address || "—"}</span>
               <span>{formatDate(application.created_at)}</span>
@@ -3231,7 +3202,7 @@ function DocumentModerationPanel({
         <div className="moderation-summary">
           <div>
             <span>Статус</span>
-            <strong>{statusLabels[moderation?.status || application.status] || moderation?.status || application.status}</strong>
+            <strong>{statusText(moderation?.status || application.status)}</strong>
           </div>
           <div>
             <span>Ручная проверка</span>
