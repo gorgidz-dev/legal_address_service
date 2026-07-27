@@ -1,0 +1,750 @@
+/*
+ * uradres.net — единый слой стилей кабинета.
+ * Заменяет: часть styles.css (.sidebar, .nav-item, .client-*, .owner-*, .metric-line,
+ * .simple-item, .registry-*) и весь оверлей design/app-shell.css.
+ *
+ * Правила слоя:
+ *  1. Значения берутся только из design/tokens.css. legacy-tokens.css удаляется.
+ *  2. Никаких !important. Если правило не побеждает — старое правило удаляется,
+ *     а не перебивается.
+ *  3. Один компонент = один класс с префиксом .cab-.
+ *  4. Радиус интерфейсных элементов 8px, pill (999px) только у фильтр-чипов и бейджей.
+ */
+
+/* ============================== Оболочка ============================== */
+
+.cab-shell {
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ds-page-bg);
+  color: var(--ds-page-fg);
+  font-family: var(--ds-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.cab-sidebar {
+  width: 238px;
+  flex: 0 0 238px;
+  background: #fff;
+  border-right: 1px solid var(--ds-border-soft);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px 14px;
+  gap: 16px;
+}
+
+.cab-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.cab-brand__mark {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-indigo-600);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.cab-brand__name {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: var(--ds-tracking-snug);
+  display: block;
+}
+.cab-brand__role {
+  font-size: 11.5px;
+  color: var(--ds-slate-500);
+}
+
+.cab-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.cab-nav__group-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ds-slate-400);
+  padding: 6px 10px 4px;
+}
+.cab-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+  background: transparent;
+  color: var(--ds-slate-600);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ds-motion-fast) var(--ds-ease-out),
+    color var(--ds-motion-fast) var(--ds-ease-out);
+}
+.cab-nav__item:hover { background: var(--ds-slate-100); color: var(--ds-indigo-700); }
+.cab-nav__item.is-active {
+  background: var(--ds-indigo-50);
+  border-color: var(--ds-indigo-100);
+  color: var(--ds-indigo-700);
+  font-weight: 650;
+}
+.cab-nav__label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cab-nav__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--ds-radius-pill);
+  background: var(--ds-slate-100);
+  color: var(--ds-slate-500);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.cab-nav__item.is-active .cab-nav__count { background: var(--ds-indigo-100); color: var(--ds-indigo-700); }
+
+.cab-sidebar__footer {
+  border-top: 1px solid var(--ds-border-soft);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cab-user { display: flex; align-items: center; gap: 9px; }
+.cab-user__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-700);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+.cab-user__mail {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.cab-user__role { font-size: 11px; color: var(--ds-slate-500); }
+
+/* ============================== Шапка ============================== */
+
+.cab-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+
+.cab-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 22px;
+  background: #fff;
+  border-bottom: 1px solid var(--ds-border-soft);
+  flex-shrink: 0;
+}
+.cab-topbar__title { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: var(--ds-tracking-tight); line-height: 1.2; }
+.cab-topbar__sub { font-size: 12.5px; color: var(--ds-slate-500); }
+.cab-crumbs { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ds-slate-400); }
+.cab-crumbs__current { color: var(--ds-slate-600); font-weight: 600; }
+
+.cab-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  min-width: 230px;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-md);
+  background: #fff;
+  color: var(--ds-slate-400);
+  font-size: 12.5px;
+  cursor: text;
+}
+.cab-search__kbd {
+  font-size: 10.5px;
+  font-weight: 600;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-sm);
+  padding: 1px 5px;
+}
+
+.cab-iconbtn {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-slate-200);
+  background: #fff;
+  color: var(--ds-slate-600);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.cab-iconbtn__dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--ds-radius-pill);
+  background: var(--ds-indigo-600);
+  border: 2px solid #fff;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.cab-topbar__left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cab-topbar__heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cab-topbar__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/*
+ * Кнопка «Назад». В макете её нет — там навигация только через меню. Но в
+ * приложении есть вложенность (заявка, чат, карточка адреса), и до этой правки
+ * единственным способом вернуться были крошки NavCrumbs. Убрать их, ничего не
+ * дав взамен, значило бы запереть человека, пришедшего по ссылке из письма.
+ * Поэтому кнопка осталась, но в виде иконки и только когда есть куда вернуться.
+ */
+.cab-iconbtn--sm { width: 30px; height: 30px; }
+
+/*
+ * Плашка «Подтвердите e-mail». В макете это неинтерактивная pill-подпись, но
+ * тогда пропадает кнопка переотправки письма. Здесь pill — переключатель:
+ * по клику раскрывается панель с адресом и кнопкой «Отправить ссылку».
+ */
+.cab-verify {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--ds-radius-pill);
+  border: 1px solid #fde68a;
+  background: var(--ds-warning-bg);
+  color: var(--ds-warning-fg);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cab-verify-panel {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 22px;
+  background: var(--ds-warning-bg);
+  border-bottom: 1px solid #fde68a;
+  color: var(--ds-warning-fg);
+  font-size: 12.5px;
+}
+.cab-verify-panel__text { flex: 1; min-width: 220px; line-height: 1.45; }
+
+/* Полоса «оператор смотрит чужой кабинет». */
+.cab-impersonation {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 22px;
+  background: var(--ds-indigo-900);
+  color: #fff;
+  font-size: 12.5px;
+}
+
+.cab-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 22px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ============================== Кнопки и чипы ============================== */
+
+.cab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-slate-200);
+  background: #fff;
+  color: var(--ds-slate-700);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: var(--ds-tracking-snug);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--ds-motion-fast) var(--ds-ease-out),
+    border-color var(--ds-motion-fast) var(--ds-ease-out);
+}
+.cab-btn:hover { background: var(--ds-slate-50); border-color: var(--ds-slate-300); }
+.cab-btn--primary { background: var(--ds-indigo-600); border-color: var(--ds-indigo-600); color: #fff; }
+.cab-btn--primary:hover { background: var(--ds-indigo-700); border-color: var(--ds-indigo-700); }
+.cab-btn--danger { border-color: #fecaca; color: var(--ds-danger-fg); background: #fff; }
+.cab-btn--danger:hover { background: var(--ds-danger-bg); }
+.cab-btn--ghost { border-color: transparent; background: transparent; color: var(--ds-slate-600); }
+.cab-btn--ghost:hover { background: var(--ds-slate-100); }
+.cab-btn--block { width: 100%; }
+.cab-btn--sm { height: 32px; padding: 0 12px; font-size: 12.5px; }
+.cab-btn:disabled { opacity: 0.5; pointer-events: none; }
+
+.cab-chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--ds-radius-pill);
+  border: 1px solid var(--ds-slate-200);
+  background: #fff;
+  color: var(--ds-slate-600);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cab-chip.is-active { background: var(--ds-indigo-950); border-color: var(--ds-indigo-950); color: #fff; }
+.cab-chip--add { border-style: dashed; border-color: var(--ds-slate-300); background: transparent; }
+
+/* ============================== Статусы ============================== */
+/* Единственная система бейджей. Модификатор ставится из карты статусов в коде. */
+
+.cab-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--ds-radius-pill);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--ds-neutral-bg);
+  color: var(--ds-neutral-fg);
+}
+.cab-badge--brand { background: var(--ds-brand-bg); color: var(--ds-brand-fg); }
+.cab-badge--info { background: var(--ds-info-bg); color: var(--ds-info-fg); }
+.cab-badge--success { background: var(--ds-success-bg); color: var(--ds-success-fg); }
+.cab-badge--warning { background: var(--ds-warning-bg); color: var(--ds-warning-fg); }
+.cab-badge--danger { background: var(--ds-danger-bg); color: var(--ds-danger-fg); }
+/* Тон neutral совпадает с базовым, но модификатор объявлен явно: карта статусов
+   выдаёт его наравне с остальными, и молчаливо мёртвый класс в разметке — повод
+   для ошибки при следующей правке палитры. */
+.cab-badge--neutral { background: var(--ds-neutral-bg); color: var(--ds-neutral-fg); }
+
+/* ============================== Метрики ============================== */
+
+.cab-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.cab-stat {
+  background: #fff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--ds-shadow-sm);
+}
+.cab-stat__label {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ds-slate-500);
+}
+.cab-stat__value { font-size: 22px; font-weight: 700; letter-spacing: var(--ds-tracking-tighter); line-height: 1.1; }
+.cab-stat__hint { font-size: 11.5px; color: var(--ds-slate-400); }
+.cab-stat__hint--warning { color: var(--ds-warning-fg); }
+.cab-stat__hint--success { color: var(--ds-success-fg); }
+.cab-stat__hint--brand { color: var(--ds-brand-fg); }
+
+/* ============================== Панель фильтров ============================== */
+
+.cab-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cab-toolbar__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ds-slate-400);
+}
+.cab-toolbar__spacer { flex: 1; }
+
+.cab-bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-indigo-950);
+  color: #fff;
+}
+.cab-bulkbar .cab-btn {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  height: 30px;
+}
+.cab-bulkbar .cab-btn:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* ============================== Очередь + панель заявки ============================== */
+
+.cab-queue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 386px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1280px) {
+  .cab-queue { grid-template-columns: minmax(0, 1fr); }
+}
+
+.cab-table {
+  background: #fff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-xl);
+  box-shadow: var(--ds-shadow-md);
+  overflow: hidden;
+}
+.cab-table__head,
+.cab-table__row {
+  display: grid;
+  grid-template-columns: 34px 82px minmax(90px, 1.5fr) minmax(90px, 1.4fr) 124px 112px 94px;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 16px;
+}
+.cab-table__head {
+  background: var(--ds-slate-50);
+  border-bottom: 1px solid var(--ds-border-soft);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ds-slate-500);
+}
+.cab-table__row { border-bottom: 1px solid #f5f6f9; background: #fff; cursor: pointer; }
+.cab-table__row:hover { background: var(--ds-indigo-50); }
+.cab-table__row.is-selected { background: var(--ds-indigo-50); box-shadow: inset 2px 0 0 var(--ds-indigo-600); }
+/* Просроченная по SLA строка: мягкая заливка + красная засечка слева. */
+.cab-table__row.is-overdue { background: #fffaf9; box-shadow: inset 2px 0 0 #fecaca; }
+.cab-table__cell--ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cab-table__id { font-family: var(--ds-font-mono); font-size: 12px; color: var(--ds-slate-500); }
+.cab-table__amount { font-size: 13px; font-weight: 700; color: var(--ds-indigo-600); text-align: right; white-space: nowrap; }
+.cab-table__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid var(--ds-border-soft);
+  font-size: 12px;
+  color: var(--ds-slate-500);
+}
+.cab-table__foot kbd {
+  font-family: var(--ds-font-mono);
+  font-size: 11px;
+  background: var(--ds-slate-100);
+  border-radius: var(--ds-radius-sm);
+  padding: 1px 4px;
+}
+
+.cab-sla { font-size: 11.5px; font-weight: 500; color: var(--ds-slate-500); white-space: nowrap; }
+.cab-sla--warning { color: var(--ds-warning-fg); }
+.cab-sla--danger { color: var(--ds-danger-fg); font-weight: 700; }
+.cab-sla--success { color: var(--ds-success-fg); }
+
+/* --- Панель заявки --- */
+
+.cab-drawer {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-xl);
+  box-shadow: var(--ds-shadow-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.cab-drawer__head { padding: 16px 18px 12px; border-bottom: 1px solid var(--ds-slate-100); display: flex; flex-direction: column; gap: 7px; }
+.cab-drawer__id { font-family: var(--ds-font-mono); font-size: 11.5px; color: var(--ds-slate-400); }
+.cab-drawer__title { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: var(--ds-tracking-tight); line-height: 1.25; }
+.cab-drawer__address { font-size: 12px; color: var(--ds-slate-500); line-height: 1.4; }
+
+/* Прогресс заявки: Оплата → Проверка → Собственник → Документы → Готово */
+.cab-steps { display: flex; gap: 5px; margin-top: 6px; }
+.cab-step { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.cab-step__bar { height: 4px; border-radius: var(--ds-radius-pill); background: var(--ds-slate-200); }
+.cab-step.is-done .cab-step__bar { background: var(--ds-indigo-600); }
+.cab-step.is-current .cab-step__bar { background: var(--ds-indigo-300); }
+.cab-step__label { font-size: 9.5px; line-height: 1.2; color: var(--ds-slate-400); }
+.cab-step.is-done .cab-step__label { color: var(--ds-slate-500); }
+.cab-step.is-current .cab-step__label { color: var(--ds-indigo-700); font-weight: 700; }
+
+.cab-tabs { display: flex; gap: 4px; padding: 10px 12px 0; }
+.cab-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+  background: transparent;
+  color: var(--ds-slate-500);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.cab-tab.is-active { background: var(--ds-indigo-50); color: var(--ds-indigo-700); font-weight: 650; }
+.cab-tab__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: var(--ds-radius-pill);
+  background: var(--ds-slate-100);
+  color: var(--ds-slate-500);
+  font-size: 10px;
+  font-weight: 700;
+}
+.cab-tab.is-active .cab-tab__count { background: var(--ds-indigo-100); color: var(--ds-indigo-700); }
+
+.cab-kv { padding: 14px 18px 0; display: flex; flex-direction: column; gap: 8px; }
+.cab-kv__row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 12.5px; }
+.cab-kv__label { color: var(--ds-slate-500); }
+.cab-kv__value { font-weight: 600; text-align: right; }
+
+.cab-actions { padding: 14px 18px 4px; display: flex; flex-direction: column; gap: 8px; }
+/* Вход в чат прямо из заявки. */
+.cab-chat-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-indigo-100);
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-700);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Лента заявки — во всех кабинетах. */
+.cab-timeline { margin-top: 14px; border-top: 1px solid var(--ds-slate-100); background: var(--ds-slate-50); padding: 14px 18px 18px; }
+.cab-timeline__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-size: 12.5px; font-weight: 650; }
+.cab-timeline__meta { font-size: 11px; color: var(--ds-slate-400); font-weight: 400; }
+.cab-timeline__item { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; }
+.cab-timeline__rail { display: flex; flex-direction: column; align-items: center; }
+.cab-timeline__dot { width: 9px; height: 9px; border-radius: var(--ds-radius-pill); margin-top: 4px; flex-shrink: 0; background: var(--ds-slate-400); }
+.cab-timeline__dot--brand { background: var(--ds-brand-fg); }
+.cab-timeline__dot--info { background: var(--ds-info-fg); }
+.cab-timeline__dot--success { background: var(--ds-success-fg); }
+.cab-timeline__dot--warning { background: var(--ds-warning-fg); }
+.cab-timeline__line { flex: 1; width: 1px; background: var(--ds-slate-200); }
+.cab-timeline__body { padding-bottom: 14px; display: flex; flex-direction: column; gap: 2px; }
+.cab-timeline__title { font-size: 12.5px; font-weight: 650; }
+.cab-timeline__date { font-size: 10.5px; color: var(--ds-slate-400); font-family: var(--ds-font-mono); }
+.cab-timeline__text { margin: 0; font-size: 12px; color: var(--ds-slate-600); line-height: 1.45; }
+
+.cab-doc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  background: #fff;
+}
+.cab-doc__name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cab-doc__meta { font-size: 11px; color: var(--ds-slate-400); }
+
+/* ============================== Чат ============================== */
+
+.cab-msg {
+  max-width: 82%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  border-radius: var(--ds-radius-lg);
+  align-self: flex-start;
+  background: #fff;
+  border: 1px solid var(--ds-border-soft);
+}
+.cab-msg--own { align-self: flex-end; background: var(--ds-indigo-500); border-color: var(--ds-indigo-500); color: #fff; }
+.cab-msg__author { font-size: 10.5px; font-weight: 650; opacity: 0.7; }
+.cab-msg__time { font-size: 10px; opacity: 0.6; text-align: right; }
+
+/* ============================== Адреса ============================== */
+
+.cab-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.cab-card {
+  background: #fff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-xl);
+  overflow: hidden;
+  box-shadow: var(--ds-shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+.cab-card__media { aspect-ratio: 16 / 10; position: relative; background: var(--ds-slate-100); }
+.cab-card__body { padding: 12px 14px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.cab-card__title { font-size: 13.5px; font-weight: 650; letter-spacing: var(--ds-tracking-snug); line-height: 1.3; }
+.cab-card__meta { font-size: 12px; color: var(--ds-slate-500); }
+/* Заполненность карточки адреса: что мешает публикации. */
+.cab-fill { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.cab-fill__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--ds-slate-500); }
+.cab-fill__track { height: 4px; border-radius: var(--ds-radius-pill); background: var(--ds-slate-100); overflow: hidden; }
+.cab-fill__bar { display: block; height: 100%; border-radius: var(--ds-radius-pill); background: var(--ds-success-fg); }
+.cab-fill__bar--mid { background: var(--ds-warning-fg); }
+.cab-fill__bar--low { background: var(--ds-danger-fg); }
+.cab-fill__missing { font-size: 11px; color: var(--ds-slate-400); }
+
+/* ============================== Состояния списка ============================== */
+
+.cab-skeleton-row { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--ds-slate-100); border-radius: var(--ds-radius-lg); }
+.cab-skeleton-line { height: 10px; border-radius: 6px; background: var(--ds-slate-100); }
+.cab-skeleton-line--lg { height: 14px; background: #eceef4; }
+
+.cab-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 26px 12px;
+  border: 1px dashed var(--ds-indigo-100);
+  border-radius: var(--ds-radius-xl);
+  background: var(--ds-slate-50);
+}
+.cab-empty__title { font-size: 15px; font-weight: 650; letter-spacing: var(--ds-tracking-tight); }
+.cab-empty__text { font-size: 13px; color: var(--ds-slate-500); line-height: 1.5; max-width: 250px; }
+
+.cab-error {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #fecaca;
+  border-radius: var(--ds-radius-xl);
+  background: var(--ds-danger-bg);
+  color: var(--ds-danger-fg);
+}
+.cab-error__title { font-size: 14px; font-weight: 650; }
+.cab-error__text { font-size: 13px; line-height: 1.5; opacity: 0.85; }
+
+/* ============================== Мобильный режим ============================== */
+
+@media (max-width: 900px) {
+  .cab-sidebar { display: none; }
+  .cab-content { padding: 12px 14px 16px; gap: 12px; }
+  .cab-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .cab-topbar { padding: 10px 14px; }
+  .cab-search { display: none; }
+  .cab-table { border: 0; box-shadow: none; background: transparent; }
+  .cab-table__head { display: none; }
+  /* Строка таблицы превращается в карточку. */
+  .cab-table__row {
+    grid-template-columns: 1fr auto;
+    gap: 5px 8px;
+    background: #fff;
+    border: 1px solid var(--ds-border-soft);
+    border-radius: var(--ds-radius-xl);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    box-shadow: var(--ds-shadow-sm);
+  }
+  .cab-queue { grid-template-columns: 1fr; }
+  .cab-drawer { position: static; }
+}
+
+.cab-tabbar {
+  display: none;
+  flex-shrink: 0;
+  border-top: 1px solid var(--ds-border-soft);
+  background: #fff;
+  padding: 6px 6px 10px;
+}
+@media (max-width: 900px) { .cab-tabbar { display: flex; } }
+.cab-tabbar__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  min-height: 48px; /* минимальная зона нажатия */
+  border: 0;
+  background: transparent;
+  border-radius: var(--ds-radius-lg);
+  color: var(--ds-slate-400);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cab-tabbar__item.is-active { color: var(--ds-indigo-700); }
+
+/* ============================== Каталог ============================== */
+/*
+ * Раздел 7 хендоффа (ширина 1440, сетка в 4 колонки, фото в hero, радиус кнопок)
+ * живёт в design/catalog.css и design/components.css — там же, где остальные
+ * правила публичной части. Здесь его нет намеренно: этот файл подключается
+ * вместе с кабинетом, а изменения ширины и кнопок видит анонимный посетитель
+ * на главной. Держать их в слое с именем «cabinet» значило бы менять лендинг
+ * из файла, куда за этим никто не пойдёт смотреть.
+ */
