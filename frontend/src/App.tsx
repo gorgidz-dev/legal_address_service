@@ -11,12 +11,10 @@ import {
   FileArchive,
   FileCheck2,
   FileText,
-  FolderOpen,
   Home,
-  Image as ImageIcon,
   KeyRound,
-  MessageSquare,
   Loader2,
+  MessageSquare,
   LogOut,
   Monitor,
   Plus,
@@ -24,7 +22,6 @@ import {
   Smartphone,
   ReceiptText,
   Search,
-  Settings,
   ShieldCheck,
   Star,
   Trash2,
@@ -45,10 +42,24 @@ import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
 import { parsePath, routeToPath, useRouter } from "./router";
 import { LegalPage } from "./sections/LegalPage";
+import { EmailVerificationPage } from "./sections/EmailVerification";
+import { AddressChatPanel } from "./AddressChatPanel";
 import {
-  EmailVerificationBanner,
-  EmailVerificationPage
-} from "./sections/EmailVerification";
+  ApplicationDrawer,
+  DrawerRow,
+  DrawerTimeline
+} from "./applications/ApplicationDrawer";
+import { ApplicationsQueue, type QueueFilter } from "./applications/ApplicationsQueue";
+import { AppShell } from "./shell/AppShell";
+import {
+  navItemsFor,
+  sectionLabel,
+  type ClientSectionId,
+  type OwnerSectionId
+} from "./shell/navConfig";
+import { statusLabel as statusText, statusMeta } from "./status";
+import { Badge, StatusBadge } from "./ui/Badge";
+import { ListEmpty, ListError, ListLoading } from "./ui/ListState";
 import { useModalDismiss } from "./useModalDismiss";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { DownloadLink } from "./DownloadLink";
@@ -63,6 +74,7 @@ import type {
   ActiveClientRegistryItem,
   AdminUser,
   Address,
+  AddressChat,
   AddressPhotoAdmin,
   AddressServiceAdmin,
   OwnerAddress,
@@ -111,8 +123,10 @@ type View =
  * Разделы кабинетов клиента и собственника — они же сегменты URL /app/<section>.
  * Первый в списке считается разделом по умолчанию для «/app».
  */
-const CLIENT_SECTIONS = ["applications", "chats"] as const;
-const OWNER_SECTIONS = ["applications", "addresses", "chats"] as const;
+/*
+ * Списки разделов клиента и собственника живут в shell/navConfig.ts вместе с
+ * меню — один источник вместо двух, которые могли разъехаться.
+ */
 
 /**
  * Синонимы разделов: один и тот же экран у разных ролей называется по-разному.
@@ -128,56 +142,12 @@ function resolveSection(raw: string | null, allowed: string[]): string | null {
   return alias && allowed.includes(alias) ? alias : null;
 }
 
-const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
-  { id: "applications", label: "Заявки", icon: FolderOpen },
-  { id: "registry", label: "Действующие клиенты", icon: FileClock },
-  { id: "new", label: "Новая заявка", icon: Plus },
-  { id: "providers", label: "Собственники", icon: Building2 },
-  { id: "addresses", label: "Помещения", icon: Home },
-  { id: "templates", label: "Шаблоны", icon: Settings }
-];
-
-const adminNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "access",
-  label: "Доступ",
-  icon: ShieldCheck
-};
-
-const adminPhotosNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "photos",
-  label: "Фото на модерацию",
-  icon: ImageIcon
-};
-
-const adminProviderRequestsNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "provider-requests",
-  label: "Заявки собственников",
-  icon: Building2
-};
-
-const adminAddressModerationNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "address-moderation",
-  label: "Модерация адресов",
-  icon: Home
-};
-
-const adminAddressServicesNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "address-services",
-  label: "Услуги адресов",
-  icon: Settings
-};
-
-const adminAddressChatsNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "address-chats",
-  label: "Чаты",
-  icon: MessageSquare
-};
-
-const adminReviewModerationNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "review-moderation",
-  label: "Отзывы на модерацию",
-  icon: MessageSquare
-};
+/*
+ * Разделы всех ролей теперь описаны в shell/navConfig.ts — здесь их
+ * определений больше нет. Раньше меню оператора собиралось из семи отдельных
+ * объектов, а у клиента и собственника пункты были просто набором кнопок в
+ * разметке, поэтому «Заявки» в трёх кабинетах отличались иконкой и порядком.
+ */
 
 const ownerRequestStatusLabels: Record<string, string> = {
   new: "Новая",
@@ -190,33 +160,6 @@ const photoModerationStatusLabels: Record<string, string> = {
   pending: "На модерации",
   approved: "Одобрено",
   rejected: "Отклонено"
-};
-
-const statusLabels: Record<string, string> = {
-  draft: "Черновик",
-  guarantee_issued: "Гарантийка выдана",
-  awaiting_contract: "Ожидает договор",
-  contract_signed: "Договор подписан",
-  active: "Активна",
-  expired: "Истекла",
-  terminated: "Расторгнута",
-  awaiting_payment: "Ожидает оплату",
-  paid: "Оплачена",
-  admin_review: "Проверка администратора",
-  needs_client_fix: "Нужны уточнения",
-  assigned_to_owner: "Передана собственнику",
-  accepted_by_owner: "Принята собственником",
-  rejected_by_owner: "Отклонена собственником",
-  documents_preparing: "Готовятся документы",
-  documents_uploaded: "Документы загружены",
-  documents_review: "Проверка документов",
-  documents_revision: "Доработка документов",
-  ready_for_client: "Готова к выдаче",
-  completed: "Завершена",
-  cancelled: "Отменена",
-  dispute: "Спор",
-  refund_pending: "Возврат готовится",
-  refunded: "Возврат выполнен"
 };
 
 const typeLabels: Record<ApplicationType, string> = {
@@ -275,6 +218,52 @@ const documentKindLabels: Record<DocumentFileKind, string> = {
   postal_service: "Почтовое обслуживание",
   admin_review_file: "Файл проверки"
 };
+
+/**
+ * Клиенту список документов отдают только после проверки: до этого сервер
+ * отвечает 403 (app/services/application_documents.py). Вкладку в панели
+ * блокируем заранее — красная ошибка вместо ожидаемого «ещё рано» пугает
+ * сильнее, чем сама задержка.
+ */
+const CLIENT_DOCUMENT_STATUSES = new Set(["ready_for_client", "completed", "dispute"]);
+
+function clientCanSeeDocuments(status: string): boolean {
+  return CLIENT_DOCUMENT_STATUSES.has(status);
+}
+
+const FINISHED_STATUSES = new Set(["completed", "cancelled", "refunded", "terminated", "expired"]);
+
+const CLIENT_QUEUE_FILTERS: QueueFilter[] = [
+  { id: "all", label: "Все", match: () => true },
+  { id: "active", label: "Активные", match: (row) => !FINISHED_STATUSES.has(row.status) },
+  { id: "done", label: "Завершённые", match: (row) => FINISHED_STATUSES.has(row.status) }
+];
+
+/**
+ * Собственнику важна не полнота списка, а что от него ждут действия, поэтому
+ * этот фильтр стоит первым. «Требуют действия» считается по available_actions
+ * с бэкенда — фронт не решает сам, что можно делать с заявкой.
+ */
+const OWNER_ACTIONABLE_STATUSES = new Set([
+  "assigned_to_owner",
+  "documents_preparing",
+  "documents_revision"
+]);
+
+const OWNER_QUEUE_FILTERS: QueueFilter[] = [
+  {
+    id: "actionable",
+    label: "Требуют действия",
+    match: (row) => OWNER_ACTIONABLE_STATUSES.has(row.status)
+  },
+  { id: "all", label: "Все", match: () => true },
+  {
+    id: "in-work",
+    label: "В работе",
+    match: (row) => !FINISHED_STATUSES.has(row.status) && row.status !== "ready_for_client"
+  },
+  { id: "ready", label: "Готовы к выдаче", match: (row) => row.status === "ready_for_client" }
+];
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -412,34 +401,6 @@ function LoadingRows() {
   );
 }
 
-/**
- * «Назад» и «На главную» над заголовком раздела. «Назад» показываем только
- * когда внутри приложения действительно есть куда вернуться, иначе кнопка
- * увела бы пользователя на предыдущий сайт.
- */
-function NavCrumbs({
-  canGoBack,
-  onBack,
-  onHome
-}: {
-  canGoBack: boolean;
-  onBack: () => void;
-  onHome: () => void;
-}) {
-  return (
-    <div className="nav-crumbs">
-      {canGoBack ? (
-        <button className="text-action" onClick={onBack} type="button">
-          <ChevronLeft size={15} /> Назад
-        </button>
-      ) : null}
-      <button className="text-action" onClick={onHome} type="button">
-        <Home size={15} /> На главную
-      </button>
-    </div>
-  );
-}
-
 function NotificationCenter({
   refreshKey = 0,
   onNavigate,
@@ -554,9 +515,9 @@ function NotificationCenter({
             <div className="notification-list">
               {items.map((notification) => {
                 const isChat = notification.link_type === "chat";
-                const statusLabel = notification.application_status
-                  ? statusLabels[notification.application_status] || notification.application_status
-                  : isChat ? "Чат" : "Уведомление";
+                const meta = notification.application_status
+                  ? statusMeta(notification.application_status)
+                  : null;
                 const subtitle = notification.application_title
                   ? `${notification.application_title} · ${formatDateTime(notification.created_at)}`
                   : formatDateTime(notification.created_at);
@@ -567,9 +528,9 @@ function NotificationCenter({
                     onClick={() => handleClick(notification)}
                     type="button"
                   >
-                    <span className={`status ${isChat ? "chat" : notification.application_status || ""}`}>
-                      {statusLabel}
-                    </span>
+                    <Badge tone={meta ? meta.tone : isChat ? "info" : "neutral"}>
+                      {meta ? meta.label : isChat ? "Чат" : "Уведомление"}
+                    </Badge>
                     <strong>{notification.title}</strong>
                     <small>{subtitle}</small>
                     <p>{notification.message}</p>
@@ -885,9 +846,13 @@ function UsersAccessPanel({ currentUserId }: { currentUserId: string }) {
                   </span>
                 </div>
                 <div className="row-actions">
-                  <span className={user.is_active ? "status active" : "status archived"}>
+                  {/* Тон задаётся явно: это активность УЧЁТНОЙ ЗАПИСИ, а не
+                      статус заявки. Раньше класс «status active» случайно
+                      совпадал с ApplicationStatus.active и красился его
+                      правилом. */}
+                  <Badge tone={user.is_active ? "success" : "neutral"}>
                     {user.is_active ? "Активен" : "Отключён"}
-                  </span>
+                  </Badge>
                   <Button
                     disabled={isSelf || busyId === user.id}
                     onClick={() => toggle(user)}
@@ -1397,31 +1362,12 @@ export default function App() {
     };
   }, [currentUser, needsStaffData, refreshKey]);
 
-  const navItems = useMemo(
-    () =>
-      currentUser?.role === "admin"
-        ? [
-            ...baseNavItems,
-            adminProviderRequestsNavItem,
-            adminAddressModerationNavItem,
-            adminAddressServicesNavItem,
-            adminAddressChatsNavItem,
-            adminReviewModerationNavItem,
-            adminPhotosNavItem,
-            adminNavItem
-          ]
-        : baseNavItems,
-    [currentUser?.role]
-  );
-
   // Разделы кабинета = сегменты URL /app/<section>. Список зависит от роли:
   // чужой раздел в адресе не должен открывать чужой экран.
-  const sections = useMemo<string[]>(() => {
-    if (!currentUser) return [];
-    if (currentUser.role === "client") return [...CLIENT_SECTIONS];
-    if (currentUser.role === "owner") return [...OWNER_SECTIONS];
-    return navItems.map((item) => item.id);
-  }, [currentUser, navItems]);
+  const sections = useMemo<string[]>(
+    () => (currentUser ? navItemsFor(currentUser.role).map((item) => item.id) : []),
+    [currentUser]
+  );
 
   const section =
     (route.name === "cabinet" ? resolveSection(route.section, sections) : null) ||
@@ -1429,7 +1375,12 @@ export default function App() {
     "applications";
   const selectedId = route.name === "cabinet" ? route.id : null;
   const view = section as View;
-  const selectedTitle = navItems.find((item) => item.id === view)?.label || "Сервис";
+  const selectedTitle = currentUser ? sectionLabel(currentUser.role, view) : "Сервис";
+  // Подзаголовок в шапке заменил три строки текста, с которых начинался экран
+  // («Заявки» в меню → «Мои заявки» → «Статус и адрес по заявке…»). Здесь —
+  // только то, что человек не видит и так: сколько всего записей.
+  const sectionSubtitle =
+    view === "applications" && !loading ? `Всего заявок: ${applications.length}` : undefined;
 
   const goHome = useCallback(() => navigate({ name: "home" }), [navigate]);
   const openCabinet = useCallback(
@@ -1568,7 +1519,7 @@ export default function App() {
     return (
       <ClientDashboardView
         user={currentUser}
-        view={section as (typeof CLIENT_SECTIONS)[number]}
+        view={section as ClientSectionId}
         onView={(next, id) => openCabinet(next, id ?? null)}
         selectedId={selectedId}
         onSelect={selectInSection}
@@ -1584,7 +1535,7 @@ export default function App() {
     return (
       <OwnerDashboardView
         user={currentUser}
-        view={section as (typeof OWNER_SECTIONS)[number]}
+        view={section as OwnerSectionId}
         onView={(next, id) => openCabinet(next, id ?? null)}
         selectedId={selectedId}
         onSelect={selectInSection}
@@ -1597,83 +1548,47 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button className="brand brand--link" onClick={goHome} type="button" title="На главную">
-          <div className="brand-mark">UR</div>
-          <div>
-            <strong>uradres.net</strong>
-            <span>договоры и гарантийки</span>
-          </div>
-        </button>
-
-        <nav className="nav">
-          <button
-            className="nav-item"
-            type="button"
-            onClick={goHome}
-            title="Открыть публичный каталог"
-          >
-            <Home size={18} strokeWidth={1.8} />
-            <span>Каталог</span>
-          </button>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className={view === item.id ? "nav-item active" : "nav-item"}
-                key={item.id}
-                onClick={() => openCabinet(item.id)}
-              >
-                <Icon size={18} strokeWidth={1.8} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="sidebar-footer">
-          <span>{currentUser.role === "admin" ? "Администратор" : "Пользователь"}</span>
-          <strong>{currentUser.email}</strong>
-          <button className="text-action" onClick={handleLogout} type="button">
-            <LogOut size={15} /> Выйти
-          </button>
-        </div>
-      </aside>
-
-      <main className="workspace">
-        <header className="topbar">
-          <div>
-            <NavCrumbs canGoBack={canGoBack} onBack={back} onHome={goHome} />
-            <span className="eyebrow">Рабочая область</span>
-            <h1>{selectedTitle}</h1>
-          </div>
-          <div className="topbar-actions">
-            <NotificationCenter
-              refreshKey={refreshKey}
-              onNavigate={(n) => {
-                if (n.link_type === "application" && n.link_id) {
-                  openCabinet("applications");
-                  // Админский список заявок сам управляет selected — внешнего
-                  // пробрасывания selected пока нет; пользователь увидит список
-                  // и сможет найти нужную. Линк хотя бы переключит раздел.
-                } else if (n.link_type === "chat") {
-                  openCabinet("address-chats");
-                }
-              }}
-            />
-            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-              <RefreshCw size={16} /> Обновить
-            </Button>
-          </div>
-        </header>
-
-        <InlineError message={error} />
-
-        {loading ? (
-          <LoadingRows />
-        ) : (
-          <>
+    <AppShell
+      user={currentUser}
+      section={view}
+      onSection={(id) => openCabinet(id)}
+      title={selectedTitle}
+      subtitle={sectionSubtitle}
+      counts={{ applications: applications.length }}
+      onOpenSite={goHome}
+      onBack={back}
+      canGoBack={canGoBack}
+      onLogout={handleLogout}
+      onRefresh={() => setRefreshKey((value) => value + 1)}
+      actions={
+        <NotificationCenter
+          refreshKey={refreshKey}
+          onNavigate={(n) => {
+            if (n.link_type === "application" && n.link_id) {
+              openCabinet("applications");
+              // Админский список заявок сам управляет selected — внешнего
+              // пробрасывания selected пока нет; пользователь увидит список
+              // и сможет найти нужную. Линк хотя бы переключит раздел.
+            } else if (n.link_type === "chat") {
+              openCabinet("address-chats");
+            }
+          }}
+        />
+      }
+      banner={
+        error ? (
+          <ListError
+            message={error}
+            onRetry={() => setRefreshKey((value) => value + 1)}
+            onRelogin={handleLogout}
+          />
+        ) : null
+      }
+    >
+      {loading ? (
+        <ListLoading />
+      ) : (
+        <>
             {view === "applications" && (
               <ApplicationsView
                 applications={applications}
@@ -1726,10 +1641,9 @@ export default function App() {
                 <AccessView currentUserId={currentUser.id} />
               </>
             )}
-          </>
-        )}
-      </main>
-    </div>
+        </>
+      )}
+    </AppShell>
   );
 }
 
@@ -1892,7 +1806,7 @@ const paymentStatusLabels: Record<string, string> = {
   refunded: "возвращён"
 };
 
-type ClientCabinetView = (typeof CLIENT_SECTIONS)[number];
+type ClientCabinetView = ClientSectionId;
 
 function ClientDashboardView({
   user,
@@ -1959,193 +1873,266 @@ function ClientDashboardView({
     [applications, selectedId]
   );
 
+  const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+
+  // Документы грузим только для выбранной заявки и только когда сервер их
+  // отдаст. Запрашивать их для каждой строки списка значило бы N запросов на
+  // отрисовку очереди — агрегата с количеством файлов в списке нет.
+  useEffect(() => {
+    const application = selectedApplication;
+    if (!application || !clientCanSeeDocuments(application.status)) {
+      setDocuments([]);
+      setDocumentsError(null);
+      return;
+    }
+    let alive = true;
+    setDocumentsLoading(true);
+    setDocumentsError(null);
+    api
+      .applicationDocuments(application.id)
+      .then((result) => alive && setDocuments(result))
+      .catch((err: Error) => alive && setDocumentsError(err.message))
+      .finally(() => alive && setDocumentsLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [selectedApplication?.id, selectedApplication?.status]);
+
+  const [applicationChat, setApplicationChat] = useState<AddressChat | null>(null);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  // Смена заявки закрывает открытый чат: адрес другой, и оставлять переписку
+  // по прошлому адресу под шапкой новой заявки нельзя.
+  useEffect(() => {
+    setApplicationChat(null);
+    setChatError(null);
+  }, [selectedApplication?.id]);
+
+  async function openApplicationChat(addressId: string) {
+    setChatBusy(true);
+    setChatError(null);
+    try {
+      // Чат заводится по паре «адрес × клиент», отдельной привязки к заявке в
+      // модели нет. Для клиента это безопасно: свой адрес — свой чат.
+      setApplicationChat(await api.openChatForAddress(addressId));
+    } catch (err) {
+      setChatError((err as Error).message);
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button className="brand brand--link" onClick={onOpenCatalog} type="button" title="На главную">
-          <div className="brand-mark">UR</div>
-          <div>
-            <strong>Личный кабинет</strong>
-            <span>клиент</span>
-          </div>
-        </button>
-        <nav className="nav">
-          <button type="button" className="nav-item" onClick={onOpenCatalog} title="Открыть публичный каталог">
-            <Home size={18} strokeWidth={1.8} />
-            <span>Каталог</span>
-          </button>
-          <button
-            type="button"
-            className={view === "applications" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("applications")}
-          >
-            <FolderOpen size={18} strokeWidth={1.8} />
-            <span>Заявки</span>
-          </button>
-          <button
-            type="button"
-            className={view === "chats" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("chats")}
-          >
-            <MessageSquare size={18} strokeWidth={1.8} />
-            <span>Чаты</span>
-          </button>
-        </nav>
-        <div className="sidebar-footer">
-          <span>Клиент</span>
-          <strong>{user.email}</strong>
-          <button className="text-action" onClick={onLogout} type="button">
-            <LogOut size={15} /> Выйти
-          </button>
-        </div>
-      </aside>
-
-      <main className="client-shell">
-        <header className="client-topbar">
-          <NavCrumbs canGoBack={canGoBack} onBack={onBack} onHome={onOpenCatalog} />
-          <div className="actions">
-            <NotificationCenter
-              refreshKey={refreshKey}
-              onNavigate={(n) => {
-                if (n.link_type === "application" && n.link_id) {
-                  // Раздел и заявка одним переходом: два подряд ушли бы
-                  // в историю двумя записями и второй перетёр бы первый.
-                  onView("applications", n.link_id);
-                } else if (n.link_type === "chat" && n.link_id) {
-                  onView("chats");
-                  setPendingChatId(n.link_id);
-                }
-              }}
-            />
-            <PushToggle />
-            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-              <RefreshCw size={16} /> Обновить
-            </Button>
-          </div>
-        </header>
-
-        <section className="client-heading">
-          <span className="eyebrow">
-            {view === "applications" ? "Мои заявки" : "Сообщения"}
-          </span>
-          <h1>
-            {view === "applications"
-              ? "Статус и адрес по заявке на юридический адрес"
-              : "Чаты с собственниками"}
-          </h1>
-        </section>
-
-        {user.email_verified === false ? (
-          <EmailVerificationBanner email={user.email} />
-        ) : null}
-        <InlineError message={error} />
-        <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
-
-      {view === "applications" && (loading ? (
-        <LoadingRows />
-      ) : applications.length === 0 ? (
-        <EmptyState title="Заявок пока нет" text="После отправки заявки она появится в этом кабинете." />
-      ) : (
-        <section className="client-dashboard">
-          <div className="client-list">
-            {applications.map((application) => (
-              <button
-                className={application.id === selectedApplication?.id ? "client-application active" : "client-application"}
-                key={application.id}
-                onClick={() => onSelect(application.id)}
-                type="button"
-              >
-                <span className={`status ${application.status}`}>
-                  {statusLabels[application.status] || application.status}
-                </span>
-                <strong>{application.company_name || application.planned_client_name || "Компания"}</strong>
-                <small>{application.full_address}</small>
-                <b>{formatMoney(application.selected_price)}</b>
-              </button>
-            ))}
-          </div>
-
-          {selectedApplication ? (
-            <div className="client-detail">
-              <div className="client-detail-header">
-                <div>
-                  <span className="eyebrow">{typeLabels[selectedApplication.type]}</span>
-                  <h2>{selectedApplication.company_name || selectedApplication.planned_client_name || "Заявка"}</h2>
-                </div>
-                <span className={`status ${selectedApplication.status}`}>
-                  {statusLabels[selectedApplication.status] || selectedApplication.status}
-                </span>
-              </div>
-
-              <div className="client-metrics">
-                <div>
-                  <ReceiptText size={18} />
-                  <span>Стоимость</span>
-                  <strong>{formatMoney(selectedApplication.selected_price)}</strong>
-                </div>
-                <div>
-                  <FileClock size={18} />
-                  <span>Срок</span>
-                  <strong>{selectedApplication.term_months ? `${selectedApplication.term_months} мес.` : "—"}</strong>
-                </div>
-                <div>
-                  <Home size={18} />
-                  <span>ИФНС</span>
-                  <strong>{selectedApplication.fns_number ? `№ ${selectedApplication.fns_number}` : "—"}</strong>
-                </div>
-              </div>
-
-              <div className="client-info-grid">
-                <div>
-                  <span>Адрес</span>
-                  <strong>{selectedApplication.full_address}</strong>
-                  {selectedApplication.room_number ? <small>{selectedApplication.room_number}</small> : null}
-                </div>
-                <div>
-                  <span>Собственник</span>
-                  <strong>{selectedApplication.provider_name}</strong>
-                </div>
-                <div>
-                  <span>Контакт</span>
-                  <strong>{selectedApplication.contact_name || "—"}</strong>
-                  <small>{[selectedApplication.contact_phone, selectedApplication.contact_email].filter(Boolean).join(" · ")}</small>
-                </div>
-                <div>
-                  <span>Корреспонденция</span>
-                  <strong>{selectedApplication.has_correspondence_service ? "Подключена" : "Не подключена"}</strong>
-                  {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
-                </div>
-              </div>
-
-              {selectedApplication.status === "awaiting_payment" ? (
-                <SbpPaymentPanel
-                  applicationId={selectedApplication.id}
-                  onPaid={() => setRefreshKey((value) => value + 1)}
-                />
-              ) : null}
-
-              <div className="timeline-panel">
-                <div className="timeline-title">
-                  <FileText size={18} />
-                  <strong>Лента заявки</strong>
-                </div>
-                {selectedApplication.events.length ? (
-                  <div className="timeline">
-                    {selectedApplication.events.map((event) => (
-                      <div className="timeline-item" key={event.id}>
-                        <span>{formatDate(event.created_at)}</span>
-                        <strong>{event.title}</strong>
-                        <p>{event.message}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState title="Событий пока нет" text="Обновления по заявке появятся после проверки." />
-                )}
-              </div>
-            </div>
+    <AppShell
+      user={user}
+      section={view}
+      onSection={(id) => onView(id as ClientCabinetView)}
+      title={view === "applications" ? "Заявки" : "Чаты"}
+      subtitle={
+        view === "applications" && !loading
+          ? applications.length
+            ? `Всего заявок: ${applications.length}`
+            : undefined
+          : "Переписка с собственниками адресов"
+      }
+      counts={{ applications: applications.length }}
+      onOpenSite={onOpenCatalog}
+      onBack={onBack}
+      canGoBack={canGoBack}
+      onLogout={onLogout}
+      onRefresh={() => setRefreshKey((value) => value + 1)}
+      actions={
+        <>
+          <NotificationCenter
+            refreshKey={refreshKey}
+            onNavigate={(n) => {
+              if (n.link_type === "application" && n.link_id) {
+                // Раздел и заявка одним переходом: два подряд ушли бы
+                // в историю двумя записями и второй перетёр бы первый.
+                onView("applications", n.link_id);
+              } else if (n.link_type === "chat" && n.link_id) {
+                onView("chats");
+                setPendingChatId(n.link_id);
+              }
+            }}
+          />
+          <PushToggle />
+        </>
+      }
+      banner={
+        <>
+          {error ? (
+            <ListError message={error} onRetry={() => setRefreshKey((value) => value + 1)} />
           ) : null}
-        </section>
+          <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
+        </>
+      }
+    >
+      {view === "applications" && (loading ? (
+        <ListLoading />
+      ) : applications.length === 0 ? (
+        <ListEmpty
+          title="Заявок пока нет"
+          text="Выберите адрес в каталоге и отправьте заявку — она появится здесь."
+          action={{ label: "Открыть каталог", onClick: onOpenCatalog }}
+        />
+      ) : (
+        <ApplicationsQueue
+          rows={applications.map((application) => ({
+            id: application.id,
+            subject:
+              application.company_name || application.planned_client_name || "Компания",
+            address: application.full_address,
+            status: application.status,
+            updatedAt: application.updated_at,
+            amount: formatMoney(application.selected_price)
+          }))}
+          selectedId={selectedApplication?.id || null}
+          onSelect={onSelect}
+          subjectLabel="Компания"
+          filters={CLIENT_QUEUE_FILTERS}
+          drawer={
+            selectedApplication ? (
+              <ApplicationDrawer
+                id={selectedApplication.id}
+                title={
+                  selectedApplication.company_name ||
+                  selectedApplication.planned_client_name ||
+                  "Заявка"
+                }
+                address={selectedApplication.full_address}
+                status={selectedApplication.status}
+                docsCount={documents.length || null}
+                docsDisabledReason={
+                  clientCanSeeDocuments(selectedApplication.status)
+                    ? null
+                    : "Документы открываются после проверки — когда заявка будет готова к выдаче"
+                }
+                chatDisabledReason={null}
+                main={
+                  <>
+                    <div className="cab-kv">
+                      <DrawerRow label="Тип" value={typeLabels[selectedApplication.type]} />
+                      <DrawerRow
+                        label="Стоимость"
+                        value={formatMoney(selectedApplication.selected_price)}
+                      />
+                      <DrawerRow
+                        label="Срок"
+                        value={
+                          selectedApplication.term_months
+                            ? `${selectedApplication.term_months} мес.`
+                            : "—"
+                        }
+                      />
+                      <DrawerRow
+                        label="ИФНС"
+                        value={
+                          selectedApplication.fns_number
+                            ? `№ ${selectedApplication.fns_number}`
+                            : "—"
+                        }
+                      />
+                      <DrawerRow label="Собственник" value={selectedApplication.provider_name} />
+                      <DrawerRow
+                        label="Корреспонденция"
+                        value={
+                          selectedApplication.has_correspondence_service
+                            ? selectedApplication.correspondence_price
+                              ? `Подключена · ${formatMoney(selectedApplication.correspondence_price)}`
+                              : "Подключена"
+                            : "Не подключена"
+                        }
+                      />
+                      {selectedApplication.room_number ? (
+                        <DrawerRow label="Помещение" value={selectedApplication.room_number} />
+                      ) : null}
+                    </div>
+
+                    {selectedApplication.status === "awaiting_payment" ? (
+                      <div className="cab-actions">
+                        <SbpPaymentPanel
+                          applicationId={selectedApplication.id}
+                          onPaid={() => setRefreshKey((value) => value + 1)}
+                        />
+                      </div>
+                    ) : null}
+
+                    <DrawerTimeline
+                      emptyText="Обновления по заявке появятся после проверки."
+                      events={selectedApplication.events}
+                    />
+                  </>
+                }
+                docs={
+                  documentsLoading ? (
+                    <ListLoading rows={2} />
+                  ) : documentsError ? (
+                    <ListError message={documentsError} />
+                  ) : documents.length ? (
+                    <div className="cab-actions">
+                      {documents.map((document) => (
+                        <DownloadLink
+                          className="cab-doc"
+                          href={apiDownloadUrl(document.download_url)}
+                          key={document.id}
+                        >
+                          <FileText size={17} />
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <strong className="cab-doc__name">{document.original_filename}</strong>
+                            <span className="cab-doc__meta">
+                              {documentKindLabels[document.kind]} ·{" "}
+                              {formatFileSize(document.size_bytes)} ·{" "}
+                              {formatDate(document.created_at)}
+                            </span>
+                          </span>
+                          <Download size={16} />
+                        </DownloadLink>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="cab-actions">
+                      <ListEmpty
+                        text="Как только собственник загрузит комплект и оператор его проверит, файлы появятся здесь."
+                        title="Документов пока нет"
+                      />
+                    </div>
+                  )
+                }
+                chat={
+                  <div className="cab-actions">
+                    {chatError ? <ListError message={chatError} /> : null}
+                    {applicationChat ? (
+                      <AddressChatPanel
+                        chat={applicationChat}
+                        currentUser={user}
+                        onClose={() => setApplicationChat(null)}
+                      />
+                    ) : (
+                      <>
+                        <p className="cab-timeline__text">
+                          Переписка с собственником по адресу этой заявки.
+                        </p>
+                        <button
+                          className="cab-chat-cta"
+                          disabled={chatBusy}
+                          onClick={() => openApplicationChat(selectedApplication.address_id)}
+                          type="button"
+                        >
+                          {chatBusy ? <Loader2 className="spin" size={15} /> : <MessageSquare size={15} />}
+                          Открыть чат с собственником
+                        </button>
+                      </>
+                    )}
+                  </div>
+                }
+              />
+            ) : null
+          }
+        />
       ))}
 
       {view === "chats" && (
@@ -2156,12 +2143,11 @@ function ClientDashboardView({
           onChatOpened={() => setPendingChatId(null)}
         />
       )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 
-type OwnerCabinetView = (typeof OWNER_SECTIONS)[number];
+type OwnerCabinetView = OwnerSectionId;
 
 function OwnerDashboardView({
   user,
@@ -2272,6 +2258,38 @@ function OwnerDashboardView({
     };
   }, [selectedApplication?.id, documentsRefreshKey]);
 
+  /**
+   * Чат по адресу заявки. Собственник не может его создать — сервер разрешает
+   * это только клиенту, — поэтому ищем уже существующий среди своих.
+   *
+   * Совпадение только по адресу: привязки чата к заявке в модели нет. Если по
+   * одному адресу переписываются несколько клиентов, подходящих чатов будет
+   * больше одного, и открывать первый попавшийся нельзя — это чужая переписка.
+   * В таком случае вкладка остаётся пустой, а разговоры доступны в разделе
+   * «Чаты», где видно, кто собеседник.
+   */
+  const [ownerChat, setOwnerChat] = useState<AddressChat | null>(null);
+
+  useEffect(() => {
+    const addressId = selectedApplication?.address_id;
+    if (!addressId) {
+      setOwnerChat(null);
+      return;
+    }
+    let alive = true;
+    api
+      .listMyChats()
+      .then((chats) => {
+        if (!alive) return;
+        const matching = chats.filter((chat) => chat.address_id === addressId);
+        setOwnerChat(matching.length === 1 ? matching[0] : null);
+      })
+      .catch(() => alive && setOwnerChat(null));
+    return () => {
+      alive = false;
+    };
+  }, [selectedApplication?.address_id]);
+
   async function runOwnerAction(action: string) {
     if (!selectedApplication) return;
     setActionBusy(action);
@@ -2309,107 +2327,64 @@ function OwnerDashboardView({
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button className="brand brand--link" onClick={onOpenCatalog} type="button" title="На главную">
-          <div className="brand-mark">UR</div>
-          <div>
-            <strong>Кабинет</strong>
-            <span>исполнитель</span>
-          </div>
-        </button>
-        <nav className="nav">
-          <button type="button" className="nav-item" onClick={onOpenCatalog} title="Открыть публичный каталог">
-            <Home size={18} strokeWidth={1.8} />
-            <span>Каталог</span>
-          </button>
-          <button
-            type="button"
-            className={view === "applications" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("applications")}
-          >
-            <FolderOpen size={18} strokeWidth={1.8} />
-            <span>Заявки</span>
-          </button>
-          <button
-            type="button"
-            className={view === "addresses" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("addresses")}
-          >
-            <Home size={18} strokeWidth={1.8} />
-            <span>Адреса</span>
-          </button>
-          <button
-            type="button"
-            className={view === "chats" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("chats")}
-          >
-            <MessageSquare size={18} strokeWidth={1.8} />
-            <span>Чаты</span>
-          </button>
-        </nav>
-        <div className="sidebar-footer">
-          <span>Собственник</span>
-          <strong>{user.email}</strong>
-          <button className="text-action" onClick={onLogout} type="button">
-            <LogOut size={15} /> Выйти
-          </button>
-        </div>
-      </aside>
-
-      <main className="owner-shell">
-        <header className="owner-topbar">
-          <NavCrumbs canGoBack={canGoBack} onBack={onBack} onHome={onOpenCatalog} />
-          <div className="actions">
-            <NotificationCenter
-              refreshKey={refreshKey}
-              onNavigate={(n) => {
-                if (n.link_type === "application" && n.link_id) {
-                  // Раздел и заявка одним переходом — иначе вторая навигация
-                  // затирает первую.
-                  onView("applications", n.link_id);
-                } else if (n.link_type === "chat" && n.link_id) {
-                  onView("chats");
-                  setPendingChatId(n.link_id);
-                }
-              }}
-            />
-            <PushToggle />
-            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-              <RefreshCw size={16} /> Обновить
-            </Button>
-          </div>
-        </header>
-
-        <section className="owner-heading">
-          <span className="eyebrow">
-            {view === "applications"
-              ? "Заявки"
-              : view === "addresses"
-                ? "Адреса"
-                : "Сообщения"}
-          </span>
-          <h1>
-            {view === "applications"
-              ? "Заявки, назначенные вашей организации"
-              : view === "addresses"
-                ? "Адреса, привязанные к вашей организации"
-                : "Входящие сообщения по адресам"}
-          </h1>
-        </section>
-
-        {user.email_verified === false ? (
-          <EmailVerificationBanner email={user.email} />
-        ) : null}
-        <InlineError message={error} />
-        <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
-
+    <AppShell
+      user={user}
+      section={view}
+      onSection={(id) => onView(id as OwnerCabinetView)}
+      title={view === "applications" ? "Заявки" : view === "addresses" ? "Адреса" : "Чаты"}
+      subtitle={
+        view === "applications"
+          ? actionableCount
+            ? `Требуют действия: ${actionableCount} из ${applications.length}`
+            : applications.length
+              ? `Всего заявок: ${applications.length}`
+              : undefined
+          : view === "addresses"
+            ? `Опубликовано: ${publishedCount} из ${addresses.length}`
+            : "Входящие сообщения по вашим адресам"
+      }
+      counts={{ applications: applications.length, addresses: addresses.length }}
+      onOpenSite={onOpenCatalog}
+      onBack={onBack}
+      canGoBack={canGoBack}
+      onLogout={onLogout}
+      onRefresh={() => setRefreshKey((value) => value + 1)}
+      actions={
+        <>
+          <NotificationCenter
+            refreshKey={refreshKey}
+            onNavigate={(n) => {
+              if (n.link_type === "application" && n.link_id) {
+                // Раздел и заявка одним переходом — иначе вторая навигация
+                // затирает первую.
+                onView("applications", n.link_id);
+              } else if (n.link_type === "chat" && n.link_id) {
+                onView("chats");
+                setPendingChatId(n.link_id);
+              }
+            }}
+          />
+          <PushToggle />
+        </>
+      }
+      banner={
+        <>
+          {error ? (
+            <ListError message={error} onRetry={() => setRefreshKey((value) => value + 1)} />
+          ) : null}
+          <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
+        </>
+      }
+    >
         {(view === "applications" || view === "addresses") && (loading ? (
-          <LoadingRows />
+          <ListLoading />
         ) : !dashboard ? (
-          <EmptyState title="Кабинет недоступен" text="Проверьте привязку пользователя к организации исполнителя." />
+          <ListEmpty title="Кабинет недоступен" text="Проверьте привязку пользователя к организации собственника." />
         ) : (
-          <section className={view === "applications" ? "owner-layout owner-layout--single" : "owner-layout owner-layout--single"}>
+          // Раскладка owner-layout нужна только разделу «Адреса»: заявки рисует
+          // общая очередь со своей сеткой. Тернарник с двумя одинаковыми
+          // ветками, стоявший здесь, остался от времён, когда раскладок было две.
+          <section className={view === "addresses" ? "owner-layout owner-layout--single" : undefined}>
           {view === "addresses" && (
           <aside className="owner-side">
             <div className="owner-provider-card">
@@ -2480,192 +2455,246 @@ function OwnerDashboardView({
           )}
 
           {view === "applications" && (
-          <div className="owner-main">
-            {applications.length ? (
-              <div className="owner-application-list">
-                {applications.map((application) => (
-                  <button
-                    className={application.id === selectedApplication?.id ? "owner-application active" : "owner-application"}
-                    key={application.id}
-                    onClick={() => onSelect(application.id)}
-                    type="button"
-                  >
-                    <span className={`status ${application.status}`}>
-                      {statusLabels[application.status] || application.status}
-                    </span>
-                    <strong>{application.company_name || application.planned_client_name || "Компания"}</strong>
-                    <small>{application.full_address}</small>
-                    <b>{formatMoney(application.selected_price)}</b>
-                  </button>
-                ))}
-              </div>
+            applications.length === 0 ? (
+              <ListEmpty
+                text="Когда оператор назначит заявку на ваш адрес, она появится здесь."
+                title="Заявок пока нет"
+              />
             ) : (
-              <EmptyState title="Заявок пока нет" text="Когда администратор назначит заявку на ваш адрес, она появится здесь." />
-            )}
+              <ApplicationsQueue
+                rows={applications.map((application) => ({
+                  id: application.id,
+                  subject:
+                    application.company_name || application.planned_client_name || "Клиент",
+                  address: application.full_address,
+                  status: application.status,
+                  updatedAt: application.updated_at,
+                  amount: formatMoney(application.selected_price)
+                }))}
+                selectedId={selectedApplication?.id || null}
+                onSelect={onSelect}
+                subjectLabel="Клиент"
+                filters={OWNER_QUEUE_FILTERS}
+                drawer={
+                  selectedApplication ? (
+                    <ApplicationDrawer
+                      id={selectedApplication.id}
+                      title={
+                        selectedApplication.company_name ||
+                        selectedApplication.planned_client_name ||
+                        "Заявка"
+                      }
+                      address={selectedApplication.full_address}
+                      status={selectedApplication.status}
+                      docsCount={documents.length || null}
+                      chatDisabledReason={
+                        ownerChat
+                          ? null
+                          : "Чат по адресу открывает клиент — здесь появится уже начатая переписка"
+                      }
+                      main={
+                        <>
+                          <div className="cab-kv">
+                            <DrawerRow label="Тип" value={typeLabels[selectedApplication.type]} />
+                            <DrawerRow
+                              label="Сумма адреса"
+                              value={formatMoney(selectedApplication.selected_price)}
+                            />
+                            <DrawerRow
+                              label="Срок"
+                              value={
+                                selectedApplication.term_months
+                                  ? `${selectedApplication.term_months} мес.`
+                                  : "—"
+                              }
+                            />
+                            <DrawerRow
+                              label="ИФНС"
+                              value={
+                                selectedApplication.fns_number
+                                  ? `№ ${selectedApplication.fns_number}`
+                                  : "—"
+                              }
+                            />
+                            <DrawerRow
+                              label="Контакт клиента"
+                              value={selectedApplication.contact_name || "—"}
+                            />
+                            <DrawerRow
+                              label="Связь"
+                              value={
+                                [
+                                  selectedApplication.contact_phone,
+                                  selectedApplication.contact_email
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ") || "—"
+                              }
+                            />
+                            <DrawerRow
+                              label="Следующий шаг"
+                              value={ownerNextStepLabel(selectedApplication)}
+                            />
+                            <DrawerRow
+                              label="Корреспонденция"
+                              value={
+                                selectedApplication.has_correspondence_service
+                                  ? selectedApplication.correspondence_price
+                                    ? `Подключена · ${formatMoney(selectedApplication.correspondence_price)}`
+                                    : "Подключена"
+                                  : "Не подключена"
+                              }
+                            />
+                          </div>
 
-            {selectedApplication ? (
-              <div className="owner-detail">
-                <div className="client-detail-header">
-                  <div>
-                    <span className="eyebrow">{typeLabels[selectedApplication.type]}</span>
-                    <h2>{selectedApplication.company_name || selectedApplication.planned_client_name || "Заявка"}</h2>
-                  </div>
-                  <span className={`status ${selectedApplication.status}`}>
-                    {statusLabels[selectedApplication.status] || selectedApplication.status}
-                  </span>
-                </div>
+                          <div className="cab-actions">
+                            <OwnerPaymentSection
+                              applicationId={selectedApplication.id}
+                              onConfirmed={() => setRefreshKey((value) => value + 1)}
+                            />
 
-                <div className="client-metrics">
-                  <div>
-                    <ReceiptText size={18} />
-                    <span>Сумма адреса</span>
-                    <strong>{formatMoney(selectedApplication.selected_price)}</strong>
-                  </div>
-                  <div>
-                    <FileClock size={18} />
-                    <span>Срок</span>
-                    <strong>{selectedApplication.term_months ? `${selectedApplication.term_months} мес.` : "—"}</strong>
-                  </div>
-                  <div>
-                    <Home size={18} />
-                    <span>ИФНС</span>
-                    <strong>{selectedApplication.fns_number ? `№ ${selectedApplication.fns_number}` : "—"}</strong>
-                  </div>
-                </div>
+                            {/* Набор действий приходит с бэкенда: право решать,
+                                что можно делать с заявкой, остаётся там. */}
+                            {selectedApplication.available_actions.map((action) => {
+                              const Icon =
+                                action === "accept"
+                                  ? CheckCircle2
+                                  : action === "reject"
+                                    ? XCircle
+                                    : action === "start_documents"
+                                      ? FileText
+                                      : Upload;
+                              return (
+                                <button
+                                  className={
+                                    action === "reject"
+                                      ? "cab-btn cab-btn--danger cab-btn--block"
+                                      : "cab-btn cab-btn--primary cab-btn--block"
+                                  }
+                                  disabled={actionBusy !== null}
+                                  key={action}
+                                  onClick={() => runOwnerAction(action)}
+                                  type="button"
+                                >
+                                  {actionBusy === action ? (
+                                    <Loader2 className="spin" size={15} />
+                                  ) : (
+                                    <Icon size={15} />
+                                  )}
+                                  {ownerActionLabels[action] || action}
+                                </button>
+                              );
+                            })}
+                            {actionError ? <ListError message={actionError} /> : null}
+                          </div>
 
-                <div className="client-info-grid">
-                  <div>
-                    <span>Адрес</span>
-                    <strong>{selectedApplication.full_address}</strong>
-                  </div>
-                  <div>
-                    <span>Контакт клиента</span>
-                    <strong>{selectedApplication.contact_name || "—"}</strong>
-                    <small>{[selectedApplication.contact_phone, selectedApplication.contact_email].filter(Boolean).join(" · ")}</small>
-                  </div>
-                  <div>
-                    <span>Следующий шаг</span>
-                    <strong>{ownerNextStepLabel(selectedApplication)}</strong>
-                  </div>
-                  <div>
-                    <span>Корреспонденция</span>
-                    <strong>{selectedApplication.has_correspondence_service ? "Подключена" : "Не подключена"}</strong>
-                    {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
-                  </div>
-                </div>
+                          <DrawerTimeline
+                            emptyText="События появятся после назначения заявки."
+                            events={selectedApplication.events}
+                          />
+                        </>
+                      }
+                      docs={
+                        <div className="cab-actions">
+                          {ownerCanUploadDocuments(selectedApplication) ? (
+                            <form className="owner-upload-form" onSubmit={uploadOwnerDocument}>
+                              <Field label="Тип документа">
+                                <select
+                                  value={documentKind}
+                                  onChange={(event) =>
+                                    setDocumentKind(event.target.value as DocumentFileKind)
+                                  }
+                                >
+                                  {ownerDocumentKinds.map((kind) => (
+                                    <option key={kind} value={kind}>
+                                      {documentKindLabels[kind]}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field label="Файл">
+                                <input
+                                  accept=".pdf,.doc,.docx,.zip,.jpg,.jpeg,.png"
+                                  key={documentInputKey}
+                                  onChange={(event) =>
+                                    setDocumentFile(event.target.files?.[0] || null)
+                                  }
+                                  type="file"
+                                />
+                              </Field>
+                              <button
+                                className="cab-btn cab-btn--primary cab-btn--block"
+                                disabled={uploadBusy || !documentFile}
+                                type="submit"
+                              >
+                                {uploadBusy ? (
+                                  <Loader2 className="spin" size={15} />
+                                ) : (
+                                  <Upload size={15} />
+                                )}
+                                Отправить на проверку
+                              </button>
+                            </form>
+                          ) : null}
 
-                <OwnerPaymentSection
-                  applicationId={selectedApplication.id}
-                  onConfirmed={() => setRefreshKey((value) => value + 1)}
-                />
+                          {uploadError || documentsError ? (
+                            <ListError message={uploadError || documentsError || ""} />
+                          ) : null}
 
-                {selectedApplication.available_actions.length ? (
-                  <div className="owner-action-strip">
-                    {selectedApplication.available_actions.map((action) => {
-                      const Icon =
-                        action === "accept"
-                          ? CheckCircle2
-                          : action === "reject"
-                            ? XCircle
-                            : action === "start_documents"
-                              ? FileText
-                              : Upload;
-                      return (
-                        <Button
-                          disabled={actionBusy !== null}
-                          key={action}
-                          onClick={() => runOwnerAction(action)}
-                          variant={action === "reject" ? "secondary" : "primary"}
-                        >
-                          {actionBusy === action ? <Loader2 className="spin" size={16} /> : <Icon size={16} />}
-                          {ownerActionLabels[action] || action}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                <InlineError message={actionError} />
-
-                <div className="owner-documents-panel">
-                  <div className="timeline-title">
-                    <FileArchive size={18} />
-                    <strong>Документы заявки</strong>
-                  </div>
-
-                  {ownerCanUploadDocuments(selectedApplication) ? (
-                    <form className="owner-upload-form" onSubmit={uploadOwnerDocument}>
-                      <Field label="Тип документа">
-                        <select value={documentKind} onChange={(event) => setDocumentKind(event.target.value as DocumentFileKind)}>
-                          {ownerDocumentKinds.map((kind) => (
-                            <option key={kind} value={kind}>
-                              {documentKindLabels[kind]}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                      <Field label="Файл">
-                        <input
-                          accept=".pdf,.doc,.docx,.zip,.jpg,.jpeg,.png"
-                          key={documentInputKey}
-                          onChange={(event) => setDocumentFile(event.target.files?.[0] || null)}
-                          type="file"
-                        />
-                      </Field>
-                      <Button disabled={uploadBusy || !documentFile} type="submit">
-                        {uploadBusy ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
-                        Отправить на проверку
-                      </Button>
-                    </form>
-                  ) : null}
-
-                  <InlineError message={uploadError || documentsError} />
-
-                  {documentsLoading ? (
-                    <LoadingRows />
-                  ) : documents.length ? (
-                    <div className="owner-document-list">
-                      {documents.map((document) => (
-                        <DownloadLink className="owner-document-item" href={apiDownloadUrl(document.download_url)} key={document.id}>
-                          <FileText size={17} />
-                          <span>
-                            <strong>{document.original_filename}</strong>
-                            <small>
-                              {documentKindLabels[document.kind]} · {formatFileSize(document.size_bytes)} ·{" "}
-                              {formatDate(document.created_at)}
-                            </small>
-                          </span>
-                          <Download size={16} />
-                        </DownloadLink>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState title="Документы пока не загружены" text="После загрузки файлы появятся здесь." />
-                  )}
-                </div>
-
-                <div className="timeline-panel">
-                  <div className="timeline-title">
-                    <FileText size={18} />
-                    <strong>Лента исполнителя</strong>
-                  </div>
-                  {selectedApplication.events.length ? (
-                    <div className="timeline">
-                      {selectedApplication.events.map((event) => (
-                        <div className="timeline-item" key={event.id}>
-                          <span>{formatDate(event.created_at)}</span>
-                          <strong>{event.title}</strong>
-                          <p>{event.message}</p>
+                          {documentsLoading ? (
+                            <ListLoading rows={2} />
+                          ) : documents.length ? (
+                            documents.map((document) => (
+                              <DownloadLink
+                                className="cab-doc"
+                                href={apiDownloadUrl(document.download_url)}
+                                key={document.id}
+                              >
+                                <FileText size={17} />
+                                <span style={{ minWidth: 0, flex: 1 }}>
+                                  <strong className="cab-doc__name">
+                                    {document.original_filename}
+                                  </strong>
+                                  <span className="cab-doc__meta">
+                                    {documentKindLabels[document.kind]} ·{" "}
+                                    {formatFileSize(document.size_bytes)} ·{" "}
+                                    {formatDate(document.created_at)}
+                                  </span>
+                                </span>
+                                <Download size={16} />
+                              </DownloadLink>
+                            ))
+                          ) : (
+                            <ListEmpty
+                              text="Загрузите комплект — он уйдёт оператору на проверку."
+                              title="Документов пока нет"
+                            />
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState title="Событий пока нет" text="События для исполнителя появятся после назначения заявки." />
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
+                      }
+                      chat={
+                        <div className="cab-actions">
+                          {ownerChat ? (
+                            <AddressChatPanel
+                              chat={ownerChat}
+                              currentUser={user}
+                              onClose={() => onView("chats")}
+                            />
+                          ) : (
+                            <p className="cab-timeline__text">
+                              Переписки по адресу этой заявки пока нет. Создать её может
+                              только клиент — из карточки адреса или из своей заявки.
+                            </p>
+                          )}
+                        </div>
+                      }
+                    />
+                  ) : null
+                }
+              />
+            )
           )}
+
         </section>
         ))}
 
@@ -2696,8 +2725,7 @@ function OwnerDashboardView({
             onSaved={() => setRefreshKey((value) => value + 1)}
           />
         ) : null}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 
@@ -3096,7 +3124,7 @@ function ApplicationsView({
                 <b>{application.contact_name || "—"}</b>
                 <small>{[application.contact_phone, application.contact_email].filter(Boolean).join(" · ") || "нет контактов"}</small>
               </span>
-              <span className={`status ${application.status}`}>{statusLabels[application.status] || application.status}</span>
+              <StatusBadge status={application.status} />
               <span>{providerById.get(application.provider_id)?.short_name || "—"}</span>
               <span>{addressById.get(application.address_id)?.full_address || "—"}</span>
               <span>{formatDate(application.created_at)}</span>
@@ -3231,7 +3259,7 @@ function DocumentModerationPanel({
         <div className="moderation-summary">
           <div>
             <span>Статус</span>
-            <strong>{statusLabels[moderation?.status || application.status] || moderation?.status || application.status}</strong>
+            <strong>{statusText(moderation?.status || application.status)}</strong>
           </div>
           <div>
             <span>Ручная проверка</span>

@@ -74,8 +74,18 @@ type CatalogFilters = {
   priceTo: string;
   sort: CatalogSort;
   withCorr: boolean;
-  budgetUnder30k: boolean;
+  /**
+   * Пресет верхней границы цены. Раньше это был булев `budgetUnder30k`; чтобы
+   * добавить «дешевле 20 000» вторым флагом, пришлось бы решать, что делать
+   * при обоих включённых. Ссылки со старым `budget=lt30` продолжают работать.
+   */
+  budgetPreset: "" | "lt20" | "lt30";
   premium11: boolean;
+};
+
+const BUDGET_PRESET_VALUES: Record<Exclude<CatalogFilters["budgetPreset"], "">, number> = {
+  lt20: 20000,
+  lt30: 30000,
 };
 
 const initialFilters: CatalogFilters = {
@@ -89,7 +99,7 @@ const initialFilters: CatalogFilters = {
   priceTo: "",
   sort: "default",
   withCorr: false,
-  budgetUnder30k: false,
+  budgetPreset: "",
   premium11: false,
 };
 
@@ -125,7 +135,7 @@ function filtersToQueryString(f: CatalogFilters): string {
   if (f.priceTo) p.set("pt", f.priceTo);
   if (f.sort !== "default") p.set("sort", f.sort);
   if (f.withCorr) p.set("corr", "1");
-  if (f.budgetUnder30k) p.set("budget", "lt30");
+  if (f.budgetPreset) p.set("budget", f.budgetPreset);
   if (f.premium11) p.set("tier", "premium");
   return p.toString();
 }
@@ -145,7 +155,7 @@ function filtersFromQueryString(search: string): CatalogFilters {
     priceTo: p.get("pt") ?? "",
     sort: sort && (VALID_SORTS as string[]).includes(sort) ? (sort as CatalogSort) : "default",
     withCorr: p.get("corr") === "1",
-    budgetUnder30k: p.get("budget") === "lt30",
+    budgetPreset: p.get("budget") === "lt20" ? "lt20" : p.get("budget") === "lt30" ? "lt30" : "",
     premium11: p.get("tier") === "premium",
   };
 }
@@ -614,8 +624,8 @@ export default function PublicCatalog({
       // (budgetUnder30k / premium11) — fallback.
       price_lt: filters.priceTo
         ? Number(filters.priceTo)
-        : filters.budgetUnder30k
-          ? 30000
+        : filters.budgetPreset
+          ? BUDGET_PRESET_VALUES[filters.budgetPreset]
           : undefined,
       price_gte: filters.priceFrom
         ? Number(filters.priceFrom)
@@ -638,7 +648,7 @@ export default function PublicCatalog({
       filters.withCorr,
       filters.priceFrom,
       filters.priceTo,
-      filters.budgetUnder30k,
+      filters.budgetPreset,
       filters.premium11,
       filters.sort,
     ],
@@ -723,7 +733,7 @@ export default function PublicCatalog({
     filters.priceFrom,
     filters.priceTo,
     filters.withCorr,
-    filters.budgetUnder30k,
+    filters.budgetPreset,
     filters.premium11,
     filters.sort,
   ]);
@@ -804,14 +814,9 @@ export default function PublicCatalog({
     return set.size;
   }, [addresses]);
 
-  const cities = useMemo(() => {
-    const values = new Set<string>(["Москва"]);
-    for (const address of addresses) {
-      const match = address.full_address.match(/г\.\s*([^,]+)/i);
-      if (match?.[1]) values.add(match[1].trim());
-    }
-    return Array.from(values).sort((a, b) => a.localeCompare(b, "ru"));
-  }, [addresses]);
+  /* Подсказки городов вынимались регуляркой из строки адреса и жили только в
+     datalist свободного поля «Город». Поле убрано — города берутся из
+     справочника ИФНС в каскаде, где они настоящие, а не выкушенные из текста. */
 
   const hasActiveFilters = Boolean(
     filters.query.trim() ||
@@ -823,7 +828,7 @@ export default function PublicCatalog({
       filters.priceTo ||
       filters.city !== initialFilters.city ||
       filters.withCorr ||
-      filters.budgetUnder30k ||
+      filters.budgetPreset ||
       filters.premium11 ||
       filters.sort !== "default",
   );
@@ -1078,34 +1083,97 @@ export default function PublicCatalog({
             <div className="ds-stat__lbl">месяцев аренды</div>
           </div>
         </motion.div>
+
+        {/* Декоративная иллюстрация: пустой alt, на узком экране скрыта целиком.
+            Стоит последней в разметке, чтобы не вклиниваться между заголовком и
+            текстом при чтении с экранного диктора; на месте её держит сетка. */}
+        <div aria-hidden="true" className="ds-hero__media">
+          <img alt="" decoding="async" fetchPriority="high" src="/hero-office.jpg" />
+        </div>
       </motion.section>
 
-      <HomeConfigurator
-        filters={{
-          query: filters.query,
-          region: filters.region,
-          geoCity: filters.geoCity,
-          fnsOfficeId: filters.fnsOfficeId,
-          priceFrom: filters.priceFrom,
-          priceTo: filters.priceTo,
-          withCorr: filters.withCorr,
-        }}
-        onChange={(next) => setFilters({ ...filters, ...next })}
-        termMonths={11}
-        onTermChange={() => {
-          /* MVP: term shown per card; конфигуратор пока не привязывает term глобально */
-        }}
-        geoTree={geoTree}
-        totalCount={totalCount}
-        loading={loading}
-        onShowResults={() => {
-          document
-            .getElementById("catalog-grid")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }}
-        onReset={resetFilters}
-        onOpenMap={() => setMapOpen(true)}
-      />
+      {/*
+        Раньше здесь стоял конфигуратор — вторая форма про то же, что и
+        расширенный поиск: город, срок, цена и корреспонденция задавались в
+        двух местах одной страницы. Теперь на странице ряд пресетов, а полная
+        форма живёт в модалке «Подобрать адрес» (кнопка справа и в шапке).
+
+        В ряду только те пресеты, которые действительно работают. «Готово к
+        регистрации» и «Рядом с метро» из макета не выведены: первого нет в
+        API (клиентская фильтрация разошлась бы со счётчиком и пагинацией),
+        для второго нет данных о станциях ни в модели, ни в выдаче.
+      */}
+      <div className="ds-quickchips ds-quickchips--standalone">
+        <span className="ds-quickchips__label">Подбор</span>
+        <button
+          aria-pressed={filters.budgetPreset === "lt20"}
+          className={filters.budgetPreset === "lt20" ? "ds-chip ds-chip--active" : "ds-chip"}
+          onClick={() =>
+            setFilters({
+              ...filters,
+              budgetPreset: filters.budgetPreset === "lt20" ? "" : "lt20",
+              // Пресет и поле «цена до» — про одно и то же. Оставлять оба
+              // значит показывать активный чип, который ни на что не влияет.
+              priceTo: "",
+            })
+          }
+          type="button"
+        >
+          Дешевле 20 000 ₽
+        </button>
+        <button
+          aria-pressed={filters.budgetPreset === "lt30"}
+          className={filters.budgetPreset === "lt30" ? "ds-chip ds-chip--active" : "ds-chip"}
+          onClick={() =>
+            setFilters({
+              ...filters,
+              budgetPreset: filters.budgetPreset === "lt30" ? "" : "lt30",
+              priceTo: "",
+            })
+          }
+          type="button"
+        >
+          Дешевле 30 000 ₽
+        </button>
+        <button
+          aria-pressed={filters.withCorr}
+          className={filters.withCorr ? "ds-chip ds-chip--active" : "ds-chip"}
+          onClick={() => setFilters({ ...filters, withCorr: !filters.withCorr })}
+          type="button"
+        >
+          С почтой
+        </button>
+        <button
+          aria-pressed={filters.sort === "newest"}
+          className={filters.sort === "newest" ? "ds-chip ds-chip--active" : "ds-chip"}
+          onClick={() =>
+            setFilters({ ...filters, sort: filters.sort === "newest" ? "default" : "newest" })
+          }
+          type="button"
+        >
+          Сначала новые
+        </button>
+        <span style={{ flex: 1 }} />
+        {hasActiveFilters ? (
+          <button className="ds-chip" onClick={resetFilters} type="button">
+            Сбросить
+          </button>
+        ) : null}
+        <button
+          className="ds-btn ds-btn--secondary ds-btn--sm"
+          onClick={() => setAdvancedOpen(true)}
+          type="button"
+        >
+          <Search size={13} /> Подобрать адрес
+        </button>
+        <button
+          className="ds-btn ds-btn--secondary ds-btn--sm"
+          onClick={() => setMapOpen(true)}
+          type="button"
+        >
+          На карте
+        </button>
+      </div>
 
       <AddressMapModal
         open={mapOpen}
@@ -1241,13 +1309,14 @@ export default function PublicCatalog({
                       С корреспонденцией <X size={12} />
                     </button>
                   )}
-                  {filters.budgetUnder30k && (
+                  {filters.budgetPreset && (
                     <button
                       type="button"
                       className="ds-chip ds-chip--active"
-                      onClick={() => setFilters({ ...filters, budgetUnder30k: false })}
+                      onClick={() => setFilters({ ...filters, budgetPreset: "" })}
                     >
-                      До 30 000 ₽ <X size={12} />
+                      До {BUDGET_PRESET_VALUES[filters.budgetPreset].toLocaleString("ru-RU")} ₽{" "}
+                      <X size={12} />
                     </button>
                   )}
                   {filters.premium11 && (
@@ -2029,23 +2098,17 @@ export default function PublicCatalog({
               Срок и подключение корреспонденции выбираются прямо в карточке адреса —
               цена обновится автоматически.
             </p>
+            {/*
+              Свободного поля «Город» здесь больше нет: город выбирается ниже,
+              в каскаде «Регион → Город → ИФНС», где значения приходят из
+              справочника инспекций, а не набираются руками. Два поля про город
+              в одном окне — ровно та двойственность, ради которой конфигуратор
+              и переехал со страницы. Параметр city из старых ссылок продолжает
+              работать и снимается чипом в блоке активных фильтров.
+            */}
             <div className="form-grid">
               <label className="field">
-                <span>Город</span>
-                <input
-                  list="ds-public-cities-modal"
-                  value={filters.city}
-                  onChange={(event) => setFilters({ ...filters, city: event.target.value })}
-                  placeholder="Москва"
-                />
-                <datalist id="ds-public-cities-modal">
-                  {cities.map((city) => (
-                    <option key={city} value={city} />
-                  ))}
-                </datalist>
-              </label>
-              <label className="field">
-                <span>ИФНС</span>
+                <span>ИФНС по номеру</span>
                 <select
                   value={filters.fnsNumber}
                   onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
@@ -2074,6 +2137,56 @@ export default function PublicCatalog({
                 />
               </label>
             </div>
+
+            {/*
+              Конфигуратор переехал сюда со страницы. Без него из подбора
+              пропали бы гео-каскад «регион → город → ИФНС», диапазон цены и
+              фильтр корреспонденции — всё это бэкенд поддерживает, а в модалке
+              полей под них не было.
+            */}
+            <div className="ds-configurator-embed">
+              <HomeConfigurator
+                filters={{
+                  query: filters.query,
+                  region: filters.region,
+                  geoCity: filters.geoCity,
+                  fnsOfficeId: filters.fnsOfficeId,
+                  priceFrom: filters.priceFrom,
+                  priceTo: filters.priceTo,
+                  withCorr: filters.withCorr,
+                }}
+                onChange={(next) =>
+                  setFilters({
+                    ...filters,
+                    ...next,
+                    // Ручной ввод «до» отменяет пресет: иначе поле показывало
+                    // бы одно число, а выдача фильтровалась по другому.
+                    ...(next.priceTo !== undefined && next.priceTo !== filters.priceTo
+                      ? { budgetPreset: "" as const }
+                      : {}),
+                  })
+                }
+                termMonths={11}
+                onTermChange={() => {
+                  /* MVP: срок выбирается в карточке адреса — там же меняется цена. */
+                }}
+                geoTree={geoTree}
+                totalCount={totalCount}
+                loading={loading}
+                onShowResults={() => {
+                  setAdvancedOpen(false);
+                  document
+                    .getElementById("catalog-grid")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                onReset={resetFilters}
+                onOpenMap={() => {
+                  setAdvancedOpen(false);
+                  setMapOpen(true);
+                }}
+              />
+            </div>
+
             <div
               className="row-actions"
               style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}

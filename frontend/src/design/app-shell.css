@@ -40,14 +40,6 @@ h1 {
   line-height: 1.05;
 }
 
-/* === Sidebar — фирменный индиго-акцент === */
-.sidebar {
-  background: #ffffff;
-  border-right: 1px solid var(--ds-border-soft);
-  padding: 24px 18px;
-  gap: 22px;
-}
-
 .brand {
   min-height: auto;
   gap: 12px;
@@ -75,60 +67,6 @@ h1 {
 .brand span {
   color: var(--ds-slate-500);
   font-size: 12px;
-}
-
-.nav {
-  gap: 4px;
-}
-
-.nav-item {
-  padding: 9px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--ds-radius-md);
-  color: var(--ds-slate-600);
-  font-size: 14px;
-  font-weight: 500;
-  transition:
-    background var(--ds-motion-fast) var(--ds-ease-out),
-    color var(--ds-motion-fast) var(--ds-ease-out),
-    border-color var(--ds-motion-fast) var(--ds-ease-out);
-}
-
-.nav-item:hover {
-  background: var(--ds-slate-100);
-  color: var(--ds-indigo-700);
-}
-
-.nav-item.active {
-  background: var(--ds-indigo-50);
-  border-color: var(--ds-indigo-100);
-  color: var(--ds-indigo-700);
-  font-weight: 600;
-}
-
-.nav-item svg {
-  color: currentColor;
-}
-
-.sidebar-footer {
-  border-top: 1px solid var(--ds-border-soft);
-  color: var(--ds-slate-500);
-  font-size: 12px;
-}
-
-.sidebar-footer strong {
-  color: var(--ds-indigo-950);
-  font-family: var(--ds-font-mono);
-}
-
-/* === Workspace заголовок === */
-.workspace {
-  padding: 32px 36px;
-}
-
-.topbar {
-  margin-bottom: 28px;
-  max-width: 1280px;
 }
 
 .eyebrow {
@@ -196,7 +134,6 @@ h1 {
 .demo-seed-panel,
 .public-login-panel,
 .owner-request-panel,
-.timeline-panel,
 .payment-panel,
 .simple-list .simple-item {
   background: #ffffff;
@@ -271,167 +208,6 @@ h1 {
   outline: none;
   border-color: var(--ds-indigo-500);
   box-shadow: 0 0 0 3px var(--ds-indigo-100);
-}
-
-/* === Status badges — семантические цвета === */
-.status {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: var(--ds-radius-pill);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0;
-  background: var(--ds-neutral-bg);
-  color: var(--ds-neutral-fg);
-  border: 1px solid transparent;
-}
-
-/* Финальные позитивные */
-.status.completed,
-.status.paid,
-.status.contract_signed,
-.status.ready_for_client {
-  background: var(--ds-success-bg);
-  color: var(--ds-success-fg);
-}
-
-/* В работе / нейтральные */
-.status.admin_review,
-.status.documents_review,
-.status.documents_preparing,
-.status.documents_uploaded,
-.status.assigned_to_owner,
-.status.accepted_by_owner,
-.status.guarantee_issued,
-.status.awaiting_contract,
-.status.active {
-  background: var(--ds-info-bg);
-  color: var(--ds-info-fg);
-}
-
-/* Ожидание оплаты — индиго brand */
-.status.awaiting_payment,
-.status.draft {
-  background: var(--ds-brand-bg);
-  color: var(--ds-brand-fg);
-}
-
-/* Внимание */
-.status.needs_client_fix,
-.status.documents_revision,
-.status.dispute {
-  background: var(--ds-warning-bg);
-  color: var(--ds-warning-fg);
-}
-
-/* Отрицательные */
-.status.cancelled,
-.status.rejected_by_owner,
-.status.refunded,
-.status.refund_pending,
-.status.expired,
-.status.terminated {
-  background: var(--ds-danger-bg);
-  color: var(--ds-danger-fg);
-}
-
-/* === Client dashboard === */
-.client-shell {
-  background: var(--ds-page-bg);
-}
-
-.client-topbar {
-  background: #ffffff;
-  border: 1px solid var(--ds-border-soft);
-  border-radius: var(--ds-radius-lg);
-  padding: 14px 22px;
-  margin-bottom: 22px;
-  box-shadow: var(--ds-shadow-sm);
-}
-
-.client-topbar .brand strong {
-  color: var(--ds-indigo-950);
-}
-
-.client-heading h1 {
-  color: var(--ds-indigo-950);
-  font-size: clamp(28px, 3vw, 38px);
-}
-
-.client-application {
-  border: 1px solid var(--ds-border-soft);
-  background: #ffffff;
-  border-radius: var(--ds-radius-lg);
-  padding: 14px 16px;
-  transition:
-    border-color var(--ds-motion-fast) var(--ds-ease-out),
-    background var(--ds-motion-fast) var(--ds-ease-out),
-    box-shadow var(--ds-motion-fast) var(--ds-ease-out);
-}
-
-.client-application:hover {
-  border-color: var(--ds-indigo-200);
-  background: var(--ds-indigo-50);
-  box-shadow: var(--ds-shadow-sm);
-}
-
-.client-application.active {
-  border-color: var(--ds-indigo-300);
-  background: var(--ds-indigo-50);
-  box-shadow: var(--ds-shadow-md);
-}
-
-.client-detail {
-  background: #ffffff;
-  border: 1px solid var(--ds-border-soft);
-  border-radius: var(--ds-radius-xl);
-  padding: 22px;
-  box-shadow: var(--ds-shadow-sm);
-}
-
-.client-detail-header h2 {
-  color: var(--ds-indigo-950);
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: var(--ds-tracking-tighter);
-}
-
-.client-metrics div,
-.client-info-grid div {
-  background: var(--ds-slate-50);
-  border: 1px solid var(--ds-border-soft);
-  border-radius: var(--ds-radius-md);
-}
-
-.client-metrics svg {
-  color: var(--ds-indigo-500);
-}
-
-/* === Owner dashboard === */
-.owner-application {
-  background: #ffffff;
-  border-color: var(--ds-border-soft);
-  border-radius: var(--ds-radius-lg);
-  box-shadow: var(--ds-shadow-sm);
-}
-
-.owner-application:hover {
-  border-color: var(--ds-indigo-200);
-  background: var(--ds-indigo-50);
-}
-
-.owner-application.active {
-  background: var(--ds-indigo-50);
-  border-color: var(--ds-indigo-300);
-}
-
-.owner-application strong {
-  color: var(--ds-indigo-950);
-}
-
-.owner-application b {
-  color: var(--ds-indigo-700);
 }
 
 .owner-document-item {
@@ -550,12 +326,6 @@ h1 {
   font-size: 13px;
 }
 
-/* === Topbar buttons (Обновить, Выйти, Уведомления) === */
-.client-topbar .actions .btn,
-.topbar .topbar-actions .btn {
-  box-shadow: var(--ds-shadow-sm);
-}
-
 /* === Address card в каталоге admin/owner (помещения) - убираем зелёный === */
 .address-card-icon {
   background: var(--ds-indigo-50);
@@ -596,18 +366,6 @@ h1 {
 
 .templates-panel svg {
   color: var(--ds-indigo-500);
-}
-
-/* === Sidebar logout link === */
-.sidebar-footer button {
-  color: var(--ds-slate-500);
-  background: transparent;
-  border: none;
-  padding: 0;
-}
-
-.sidebar-footer button:hover {
-  color: var(--ds-indigo-700);
 }
 
 /* Override базового modal-backdrop из styles.css (z=5) — должен быть выше
@@ -658,50 +416,15 @@ h1 {
 .ds-detail-totop:hover {
   transform: translateY(-2px);
 }
-
-/* Унифицированный padding контента раздела во всех кабинетах:
-   client-shell / owner-shell — выровнять верхний/нижний/боковой отступы
-   относительно sidebar. */
-.app-shell .client-shell,
-.app-shell .owner-shell {
-  padding: 24px 28px 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  min-width: 0;
-}
-.app-shell .client-topbar,
-.app-shell .owner-topbar {
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-}
-.app-shell .client-heading,
-.app-shell .owner-heading {
-  margin: 0;
-  padding: 0;
-  max-width: none;
-  margin-left: 0;
-  margin-right: 0;
-}
-/* Базовый styles.css центрирует owner-layout (margin: auto). В sidebar-режиме
-   нам нужно прижать его к левому краю и использовать всю доступную ширину
-   контентной зоны. */
-.app-shell .owner-layout {
+/* Базовый styles.css центрирует owner-layout (margin: auto). Внутри кабинета
+   он должен занимать всю ширину контентной зоны, а не половину экрана.
+   Селектор был привязан к .app-shell — оболочка переехала на .cab-shell,
+   и без правки это правило перестало применяться. */
+.cab-content .owner-layout {
   max-width: none;
   margin-left: 0;
   margin-right: 0;
   width: 100%;
-}
-.app-shell .owner-topbar {
-  max-width: none;
-  margin-left: 0;
-  margin-right: 0;
 }
 /* Если в Owner-разделе только один из owner-side/owner-main —
    гридом из 1 колонки без второй. */
@@ -752,13 +475,6 @@ h1 {
     grid-column: 1;
     grid-row: auto;
   }
-}
-
-/* ===================== Notifications ===================== */
-.notification-item .status.chat {
-  background: var(--ds-indigo-50);
-  color: var(--ds-indigo-700);
-  border-color: var(--ds-indigo-200);
 }
 
 /* ===================== Owner address editor ===================== */
@@ -1042,7 +758,6 @@ h1 {
 
 /* Логотип в сайдбаре и на экране входа теперь кнопка. Сбрасываем кнопочные
    умолчания, чтобы блок бренда выглядел ровно как раньше. */
-.brand--link,
 .auth-brand--link {
   appearance: none;
   width: 100%;
@@ -1057,33 +772,13 @@ h1 {
   transition: opacity 0.15s ease;
 }
 
-.brand--link:hover,
 .auth-brand--link:hover {
   opacity: 0.82;
 }
 
-.brand--link:focus-visible,
 .auth-brand--link:focus-visible {
   outline: 2px solid var(--ds-indigo-600);
   outline-offset: 3px;
-}
-
-/* «Назад» и «На главную» над заголовком раздела кабинета. */
-.nav-crumbs {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 10px;
-}
-
-.nav-crumbs .text-action {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ds-slate-500);
-}
-
-.nav-crumbs .text-action:hover {
-  color: var(--ds-indigo-600);
 }
 
 /* Те же кнопки на экране входа — по центру под логотипом. */
