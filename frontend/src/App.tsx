@@ -51,7 +51,12 @@ import {
 } from "./applications/ApplicationDrawer";
 import { ApplicationsQueue, type QueueFilter } from "./applications/ApplicationsQueue";
 import { AppShell } from "./shell/AppShell";
-import { navItemsFor, sectionLabel } from "./shell/navConfig";
+import {
+  navItemsFor,
+  sectionLabel,
+  type ClientSectionId,
+  type OwnerSectionId
+} from "./shell/navConfig";
 import { statusLabel as statusText, statusMeta } from "./status";
 import { Badge, StatusBadge } from "./ui/Badge";
 import { ListEmpty, ListError, ListLoading } from "./ui/ListState";
@@ -118,8 +123,10 @@ type View =
  * Разделы кабинетов клиента и собственника — они же сегменты URL /app/<section>.
  * Первый в списке считается разделом по умолчанию для «/app».
  */
-const CLIENT_SECTIONS = ["applications", "chats"] as const;
-const OWNER_SECTIONS = ["applications", "addresses", "chats"] as const;
+/*
+ * Списки разделов клиента и собственника живут в shell/navConfig.ts вместе с
+ * меню — один источник вместо двух, которые могли разъехаться.
+ */
 
 /**
  * Синонимы разделов: один и тот же экран у разных ролей называется по-разному.
@@ -1512,7 +1519,7 @@ export default function App() {
     return (
       <ClientDashboardView
         user={currentUser}
-        view={section as (typeof CLIENT_SECTIONS)[number]}
+        view={section as ClientSectionId}
         onView={(next, id) => openCabinet(next, id ?? null)}
         selectedId={selectedId}
         onSelect={selectInSection}
@@ -1528,7 +1535,7 @@ export default function App() {
     return (
       <OwnerDashboardView
         user={currentUser}
-        view={section as (typeof OWNER_SECTIONS)[number]}
+        view={section as OwnerSectionId}
         onView={(next, id) => openCabinet(next, id ?? null)}
         selectedId={selectedId}
         onSelect={selectInSection}
@@ -1799,7 +1806,7 @@ const paymentStatusLabels: Record<string, string> = {
   refunded: "возвращён"
 };
 
-type ClientCabinetView = (typeof CLIENT_SECTIONS)[number];
+type ClientCabinetView = ClientSectionId;
 
 function ClientDashboardView({
   user,
@@ -2140,7 +2147,7 @@ function ClientDashboardView({
   );
 }
 
-type OwnerCabinetView = (typeof OWNER_SECTIONS)[number];
+type OwnerCabinetView = OwnerSectionId;
 
 function OwnerDashboardView({
   user,
