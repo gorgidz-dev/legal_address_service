@@ -14,6 +14,7 @@ import {
   Home,
   KeyRound,
   Loader2,
+  MessageSquare,
   LogOut,
   Monitor,
   Plus,
@@ -42,6 +43,13 @@ import PublicCatalog from "./publicCatalog";
 import { parsePath, routeToPath, useRouter } from "./router";
 import { LegalPage } from "./sections/LegalPage";
 import { EmailVerificationPage } from "./sections/EmailVerification";
+import { AddressChatPanel } from "./AddressChatPanel";
+import {
+  ApplicationDrawer,
+  DrawerRow,
+  DrawerTimeline
+} from "./applications/ApplicationDrawer";
+import { ApplicationsQueue, type QueueFilter } from "./applications/ApplicationsQueue";
 import { AppShell } from "./shell/AppShell";
 import { navItemsFor, sectionLabel } from "./shell/navConfig";
 import { statusLabel as statusText, statusMeta } from "./status";
@@ -61,6 +69,7 @@ import type {
   ActiveClientRegistryItem,
   AdminUser,
   Address,
+  AddressChat,
   AddressPhotoAdmin,
   AddressServiceAdmin,
   OwnerAddress,
@@ -202,6 +211,52 @@ const documentKindLabels: Record<DocumentFileKind, string> = {
   postal_service: "Почтовое обслуживание",
   admin_review_file: "Файл проверки"
 };
+
+/**
+ * Клиенту список документов отдают только после проверки: до этого сервер
+ * отвечает 403 (app/services/application_documents.py). Вкладку в панели
+ * блокируем заранее — красная ошибка вместо ожидаемого «ещё рано» пугает
+ * сильнее, чем сама задержка.
+ */
+const CLIENT_DOCUMENT_STATUSES = new Set(["ready_for_client", "completed", "dispute"]);
+
+function clientCanSeeDocuments(status: string): boolean {
+  return CLIENT_DOCUMENT_STATUSES.has(status);
+}
+
+const FINISHED_STATUSES = new Set(["completed", "cancelled", "refunded", "terminated", "expired"]);
+
+const CLIENT_QUEUE_FILTERS: QueueFilter[] = [
+  { id: "all", label: "Все", match: () => true },
+  { id: "active", label: "Активные", match: (row) => !FINISHED_STATUSES.has(row.status) },
+  { id: "done", label: "Завершённые", match: (row) => FINISHED_STATUSES.has(row.status) }
+];
+
+/**
+ * Собственнику важна не полнота списка, а что от него ждут действия, поэтому
+ * этот фильтр стоит первым. «Требуют действия» считается по available_actions
+ * с бэкенда — фронт не решает сам, что можно делать с заявкой.
+ */
+const OWNER_ACTIONABLE_STATUSES = new Set([
+  "assigned_to_owner",
+  "documents_preparing",
+  "documents_revision"
+]);
+
+const OWNER_QUEUE_FILTERS: QueueFilter[] = [
+  {
+    id: "actionable",
+    label: "Требуют действия",
+    match: (row) => OWNER_ACTIONABLE_STATUSES.has(row.status)
+  },
+  { id: "all", label: "Все", match: () => true },
+  {
+    id: "in-work",
+    label: "В работе",
+    match: (row) => !FINISHED_STATUSES.has(row.status) && row.status !== "ready_for_client"
+  },
+  { id: "ready", label: "Готовы к выдаче", match: (row) => row.status === "ready_for_client" }
+];
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -1811,6 +1866,58 @@ function ClientDashboardView({
     [applications, selectedId]
   );
 
+  const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+
+  // Документы грузим только для выбранной заявки и только когда сервер их
+  // отдаст. Запрашивать их для каждой строки списка значило бы N запросов на
+  // отрисовку очереди — агрегата с количеством файлов в списке нет.
+  useEffect(() => {
+    const application = selectedApplication;
+    if (!application || !clientCanSeeDocuments(application.status)) {
+      setDocuments([]);
+      setDocumentsError(null);
+      return;
+    }
+    let alive = true;
+    setDocumentsLoading(true);
+    setDocumentsError(null);
+    api
+      .applicationDocuments(application.id)
+      .then((result) => alive && setDocuments(result))
+      .catch((err: Error) => alive && setDocumentsError(err.message))
+      .finally(() => alive && setDocumentsLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [selectedApplication?.id, selectedApplication?.status]);
+
+  const [applicationChat, setApplicationChat] = useState<AddressChat | null>(null);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  // Смена заявки закрывает открытый чат: адрес другой, и оставлять переписку
+  // по прошлому адресу под шапкой новой заявки нельзя.
+  useEffect(() => {
+    setApplicationChat(null);
+    setChatError(null);
+  }, [selectedApplication?.id]);
+
+  async function openApplicationChat(addressId: string) {
+    setChatBusy(true);
+    setChatError(null);
+    try {
+      // Чат заводится по паре «адрес × клиент», отдельной привязки к заявке в
+      // модели нет. Для клиента это безопасно: свой адрес — свой чат.
+      setApplicationChat(await api.openChatForAddress(addressId));
+    } catch (err) {
+      setChatError((err as Error).message);
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
   return (
     <AppShell
       user={user}
@@ -1866,102 +1973,159 @@ function ClientDashboardView({
           action={{ label: "Открыть каталог", onClick: onOpenCatalog }}
         />
       ) : (
-        <section className="client-dashboard">
-          <div className="client-list">
-            {applications.map((application) => (
-              <button
-                className={application.id === selectedApplication?.id ? "client-application active" : "client-application"}
-                key={application.id}
-                onClick={() => onSelect(application.id)}
-                type="button"
-              >
-                <StatusBadge status={application.status} />
-                <strong>{application.company_name || application.planned_client_name || "Компания"}</strong>
-                <small>{application.full_address}</small>
-                <b>{formatMoney(application.selected_price)}</b>
-              </button>
-            ))}
-          </div>
+        <ApplicationsQueue
+          rows={applications.map((application) => ({
+            id: application.id,
+            subject:
+              application.company_name || application.planned_client_name || "Компания",
+            address: application.full_address,
+            status: application.status,
+            updatedAt: application.updated_at,
+            amount: formatMoney(application.selected_price)
+          }))}
+          selectedId={selectedApplication?.id || null}
+          onSelect={onSelect}
+          subjectLabel="Компания"
+          filters={CLIENT_QUEUE_FILTERS}
+          drawer={
+            selectedApplication ? (
+              <ApplicationDrawer
+                id={selectedApplication.id}
+                title={
+                  selectedApplication.company_name ||
+                  selectedApplication.planned_client_name ||
+                  "Заявка"
+                }
+                address={selectedApplication.full_address}
+                status={selectedApplication.status}
+                docsCount={documents.length || null}
+                docsDisabledReason={
+                  clientCanSeeDocuments(selectedApplication.status)
+                    ? null
+                    : "Документы открываются после проверки — когда заявка будет готова к выдаче"
+                }
+                chatDisabledReason={null}
+                main={
+                  <>
+                    <div className="cab-kv">
+                      <DrawerRow label="Тип" value={typeLabels[selectedApplication.type]} />
+                      <DrawerRow
+                        label="Стоимость"
+                        value={formatMoney(selectedApplication.selected_price)}
+                      />
+                      <DrawerRow
+                        label="Срок"
+                        value={
+                          selectedApplication.term_months
+                            ? `${selectedApplication.term_months} мес.`
+                            : "—"
+                        }
+                      />
+                      <DrawerRow
+                        label="ИФНС"
+                        value={
+                          selectedApplication.fns_number
+                            ? `№ ${selectedApplication.fns_number}`
+                            : "—"
+                        }
+                      />
+                      <DrawerRow label="Собственник" value={selectedApplication.provider_name} />
+                      <DrawerRow
+                        label="Корреспонденция"
+                        value={
+                          selectedApplication.has_correspondence_service
+                            ? selectedApplication.correspondence_price
+                              ? `Подключена · ${formatMoney(selectedApplication.correspondence_price)}`
+                              : "Подключена"
+                            : "Не подключена"
+                        }
+                      />
+                      {selectedApplication.room_number ? (
+                        <DrawerRow label="Помещение" value={selectedApplication.room_number} />
+                      ) : null}
+                    </div>
 
-          {selectedApplication ? (
-            <div className="client-detail">
-              <div className="client-detail-header">
-                <div>
-                  <span className="eyebrow">{typeLabels[selectedApplication.type]}</span>
-                  <h2>{selectedApplication.company_name || selectedApplication.planned_client_name || "Заявка"}</h2>
-                </div>
-                <StatusBadge status={selectedApplication.status} />
-              </div>
-
-              <div className="client-metrics">
-                <div>
-                  <ReceiptText size={18} />
-                  <span>Стоимость</span>
-                  <strong>{formatMoney(selectedApplication.selected_price)}</strong>
-                </div>
-                <div>
-                  <FileClock size={18} />
-                  <span>Срок</span>
-                  <strong>{selectedApplication.term_months ? `${selectedApplication.term_months} мес.` : "—"}</strong>
-                </div>
-                <div>
-                  <Home size={18} />
-                  <span>ИФНС</span>
-                  <strong>{selectedApplication.fns_number ? `№ ${selectedApplication.fns_number}` : "—"}</strong>
-                </div>
-              </div>
-
-              <div className="client-info-grid">
-                <div>
-                  <span>Адрес</span>
-                  <strong>{selectedApplication.full_address}</strong>
-                  {selectedApplication.room_number ? <small>{selectedApplication.room_number}</small> : null}
-                </div>
-                <div>
-                  <span>Собственник</span>
-                  <strong>{selectedApplication.provider_name}</strong>
-                </div>
-                <div>
-                  <span>Контакт</span>
-                  <strong>{selectedApplication.contact_name || "—"}</strong>
-                  <small>{[selectedApplication.contact_phone, selectedApplication.contact_email].filter(Boolean).join(" · ")}</small>
-                </div>
-                <div>
-                  <span>Корреспонденция</span>
-                  <strong>{selectedApplication.has_correspondence_service ? "Подключена" : "Не подключена"}</strong>
-                  {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
-                </div>
-              </div>
-
-              {selectedApplication.status === "awaiting_payment" ? (
-                <SbpPaymentPanel
-                  applicationId={selectedApplication.id}
-                  onPaid={() => setRefreshKey((value) => value + 1)}
-                />
-              ) : null}
-
-              <div className="timeline-panel">
-                <div className="timeline-title">
-                  <FileText size={18} />
-                  <strong>Лента заявки</strong>
-                </div>
-                {selectedApplication.events.length ? (
-                  <div className="timeline">
-                    {selectedApplication.events.map((event) => (
-                      <div className="timeline-item" key={event.id}>
-                        <span>{formatDate(event.created_at)}</span>
-                        <strong>{event.title}</strong>
-                        <p>{event.message}</p>
+                    {selectedApplication.status === "awaiting_payment" ? (
+                      <div className="cab-actions">
+                        <SbpPaymentPanel
+                          applicationId={selectedApplication.id}
+                          onPaid={() => setRefreshKey((value) => value + 1)}
+                        />
                       </div>
-                    ))}
+                    ) : null}
+
+                    <DrawerTimeline
+                      emptyText="Обновления по заявке появятся после проверки."
+                      events={selectedApplication.events}
+                    />
+                  </>
+                }
+                docs={
+                  documentsLoading ? (
+                    <ListLoading rows={2} />
+                  ) : documentsError ? (
+                    <ListError message={documentsError} />
+                  ) : documents.length ? (
+                    <div className="cab-actions">
+                      {documents.map((document) => (
+                        <DownloadLink
+                          className="cab-doc"
+                          href={apiDownloadUrl(document.download_url)}
+                          key={document.id}
+                        >
+                          <FileText size={17} />
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <strong className="cab-doc__name">{document.original_filename}</strong>
+                            <span className="cab-doc__meta">
+                              {documentKindLabels[document.kind]} ·{" "}
+                              {formatFileSize(document.size_bytes)} ·{" "}
+                              {formatDate(document.created_at)}
+                            </span>
+                          </span>
+                          <Download size={16} />
+                        </DownloadLink>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="cab-actions">
+                      <ListEmpty
+                        text="Как только собственник загрузит комплект и оператор его проверит, файлы появятся здесь."
+                        title="Документов пока нет"
+                      />
+                    </div>
+                  )
+                }
+                chat={
+                  <div className="cab-actions">
+                    {chatError ? <ListError message={chatError} /> : null}
+                    {applicationChat ? (
+                      <AddressChatPanel
+                        chat={applicationChat}
+                        currentUser={user}
+                        onClose={() => setApplicationChat(null)}
+                      />
+                    ) : (
+                      <>
+                        <p className="cab-timeline__text">
+                          Переписка с собственником по адресу этой заявки.
+                        </p>
+                        <button
+                          className="cab-chat-cta"
+                          disabled={chatBusy}
+                          onClick={() => openApplicationChat(selectedApplication.address_id)}
+                          type="button"
+                        >
+                          {chatBusy ? <Loader2 className="spin" size={15} /> : <MessageSquare size={15} />}
+                          Открыть чат с собственником
+                        </button>
+                      </>
+                    )}
                   </div>
-                ) : (
-                  <EmptyState title="Событий пока нет" text="Обновления по заявке появятся после проверки." />
-                )}
-              </div>
-            </div>
-          ) : null}
-        </section>
+                }
+              />
+            ) : null
+          }
+        />
       ))}
 
       {view === "chats" && (
@@ -2087,6 +2251,38 @@ function OwnerDashboardView({
     };
   }, [selectedApplication?.id, documentsRefreshKey]);
 
+  /**
+   * Чат по адресу заявки. Собственник не может его создать — сервер разрешает
+   * это только клиенту, — поэтому ищем уже существующий среди своих.
+   *
+   * Совпадение только по адресу: привязки чата к заявке в модели нет. Если по
+   * одному адресу переписываются несколько клиентов, подходящих чатов будет
+   * больше одного, и открывать первый попавшийся нельзя — это чужая переписка.
+   * В таком случае вкладка остаётся пустой, а разговоры доступны в разделе
+   * «Чаты», где видно, кто собеседник.
+   */
+  const [ownerChat, setOwnerChat] = useState<AddressChat | null>(null);
+
+  useEffect(() => {
+    const addressId = selectedApplication?.address_id;
+    if (!addressId) {
+      setOwnerChat(null);
+      return;
+    }
+    let alive = true;
+    api
+      .listMyChats()
+      .then((chats) => {
+        if (!alive) return;
+        const matching = chats.filter((chat) => chat.address_id === addressId);
+        setOwnerChat(matching.length === 1 ? matching[0] : null);
+      })
+      .catch(() => alive && setOwnerChat(null));
+    return () => {
+      alive = false;
+    };
+  }, [selectedApplication?.address_id]);
+
   async function runOwnerAction(action: string) {
     if (!selectedApplication) return;
     setActionBusy(action);
@@ -2178,7 +2374,10 @@ function OwnerDashboardView({
         ) : !dashboard ? (
           <ListEmpty title="Кабинет недоступен" text="Проверьте привязку пользователя к организации собственника." />
         ) : (
-          <section className={view === "applications" ? "owner-layout owner-layout--single" : "owner-layout owner-layout--single"}>
+          // Раскладка owner-layout нужна только разделу «Адреса»: заявки рисует
+          // общая очередь со своей сеткой. Тернарник с двумя одинаковыми
+          // ветками, стоявший здесь, остался от времён, когда раскладок было две.
+          <section className={view === "addresses" ? "owner-layout owner-layout--single" : undefined}>
           {view === "addresses" && (
           <aside className="owner-side">
             <div className="owner-provider-card">
@@ -2249,188 +2448,246 @@ function OwnerDashboardView({
           )}
 
           {view === "applications" && (
-          <div className="owner-main">
-            {applications.length ? (
-              <div className="owner-application-list">
-                {applications.map((application) => (
-                  <button
-                    className={application.id === selectedApplication?.id ? "owner-application active" : "owner-application"}
-                    key={application.id}
-                    onClick={() => onSelect(application.id)}
-                    type="button"
-                  >
-                    <StatusBadge status={application.status} />
-                    <strong>{application.company_name || application.planned_client_name || "Компания"}</strong>
-                    <small>{application.full_address}</small>
-                    <b>{formatMoney(application.selected_price)}</b>
-                  </button>
-                ))}
-              </div>
+            applications.length === 0 ? (
+              <ListEmpty
+                text="Когда оператор назначит заявку на ваш адрес, она появится здесь."
+                title="Заявок пока нет"
+              />
             ) : (
-              <EmptyState title="Заявок пока нет" text="Когда администратор назначит заявку на ваш адрес, она появится здесь." />
-            )}
+              <ApplicationsQueue
+                rows={applications.map((application) => ({
+                  id: application.id,
+                  subject:
+                    application.company_name || application.planned_client_name || "Клиент",
+                  address: application.full_address,
+                  status: application.status,
+                  updatedAt: application.updated_at,
+                  amount: formatMoney(application.selected_price)
+                }))}
+                selectedId={selectedApplication?.id || null}
+                onSelect={onSelect}
+                subjectLabel="Клиент"
+                filters={OWNER_QUEUE_FILTERS}
+                drawer={
+                  selectedApplication ? (
+                    <ApplicationDrawer
+                      id={selectedApplication.id}
+                      title={
+                        selectedApplication.company_name ||
+                        selectedApplication.planned_client_name ||
+                        "Заявка"
+                      }
+                      address={selectedApplication.full_address}
+                      status={selectedApplication.status}
+                      docsCount={documents.length || null}
+                      chatDisabledReason={
+                        ownerChat
+                          ? null
+                          : "Чат по адресу открывает клиент — здесь появится уже начатая переписка"
+                      }
+                      main={
+                        <>
+                          <div className="cab-kv">
+                            <DrawerRow label="Тип" value={typeLabels[selectedApplication.type]} />
+                            <DrawerRow
+                              label="Сумма адреса"
+                              value={formatMoney(selectedApplication.selected_price)}
+                            />
+                            <DrawerRow
+                              label="Срок"
+                              value={
+                                selectedApplication.term_months
+                                  ? `${selectedApplication.term_months} мес.`
+                                  : "—"
+                              }
+                            />
+                            <DrawerRow
+                              label="ИФНС"
+                              value={
+                                selectedApplication.fns_number
+                                  ? `№ ${selectedApplication.fns_number}`
+                                  : "—"
+                              }
+                            />
+                            <DrawerRow
+                              label="Контакт клиента"
+                              value={selectedApplication.contact_name || "—"}
+                            />
+                            <DrawerRow
+                              label="Связь"
+                              value={
+                                [
+                                  selectedApplication.contact_phone,
+                                  selectedApplication.contact_email
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ") || "—"
+                              }
+                            />
+                            <DrawerRow
+                              label="Следующий шаг"
+                              value={ownerNextStepLabel(selectedApplication)}
+                            />
+                            <DrawerRow
+                              label="Корреспонденция"
+                              value={
+                                selectedApplication.has_correspondence_service
+                                  ? selectedApplication.correspondence_price
+                                    ? `Подключена · ${formatMoney(selectedApplication.correspondence_price)}`
+                                    : "Подключена"
+                                  : "Не подключена"
+                              }
+                            />
+                          </div>
 
-            {selectedApplication ? (
-              <div className="owner-detail">
-                <div className="client-detail-header">
-                  <div>
-                    <span className="eyebrow">{typeLabels[selectedApplication.type]}</span>
-                    <h2>{selectedApplication.company_name || selectedApplication.planned_client_name || "Заявка"}</h2>
-                  </div>
-                  <StatusBadge status={selectedApplication.status} />
-                </div>
+                          <div className="cab-actions">
+                            <OwnerPaymentSection
+                              applicationId={selectedApplication.id}
+                              onConfirmed={() => setRefreshKey((value) => value + 1)}
+                            />
 
-                <div className="client-metrics">
-                  <div>
-                    <ReceiptText size={18} />
-                    <span>Сумма адреса</span>
-                    <strong>{formatMoney(selectedApplication.selected_price)}</strong>
-                  </div>
-                  <div>
-                    <FileClock size={18} />
-                    <span>Срок</span>
-                    <strong>{selectedApplication.term_months ? `${selectedApplication.term_months} мес.` : "—"}</strong>
-                  </div>
-                  <div>
-                    <Home size={18} />
-                    <span>ИФНС</span>
-                    <strong>{selectedApplication.fns_number ? `№ ${selectedApplication.fns_number}` : "—"}</strong>
-                  </div>
-                </div>
+                            {/* Набор действий приходит с бэкенда: право решать,
+                                что можно делать с заявкой, остаётся там. */}
+                            {selectedApplication.available_actions.map((action) => {
+                              const Icon =
+                                action === "accept"
+                                  ? CheckCircle2
+                                  : action === "reject"
+                                    ? XCircle
+                                    : action === "start_documents"
+                                      ? FileText
+                                      : Upload;
+                              return (
+                                <button
+                                  className={
+                                    action === "reject"
+                                      ? "cab-btn cab-btn--danger cab-btn--block"
+                                      : "cab-btn cab-btn--primary cab-btn--block"
+                                  }
+                                  disabled={actionBusy !== null}
+                                  key={action}
+                                  onClick={() => runOwnerAction(action)}
+                                  type="button"
+                                >
+                                  {actionBusy === action ? (
+                                    <Loader2 className="spin" size={15} />
+                                  ) : (
+                                    <Icon size={15} />
+                                  )}
+                                  {ownerActionLabels[action] || action}
+                                </button>
+                              );
+                            })}
+                            {actionError ? <ListError message={actionError} /> : null}
+                          </div>
 
-                <div className="client-info-grid">
-                  <div>
-                    <span>Адрес</span>
-                    <strong>{selectedApplication.full_address}</strong>
-                  </div>
-                  <div>
-                    <span>Контакт клиента</span>
-                    <strong>{selectedApplication.contact_name || "—"}</strong>
-                    <small>{[selectedApplication.contact_phone, selectedApplication.contact_email].filter(Boolean).join(" · ")}</small>
-                  </div>
-                  <div>
-                    <span>Следующий шаг</span>
-                    <strong>{ownerNextStepLabel(selectedApplication)}</strong>
-                  </div>
-                  <div>
-                    <span>Корреспонденция</span>
-                    <strong>{selectedApplication.has_correspondence_service ? "Подключена" : "Не подключена"}</strong>
-                    {selectedApplication.correspondence_price ? <small>{formatMoney(selectedApplication.correspondence_price)}</small> : null}
-                  </div>
-                </div>
+                          <DrawerTimeline
+                            emptyText="События появятся после назначения заявки."
+                            events={selectedApplication.events}
+                          />
+                        </>
+                      }
+                      docs={
+                        <div className="cab-actions">
+                          {ownerCanUploadDocuments(selectedApplication) ? (
+                            <form className="owner-upload-form" onSubmit={uploadOwnerDocument}>
+                              <Field label="Тип документа">
+                                <select
+                                  value={documentKind}
+                                  onChange={(event) =>
+                                    setDocumentKind(event.target.value as DocumentFileKind)
+                                  }
+                                >
+                                  {ownerDocumentKinds.map((kind) => (
+                                    <option key={kind} value={kind}>
+                                      {documentKindLabels[kind]}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field label="Файл">
+                                <input
+                                  accept=".pdf,.doc,.docx,.zip,.jpg,.jpeg,.png"
+                                  key={documentInputKey}
+                                  onChange={(event) =>
+                                    setDocumentFile(event.target.files?.[0] || null)
+                                  }
+                                  type="file"
+                                />
+                              </Field>
+                              <button
+                                className="cab-btn cab-btn--primary cab-btn--block"
+                                disabled={uploadBusy || !documentFile}
+                                type="submit"
+                              >
+                                {uploadBusy ? (
+                                  <Loader2 className="spin" size={15} />
+                                ) : (
+                                  <Upload size={15} />
+                                )}
+                                Отправить на проверку
+                              </button>
+                            </form>
+                          ) : null}
 
-                <OwnerPaymentSection
-                  applicationId={selectedApplication.id}
-                  onConfirmed={() => setRefreshKey((value) => value + 1)}
-                />
+                          {uploadError || documentsError ? (
+                            <ListError message={uploadError || documentsError || ""} />
+                          ) : null}
 
-                {selectedApplication.available_actions.length ? (
-                  <div className="owner-action-strip">
-                    {selectedApplication.available_actions.map((action) => {
-                      const Icon =
-                        action === "accept"
-                          ? CheckCircle2
-                          : action === "reject"
-                            ? XCircle
-                            : action === "start_documents"
-                              ? FileText
-                              : Upload;
-                      return (
-                        <Button
-                          disabled={actionBusy !== null}
-                          key={action}
-                          onClick={() => runOwnerAction(action)}
-                          variant={action === "reject" ? "secondary" : "primary"}
-                        >
-                          {actionBusy === action ? <Loader2 className="spin" size={16} /> : <Icon size={16} />}
-                          {ownerActionLabels[action] || action}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                <InlineError message={actionError} />
-
-                <div className="owner-documents-panel">
-                  <div className="timeline-title">
-                    <FileArchive size={18} />
-                    <strong>Документы заявки</strong>
-                  </div>
-
-                  {ownerCanUploadDocuments(selectedApplication) ? (
-                    <form className="owner-upload-form" onSubmit={uploadOwnerDocument}>
-                      <Field label="Тип документа">
-                        <select value={documentKind} onChange={(event) => setDocumentKind(event.target.value as DocumentFileKind)}>
-                          {ownerDocumentKinds.map((kind) => (
-                            <option key={kind} value={kind}>
-                              {documentKindLabels[kind]}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                      <Field label="Файл">
-                        <input
-                          accept=".pdf,.doc,.docx,.zip,.jpg,.jpeg,.png"
-                          key={documentInputKey}
-                          onChange={(event) => setDocumentFile(event.target.files?.[0] || null)}
-                          type="file"
-                        />
-                      </Field>
-                      <Button disabled={uploadBusy || !documentFile} type="submit">
-                        {uploadBusy ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
-                        Отправить на проверку
-                      </Button>
-                    </form>
-                  ) : null}
-
-                  <InlineError message={uploadError || documentsError} />
-
-                  {documentsLoading ? (
-                    <LoadingRows />
-                  ) : documents.length ? (
-                    <div className="owner-document-list">
-                      {documents.map((document) => (
-                        <DownloadLink className="owner-document-item" href={apiDownloadUrl(document.download_url)} key={document.id}>
-                          <FileText size={17} />
-                          <span>
-                            <strong>{document.original_filename}</strong>
-                            <small>
-                              {documentKindLabels[document.kind]} · {formatFileSize(document.size_bytes)} ·{" "}
-                              {formatDate(document.created_at)}
-                            </small>
-                          </span>
-                          <Download size={16} />
-                        </DownloadLink>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState title="Документы пока не загружены" text="После загрузки файлы появятся здесь." />
-                  )}
-                </div>
-
-                <div className="timeline-panel">
-                  <div className="timeline-title">
-                    <FileText size={18} />
-                    <strong>Лента исполнителя</strong>
-                  </div>
-                  {selectedApplication.events.length ? (
-                    <div className="timeline">
-                      {selectedApplication.events.map((event) => (
-                        <div className="timeline-item" key={event.id}>
-                          <span>{formatDate(event.created_at)}</span>
-                          <strong>{event.title}</strong>
-                          <p>{event.message}</p>
+                          {documentsLoading ? (
+                            <ListLoading rows={2} />
+                          ) : documents.length ? (
+                            documents.map((document) => (
+                              <DownloadLink
+                                className="cab-doc"
+                                href={apiDownloadUrl(document.download_url)}
+                                key={document.id}
+                              >
+                                <FileText size={17} />
+                                <span style={{ minWidth: 0, flex: 1 }}>
+                                  <strong className="cab-doc__name">
+                                    {document.original_filename}
+                                  </strong>
+                                  <span className="cab-doc__meta">
+                                    {documentKindLabels[document.kind]} ·{" "}
+                                    {formatFileSize(document.size_bytes)} ·{" "}
+                                    {formatDate(document.created_at)}
+                                  </span>
+                                </span>
+                                <Download size={16} />
+                              </DownloadLink>
+                            ))
+                          ) : (
+                            <ListEmpty
+                              text="Загрузите комплект — он уйдёт оператору на проверку."
+                              title="Документов пока нет"
+                            />
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState title="Событий пока нет" text="События для исполнителя появятся после назначения заявки." />
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
+                      }
+                      chat={
+                        <div className="cab-actions">
+                          {ownerChat ? (
+                            <AddressChatPanel
+                              chat={ownerChat}
+                              currentUser={user}
+                              onClose={() => onView("chats")}
+                            />
+                          ) : (
+                            <p className="cab-timeline__text">
+                              Переписки по адресу этой заявки пока нет. Создать её может
+                              только клиент — из карточки адреса или из своей заявки.
+                            </p>
+                          )}
+                        </div>
+                      }
+                    />
+                  ) : null
+                }
+              />
+            )
           )}
+
         </section>
         ))}
 

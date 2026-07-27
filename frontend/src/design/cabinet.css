@@ -569,6 +569,14 @@
 }
 .cab-tab.is-active .cab-tab__count { background: var(--ds-indigo-100); color: var(--ds-indigo-700); }
 
+/* Тело панели прокручивается само: заявка с длинной лентой не должна уносить
+   вниз всю страницу вместе с таблицей слева. */
+.cab-drawer__body { overflow-y: auto; max-height: calc(100dvh - 260px); }
+@media (max-width: 1280px) {
+  .cab-drawer__body { max-height: none; }
+}
+.cab-tab:disabled { opacity: 0.45; cursor: not-allowed; }
+
 .cab-kv { padding: 14px 18px 0; display: flex; flex-direction: column; gap: 8px; }
 .cab-kv__row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 12.5px; }
 .cab-kv__label { color: var(--ds-slate-500); }
