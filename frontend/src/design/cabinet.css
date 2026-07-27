@@ -79,6 +79,7 @@
   min-height: 0;
   overflow-y: auto;
 }
+.cab-nav__group { display: flex; flex-direction: column; gap: 2px; }
 .cab-nav__group-title {
   font-size: 10px;
   font-weight: 700;
@@ -273,6 +274,15 @@
   font-size: 12.5px;
 }
 .cab-verify-panel__text { flex: 1; min-width: 220px; line-height: 1.45; }
+/* Внутри плашки живёт существующий компонент напоминания — снимаем с него
+   собственный фон и рамку, чтобы не было карточки в карточке. */
+.cab-verify-panel .email-verify-banner {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  width: 100%;
+}
 
 /* Полоса «оператор смотрит чужой кабинет». */
 .cab-impersonation {
@@ -656,9 +666,23 @@
 
 /* ============================== Состояния списка ============================== */
 
+.cab-liststate { display: flex; flex-direction: column; gap: 8px; }
 .cab-skeleton-row { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--ds-slate-100); border-radius: var(--ds-radius-lg); }
 .cab-skeleton-line { height: 10px; border-radius: 6px; background: var(--ds-slate-100); }
 .cab-skeleton-line--lg { height: 14px; background: #eceef4; }
+
+/* Текст только для скринридера: «Загружаем данные» рядом со скелетом. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .cab-empty {
   display: flex;
@@ -686,6 +710,7 @@
 }
 .cab-error__title { font-size: 14px; font-weight: 650; }
 .cab-error__text { font-size: 13px; line-height: 1.5; opacity: 0.85; }
+.cab-error__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ============================== Мобильный режим ============================== */
 

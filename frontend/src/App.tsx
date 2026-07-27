@@ -11,11 +11,8 @@ import {
   FileArchive,
   FileCheck2,
   FileText,
-  FolderOpen,
   Home,
-  Image as ImageIcon,
   KeyRound,
-  MessageSquare,
   Loader2,
   LogOut,
   Monitor,
@@ -24,7 +21,6 @@ import {
   Smartphone,
   ReceiptText,
   Search,
-  Settings,
   ShieldCheck,
   Star,
   Trash2,
@@ -45,12 +41,12 @@ import { PhoneInput, formatRuPhone } from "./PhoneInput";
 import PublicCatalog from "./publicCatalog";
 import { parsePath, routeToPath, useRouter } from "./router";
 import { LegalPage } from "./sections/LegalPage";
-import {
-  EmailVerificationBanner,
-  EmailVerificationPage
-} from "./sections/EmailVerification";
+import { EmailVerificationPage } from "./sections/EmailVerification";
+import { AppShell } from "./shell/AppShell";
+import { navItemsFor, sectionLabel } from "./shell/navConfig";
 import { statusLabel as statusText, statusMeta } from "./status";
 import { Badge, StatusBadge } from "./ui/Badge";
+import { ListEmpty, ListError, ListLoading } from "./ui/ListState";
 import { useModalDismiss } from "./useModalDismiss";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { DownloadLink } from "./DownloadLink";
@@ -130,56 +126,12 @@ function resolveSection(raw: string | null, allowed: string[]): string | null {
   return alias && allowed.includes(alias) ? alias : null;
 }
 
-const baseNavItems: Array<{ id: View; label: string; icon: typeof Home }> = [
-  { id: "applications", label: "Заявки", icon: FolderOpen },
-  { id: "registry", label: "Действующие клиенты", icon: FileClock },
-  { id: "new", label: "Новая заявка", icon: Plus },
-  { id: "providers", label: "Собственники", icon: Building2 },
-  { id: "addresses", label: "Помещения", icon: Home },
-  { id: "templates", label: "Шаблоны", icon: Settings }
-];
-
-const adminNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "access",
-  label: "Доступ",
-  icon: ShieldCheck
-};
-
-const adminPhotosNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "photos",
-  label: "Фото на модерацию",
-  icon: ImageIcon
-};
-
-const adminProviderRequestsNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "provider-requests",
-  label: "Заявки собственников",
-  icon: Building2
-};
-
-const adminAddressModerationNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "address-moderation",
-  label: "Модерация адресов",
-  icon: Home
-};
-
-const adminAddressServicesNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "address-services",
-  label: "Услуги адресов",
-  icon: Settings
-};
-
-const adminAddressChatsNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "address-chats",
-  label: "Чаты",
-  icon: MessageSquare
-};
-
-const adminReviewModerationNavItem: { id: View; label: string; icon: typeof Home } = {
-  id: "review-moderation",
-  label: "Отзывы на модерацию",
-  icon: MessageSquare
-};
+/*
+ * Разделы всех ролей теперь описаны в shell/navConfig.ts — здесь их
+ * определений больше нет. Раньше меню оператора собиралось из семи отдельных
+ * объектов, а у клиента и собственника пункты были просто набором кнопок в
+ * разметке, поэтому «Заявки» в трёх кабинетах отличались иконкой и порядком.
+ */
 
 const ownerRequestStatusLabels: Record<string, string> = {
   new: "Новая",
@@ -383,34 +335,6 @@ function LoadingRows() {
       {Array.from({ length: 5 }).map((_, index) => (
         <div className="skeleton-row" key={index} />
       ))}
-    </div>
-  );
-}
-
-/**
- * «Назад» и «На главную» над заголовком раздела. «Назад» показываем только
- * когда внутри приложения действительно есть куда вернуться, иначе кнопка
- * увела бы пользователя на предыдущий сайт.
- */
-function NavCrumbs({
-  canGoBack,
-  onBack,
-  onHome
-}: {
-  canGoBack: boolean;
-  onBack: () => void;
-  onHome: () => void;
-}) {
-  return (
-    <div className="nav-crumbs">
-      {canGoBack ? (
-        <button className="text-action" onClick={onBack} type="button">
-          <ChevronLeft size={15} /> Назад
-        </button>
-      ) : null}
-      <button className="text-action" onClick={onHome} type="button">
-        <Home size={15} /> На главную
-      </button>
     </div>
   );
 }
@@ -1376,31 +1300,12 @@ export default function App() {
     };
   }, [currentUser, needsStaffData, refreshKey]);
 
-  const navItems = useMemo(
-    () =>
-      currentUser?.role === "admin"
-        ? [
-            ...baseNavItems,
-            adminProviderRequestsNavItem,
-            adminAddressModerationNavItem,
-            adminAddressServicesNavItem,
-            adminAddressChatsNavItem,
-            adminReviewModerationNavItem,
-            adminPhotosNavItem,
-            adminNavItem
-          ]
-        : baseNavItems,
-    [currentUser?.role]
-  );
-
   // Разделы кабинета = сегменты URL /app/<section>. Список зависит от роли:
   // чужой раздел в адресе не должен открывать чужой экран.
-  const sections = useMemo<string[]>(() => {
-    if (!currentUser) return [];
-    if (currentUser.role === "client") return [...CLIENT_SECTIONS];
-    if (currentUser.role === "owner") return [...OWNER_SECTIONS];
-    return navItems.map((item) => item.id);
-  }, [currentUser, navItems]);
+  const sections = useMemo<string[]>(
+    () => (currentUser ? navItemsFor(currentUser.role).map((item) => item.id) : []),
+    [currentUser]
+  );
 
   const section =
     (route.name === "cabinet" ? resolveSection(route.section, sections) : null) ||
@@ -1408,7 +1313,12 @@ export default function App() {
     "applications";
   const selectedId = route.name === "cabinet" ? route.id : null;
   const view = section as View;
-  const selectedTitle = navItems.find((item) => item.id === view)?.label || "Сервис";
+  const selectedTitle = currentUser ? sectionLabel(currentUser.role, view) : "Сервис";
+  // Подзаголовок в шапке заменил три строки текста, с которых начинался экран
+  // («Заявки» в меню → «Мои заявки» → «Статус и адрес по заявке…»). Здесь —
+  // только то, что человек не видит и так: сколько всего записей.
+  const sectionSubtitle =
+    view === "applications" && !loading ? `Всего заявок: ${applications.length}` : undefined;
 
   const goHome = useCallback(() => navigate({ name: "home" }), [navigate]);
   const openCabinet = useCallback(
@@ -1576,83 +1486,47 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button className="brand brand--link" onClick={goHome} type="button" title="На главную">
-          <div className="brand-mark">UR</div>
-          <div>
-            <strong>uradres.net</strong>
-            <span>договоры и гарантийки</span>
-          </div>
-        </button>
-
-        <nav className="nav">
-          <button
-            className="nav-item"
-            type="button"
-            onClick={goHome}
-            title="Открыть публичный каталог"
-          >
-            <Home size={18} strokeWidth={1.8} />
-            <span>Каталог</span>
-          </button>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className={view === item.id ? "nav-item active" : "nav-item"}
-                key={item.id}
-                onClick={() => openCabinet(item.id)}
-              >
-                <Icon size={18} strokeWidth={1.8} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="sidebar-footer">
-          <span>{currentUser.role === "admin" ? "Администратор" : "Пользователь"}</span>
-          <strong>{currentUser.email}</strong>
-          <button className="text-action" onClick={handleLogout} type="button">
-            <LogOut size={15} /> Выйти
-          </button>
-        </div>
-      </aside>
-
-      <main className="workspace">
-        <header className="topbar">
-          <div>
-            <NavCrumbs canGoBack={canGoBack} onBack={back} onHome={goHome} />
-            <span className="eyebrow">Рабочая область</span>
-            <h1>{selectedTitle}</h1>
-          </div>
-          <div className="topbar-actions">
-            <NotificationCenter
-              refreshKey={refreshKey}
-              onNavigate={(n) => {
-                if (n.link_type === "application" && n.link_id) {
-                  openCabinet("applications");
-                  // Админский список заявок сам управляет selected — внешнего
-                  // пробрасывания selected пока нет; пользователь увидит список
-                  // и сможет найти нужную. Линк хотя бы переключит раздел.
-                } else if (n.link_type === "chat") {
-                  openCabinet("address-chats");
-                }
-              }}
-            />
-            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-              <RefreshCw size={16} /> Обновить
-            </Button>
-          </div>
-        </header>
-
-        <InlineError message={error} />
-
-        {loading ? (
-          <LoadingRows />
-        ) : (
-          <>
+    <AppShell
+      user={currentUser}
+      section={view}
+      onSection={(id) => openCabinet(id)}
+      title={selectedTitle}
+      subtitle={sectionSubtitle}
+      counts={{ applications: applications.length }}
+      onOpenSite={goHome}
+      onBack={back}
+      canGoBack={canGoBack}
+      onLogout={handleLogout}
+      onRefresh={() => setRefreshKey((value) => value + 1)}
+      actions={
+        <NotificationCenter
+          refreshKey={refreshKey}
+          onNavigate={(n) => {
+            if (n.link_type === "application" && n.link_id) {
+              openCabinet("applications");
+              // Админский список заявок сам управляет selected — внешнего
+              // пробрасывания selected пока нет; пользователь увидит список
+              // и сможет найти нужную. Линк хотя бы переключит раздел.
+            } else if (n.link_type === "chat") {
+              openCabinet("address-chats");
+            }
+          }}
+        />
+      }
+      banner={
+        error ? (
+          <ListError
+            message={error}
+            onRetry={() => setRefreshKey((value) => value + 1)}
+            onRelogin={handleLogout}
+          />
+        ) : null
+      }
+    >
+      {loading ? (
+        <ListLoading />
+      ) : (
+        <>
             {view === "applications" && (
               <ApplicationsView
                 applications={applications}
@@ -1705,10 +1579,9 @@ export default function App() {
                 <AccessView currentUserId={currentUser.id} />
               </>
             )}
-          </>
-        )}
-      </main>
-    </div>
+        </>
+      )}
+    </AppShell>
   );
 }
 
@@ -1939,91 +1812,59 @@ function ClientDashboardView({
   );
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button className="brand brand--link" onClick={onOpenCatalog} type="button" title="На главную">
-          <div className="brand-mark">UR</div>
-          <div>
-            <strong>Личный кабинет</strong>
-            <span>клиент</span>
-          </div>
-        </button>
-        <nav className="nav">
-          <button type="button" className="nav-item" onClick={onOpenCatalog} title="Открыть публичный каталог">
-            <Home size={18} strokeWidth={1.8} />
-            <span>Каталог</span>
-          </button>
-          <button
-            type="button"
-            className={view === "applications" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("applications")}
-          >
-            <FolderOpen size={18} strokeWidth={1.8} />
-            <span>Заявки</span>
-          </button>
-          <button
-            type="button"
-            className={view === "chats" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("chats")}
-          >
-            <MessageSquare size={18} strokeWidth={1.8} />
-            <span>Чаты</span>
-          </button>
-        </nav>
-        <div className="sidebar-footer">
-          <span>Клиент</span>
-          <strong>{user.email}</strong>
-          <button className="text-action" onClick={onLogout} type="button">
-            <LogOut size={15} /> Выйти
-          </button>
-        </div>
-      </aside>
-
-      <main className="client-shell">
-        <header className="client-topbar">
-          <NavCrumbs canGoBack={canGoBack} onBack={onBack} onHome={onOpenCatalog} />
-          <div className="actions">
-            <NotificationCenter
-              refreshKey={refreshKey}
-              onNavigate={(n) => {
-                if (n.link_type === "application" && n.link_id) {
-                  // Раздел и заявка одним переходом: два подряд ушли бы
-                  // в историю двумя записями и второй перетёр бы первый.
-                  onView("applications", n.link_id);
-                } else if (n.link_type === "chat" && n.link_id) {
-                  onView("chats");
-                  setPendingChatId(n.link_id);
-                }
-              }}
-            />
-            <PushToggle />
-            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-              <RefreshCw size={16} /> Обновить
-            </Button>
-          </div>
-        </header>
-
-        <section className="client-heading">
-          <span className="eyebrow">
-            {view === "applications" ? "Мои заявки" : "Сообщения"}
-          </span>
-          <h1>
-            {view === "applications"
-              ? "Статус и адрес по заявке на юридический адрес"
-              : "Чаты с собственниками"}
-          </h1>
-        </section>
-
-        {user.email_verified === false ? (
-          <EmailVerificationBanner email={user.email} />
-        ) : null}
-        <InlineError message={error} />
-        <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
-
+    <AppShell
+      user={user}
+      section={view}
+      onSection={(id) => onView(id as ClientCabinetView)}
+      title={view === "applications" ? "Заявки" : "Чаты"}
+      subtitle={
+        view === "applications" && !loading
+          ? applications.length
+            ? `Всего заявок: ${applications.length}`
+            : undefined
+          : "Переписка с собственниками адресов"
+      }
+      counts={{ applications: applications.length }}
+      onOpenSite={onOpenCatalog}
+      onBack={onBack}
+      canGoBack={canGoBack}
+      onLogout={onLogout}
+      onRefresh={() => setRefreshKey((value) => value + 1)}
+      actions={
+        <>
+          <NotificationCenter
+            refreshKey={refreshKey}
+            onNavigate={(n) => {
+              if (n.link_type === "application" && n.link_id) {
+                // Раздел и заявка одним переходом: два подряд ушли бы
+                // в историю двумя записями и второй перетёр бы первый.
+                onView("applications", n.link_id);
+              } else if (n.link_type === "chat" && n.link_id) {
+                onView("chats");
+                setPendingChatId(n.link_id);
+              }
+            }}
+          />
+          <PushToggle />
+        </>
+      }
+      banner={
+        <>
+          {error ? (
+            <ListError message={error} onRetry={() => setRefreshKey((value) => value + 1)} />
+          ) : null}
+          <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
+        </>
+      }
+    >
       {view === "applications" && (loading ? (
-        <LoadingRows />
+        <ListLoading />
       ) : applications.length === 0 ? (
-        <EmptyState title="Заявок пока нет" text="После отправки заявки она появится в этом кабинете." />
+        <ListEmpty
+          title="Заявок пока нет"
+          text="Выберите адрес в каталоге и отправьте заявку — она появится здесь."
+          action={{ label: "Открыть каталог", onClick: onOpenCatalog }}
+        />
       ) : (
         <section className="client-dashboard">
           <div className="client-list">
@@ -2131,8 +1972,7 @@ function ClientDashboardView({
           onChatOpened={() => setPendingChatId(null)}
         />
       )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 
@@ -2284,105 +2124,59 @@ function OwnerDashboardView({
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button className="brand brand--link" onClick={onOpenCatalog} type="button" title="На главную">
-          <div className="brand-mark">UR</div>
-          <div>
-            <strong>Кабинет</strong>
-            <span>исполнитель</span>
-          </div>
-        </button>
-        <nav className="nav">
-          <button type="button" className="nav-item" onClick={onOpenCatalog} title="Открыть публичный каталог">
-            <Home size={18} strokeWidth={1.8} />
-            <span>Каталог</span>
-          </button>
-          <button
-            type="button"
-            className={view === "applications" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("applications")}
-          >
-            <FolderOpen size={18} strokeWidth={1.8} />
-            <span>Заявки</span>
-          </button>
-          <button
-            type="button"
-            className={view === "addresses" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("addresses")}
-          >
-            <Home size={18} strokeWidth={1.8} />
-            <span>Адреса</span>
-          </button>
-          <button
-            type="button"
-            className={view === "chats" ? "nav-item active" : "nav-item"}
-            onClick={() => onView("chats")}
-          >
-            <MessageSquare size={18} strokeWidth={1.8} />
-            <span>Чаты</span>
-          </button>
-        </nav>
-        <div className="sidebar-footer">
-          <span>Собственник</span>
-          <strong>{user.email}</strong>
-          <button className="text-action" onClick={onLogout} type="button">
-            <LogOut size={15} /> Выйти
-          </button>
-        </div>
-      </aside>
-
-      <main className="owner-shell">
-        <header className="owner-topbar">
-          <NavCrumbs canGoBack={canGoBack} onBack={onBack} onHome={onOpenCatalog} />
-          <div className="actions">
-            <NotificationCenter
-              refreshKey={refreshKey}
-              onNavigate={(n) => {
-                if (n.link_type === "application" && n.link_id) {
-                  // Раздел и заявка одним переходом — иначе вторая навигация
-                  // затирает первую.
-                  onView("applications", n.link_id);
-                } else if (n.link_type === "chat" && n.link_id) {
-                  onView("chats");
-                  setPendingChatId(n.link_id);
-                }
-              }}
-            />
-            <PushToggle />
-            <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
-              <RefreshCw size={16} /> Обновить
-            </Button>
-          </div>
-        </header>
-
-        <section className="owner-heading">
-          <span className="eyebrow">
-            {view === "applications"
-              ? "Заявки"
-              : view === "addresses"
-                ? "Адреса"
-                : "Сообщения"}
-          </span>
-          <h1>
-            {view === "applications"
-              ? "Заявки, назначенные вашей организации"
-              : view === "addresses"
-                ? "Адреса, привязанные к вашей организации"
-                : "Входящие сообщения по адресам"}
-          </h1>
-        </section>
-
-        {user.email_verified === false ? (
-          <EmailVerificationBanner email={user.email} />
-        ) : null}
-        <InlineError message={error} />
-        <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
-
+    <AppShell
+      user={user}
+      section={view}
+      onSection={(id) => onView(id as OwnerCabinetView)}
+      title={view === "applications" ? "Заявки" : view === "addresses" ? "Адреса" : "Чаты"}
+      subtitle={
+        view === "applications"
+          ? actionableCount
+            ? `Требуют действия: ${actionableCount} из ${applications.length}`
+            : applications.length
+              ? `Всего заявок: ${applications.length}`
+              : undefined
+          : view === "addresses"
+            ? `Опубликовано: ${publishedCount} из ${addresses.length}`
+            : "Входящие сообщения по вашим адресам"
+      }
+      counts={{ applications: applications.length, addresses: addresses.length }}
+      onOpenSite={onOpenCatalog}
+      onBack={onBack}
+      canGoBack={canGoBack}
+      onLogout={onLogout}
+      onRefresh={() => setRefreshKey((value) => value + 1)}
+      actions={
+        <>
+          <NotificationCenter
+            refreshKey={refreshKey}
+            onNavigate={(n) => {
+              if (n.link_type === "application" && n.link_id) {
+                // Раздел и заявка одним переходом — иначе вторая навигация
+                // затирает первую.
+                onView("applications", n.link_id);
+              } else if (n.link_type === "chat" && n.link_id) {
+                onView("chats");
+                setPendingChatId(n.link_id);
+              }
+            }}
+          />
+          <PushToggle />
+        </>
+      }
+      banner={
+        <>
+          {error ? (
+            <ListError message={error} onRetry={() => setRefreshKey((value) => value + 1)} />
+          ) : null}
+          <InlineNotice message={notice} onDismiss={() => setNotice(null)} />
+        </>
+      }
+    >
         {(view === "applications" || view === "addresses") && (loading ? (
-          <LoadingRows />
+          <ListLoading />
         ) : !dashboard ? (
-          <EmptyState title="Кабинет недоступен" text="Проверьте привязку пользователя к организации исполнителя." />
+          <ListEmpty title="Кабинет недоступен" text="Проверьте привязку пользователя к организации собственника." />
         ) : (
           <section className={view === "applications" ? "owner-layout owner-layout--single" : "owner-layout owner-layout--single"}>
           {view === "addresses" && (
@@ -2667,8 +2461,7 @@ function OwnerDashboardView({
             onSaved={() => setRefreshKey((value) => value + 1)}
           />
         ) : null}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 
