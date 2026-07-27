@@ -14,6 +14,7 @@ import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
 import { statusMeta } from "../status";
 import { StatusBadge } from "../ui/Badge";
+import { ListEmpty } from "../ui/ListState";
 import { shortNumber } from "./progress";
 
 export type QueueRow = {
@@ -96,6 +97,8 @@ export function ApplicationsQueue({
     () => (activeFilter ? rows.filter(activeFilter.match) : rows),
     [rows, activeFilter]
   );
+  /** Фильтр «показать всё» — на него уводит кнопка из пустого состояния. */
+  const showAllId = (filters.find((item) => item.id === "all") || filters[0])?.id;
 
   const checkedRows = useMemo(
     () => visible.filter((row) => checked.includes(row.id)),
@@ -171,6 +174,30 @@ export function ApplicationsQueue({
             <span>Обновлена</span>
             <span style={{ textAlign: "right" }}>Сумма</span>
           </div>
+
+          {/*
+            Фильтр может не совпасть ни с одной строкой — и у собственника это
+            состояние по умолчанию: «Требуют действия» стоит первым, а если
+            срочного нет, кабинет открывался пустой таблицей без объяснений.
+            Заявки при этом есть, просто их не видно.
+          */}
+          {visible.length === 0 ? (
+            <div style={{ padding: "18px 16px" }}>
+              <ListEmpty
+                action={
+                  filters.length > 1
+                    ? { label: "Показать все", onClick: () => setFilterId(showAllId) }
+                    : undefined
+                }
+                text={
+                  rows.length
+                    ? `Под фильтр «${activeFilter?.label}» не попала ни одна из ${rows.length} заявок.`
+                    : "Заявок пока нет."
+                }
+                title="Ничего не найдено"
+              />
+            </div>
+          ) : null}
 
           {visible.map((row) => (
             <div
