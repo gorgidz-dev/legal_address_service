@@ -1057,11 +1057,6 @@ export default function PublicCatalog({
         animate="visible"
         variants={motionVariants}
       >
-        {/* Декоративное фото: пустой alt, на узком экране скрыто целиком.
-            Ничего, чего нет в тексте рядом, оно не сообщает. */}
-        <div aria-hidden="true" className="ds-hero__media">
-          <img alt="" decoding="async" fetchPriority="high" src="/hero-office.jpg" />
-        </div>
         <motion.h1 className="ds-hero__h1" variants={childMotion}>
           Маркетплейс юридических адресов.<br />
           <em>За 1 день.</em>
@@ -1088,6 +1083,13 @@ export default function PublicCatalog({
             <div className="ds-stat__lbl">месяцев аренды</div>
           </div>
         </motion.div>
+
+        {/* Декоративная иллюстрация: пустой alt, на узком экране скрыта целиком.
+            Стоит последней в разметке, чтобы не вклиниваться между заголовком и
+            текстом при чтении с экранного диктора; на месте её держит сетка. */}
+        <div aria-hidden="true" className="ds-hero__media">
+          <img alt="" decoding="async" fetchPriority="high" src="/hero-office.jpg" />
+        </div>
       </motion.section>
 
       {/*

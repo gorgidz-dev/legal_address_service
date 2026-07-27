@@ -176,44 +176,59 @@
 }
 
 /*
- * Фото справа, растворяющееся в фоне страницы. Блок декоративный: маска
- * съедает его левый край, а на узком экране он скрывается целиком — поэтому
- * alt пустой и картинка не должна нести смысла, которого нет в тексте.
+ * Иллюстрация справа. Блок декоративный: на узком экране он скрывается
+ * целиком — поэтому alt пустой и картинка не несёт смысла, которого нет в
+ * тексте рядом.
+ *
+ * Пакет дизайна предполагал фотографию, растворяющуюся маской в фон страницы.
+ * У этой иллюстрации собственный сплошной индиговый фон: под маской она
+ * выцветала и всё равно читалась прямоугольником с обрезанными краями.
+ * Поэтому она подана карточкой — так это выглядит намеренно, а не случайно.
+ *
+ * Шапка на широком экране — сетка из двух колонок, а не абсолютное
+ * позиционирование: при абсолютном на ширине около 1000px заголовок
+ * (max-width 640) заезжал бы под картинку.
  */
-.ds-hero__media {
-  position: absolute;
-  inset: 0 0 0 52%;
-  pointer-events: none;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(to left, #000 30%, rgba(0, 0, 0, 0.35) 62%, transparent 92%);
-  mask-image: linear-gradient(to left, #000 30%, rgba(0, 0, 0, 0.35) 62%, transparent 92%);
-  opacity: 0.9;
-}
-.ds-hero__media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.ds-hero__media::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to right,
-    var(--ds-page-bg) 0%,
-    rgba(250, 251, 252, 0.72) 38%,
-    rgba(250, 251, 252, 0) 70%
-  );
+@media (min-width: 901px) {
+  .ds-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 0.78fr);
+    /* Строки объявлены явно по числу текстовых блоков (заголовок, подзаголовок,
+       счётчики). Без этого `grid-row: 1 / -1` у картинки схлопывается в одну
+       строку: -1 указывает на последнюю ЯВНУЮ линию, а её нет — и шапка
+       растягивалась вдвое. */
+    grid-template-rows: repeat(3, auto);
+    column-gap: var(--ds-space-8);
+    align-items: center;
+  }
+  .ds-hero > *:not(.ds-hero__media) {
+    grid-column: 1;
+  }
+  .ds-hero__media {
+    position: relative;
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: stretch;
+    min-height: 380px;
+    overflow: hidden;
+    border-radius: var(--ds-radius-xl);
+  }
 }
 /*
- * Текст поднимаем над фото. Исключение для самого фото обязательно: в пакете
- * дизайна правило было записано как `.ds-hero > *`, и с равной специфичностью
- * оно перебивало position:absolute у .ds-hero__media — фото встало бы в поток
- * и разорвало шапку.
+ * Картинка вынута из потока. Иначе она отдавала бы блоку собственную высоту по
+ * пропорциям файла (589 → 558px), высота шапки определялась бы размером файла,
+ * а текст слева разъезжался бы на всю эту высоту.
  */
-.ds-hero > *:not(.ds-hero__media) {
-  position: relative;
+.ds-hero__media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Кадрируем чуть выше центра: снизу у иллюстрации пустой пол, сверху —
+     вершина арки, которую терять жальче. */
+  object-fit: cover;
+  object-position: center 46%;
+  display: block;
 }
 @media (max-width: 900px) {
   .ds-hero__media {
