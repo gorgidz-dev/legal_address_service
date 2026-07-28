@@ -426,6 +426,16 @@ export default function PublicCatalog({
     { fns_number: number; fns_city: string | null; count: number }[]
   >([]);
   const [geoTree, setGeoTree] = useState<GeoRegion[]>([]);
+  /**
+   * Размер всего каталога — для счётчиков первого экрана.
+   *
+   * Считать их по `addresses` нельзя: там лежит текущая страница выдачи, а не
+   * каталог. На проде это давало «24 адреса в каталоге» при 26 опубликованных
+   * (PAGE_SIZE = 24) — и цифра ещё и менялась при любом фильтре, хотя подпись
+   * обещает каталог целиком. Именно с этого экрана переписаны цифры в
+   * замечаниях заказчика.
+   */
+  const [catalogTotal, setCatalogTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -789,6 +799,15 @@ export default function PublicCatalog({
       .catch(() => {
         /* гео-дерево недоступно — каскад покажет пустые селекты */
       });
+    // Размер каталога: запрос без фильтров, одна запись — нужен только total.
+    api
+      .publicSearchAddresses({ page: 1, page_size: 1 })
+      .then((res) => {
+        if (alive) setCatalogTotal(res.total);
+      })
+      .catch(() => {
+        /* счётчик покажет «—», остальная страница не страдает */
+      });
     return () => {
       alive = false;
     };
@@ -798,21 +817,24 @@ export default function PublicCatalog({
   // Фронт показывает то что пришло. Подсветка совпадений по-прежнему клиентская.
   const filteredAddresses = addresses;
 
+  // Счётчики первого экрана — по справочникам всего каталога, а не по странице
+  // выдачи. Оба справочника грузятся один раз и от фильтров не зависят.
   const ifnsCount = useMemo(() => {
     const set = new Set<number>();
-    for (const a of addresses) {
-      if (a.fns_number) set.add(a.fns_number);
-    }
+    for (const opt of fnsOptions) set.add(opt.fns_number);
     return set.size;
-  }, [addresses]);
+  }, [fnsOptions]);
 
+  // Города считаем по тому же справочнику ИФНС, а не по гео-дереву: дерево
+  // строится через fns_office_id, а он у части адресов не проставлен — на проде
+  // /marketplace/geo отдаёт пустой список, и счётчик показал бы «—».
   const cityCount = useMemo(() => {
     const set = new Set<string>();
-    for (const a of addresses) {
-      if (a.fns_city) set.add(a.fns_city);
+    for (const opt of fnsOptions) {
+      if (opt.fns_city) set.add(opt.fns_city);
     }
     return set.size;
-  }, [addresses]);
+  }, [fnsOptions]);
 
   /** Подсказки для свободного поля «Город» — вынимаются из строк адресов. */
   const cities = useMemo(() => {
@@ -1073,12 +1095,14 @@ export default function PublicCatalog({
         </motion.p>
         <motion.div className="ds-hero__stats ds-stat-row" variants={childMotion}>
           <div className="ds-stat">
-            <div className="ds-stat__num">{addresses.length || "—"}</div>
-            <div className="ds-stat__lbl">{addresses.length === 1 ? "адрес в каталоге" : "адресов в каталоге"}</div>
+            <div className="ds-stat__num">{catalogTotal || "—"}</div>
+            <div className="ds-stat__lbl">{catalogTotal === 1 ? "адрес в каталоге" : "адресов в каталоге"}</div>
           </div>
           <div className="ds-stat">
             <div className="ds-stat__num">{ifnsCount || "—"}</div>
-            <div className="ds-stat__lbl">ИФНС в выборке</div>
+            {/* Было «ИФНС в выборке» — считалось по странице выдачи и врало
+                вместе с ней. Теперь это справочник по всему каталогу. */}
+            <div className="ds-stat__lbl">ИФНС в каталоге</div>
           </div>
           <div className="ds-stat">
             <div className="ds-stat__num">{cityCount || "—"}</div>
