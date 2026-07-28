@@ -1251,7 +1251,7 @@ export default function PublicCatalog({
               <AlertTriangle size={26} strokeWidth={1.8} />
             </div>
             <h3>Не удалось загрузить каталог</h3>
-            <p>Что-то пошло не так на нашей стороне. Попробуй обновить страницу через минуту — если ошибка повторится, напиши нам.</p>
+            <p>Что-то пошло не так на нашей стороне. Попробуйте обновить страницу через минуту — если ошибка повторится, напишите нам.</p>
             <div className="ds-emptystate__actions">
               <button
                 className="ds-btn ds-btn--secondary ds-btn--md"
@@ -1295,7 +1295,7 @@ export default function PublicCatalog({
             </h3>
             <p>
               {hasActiveFilters
-                ? "Сбрось ненужные фильтры или попробуй похожую ИФНС:"
+                ? "Сбросьте ненужные фильтры или попробуйте похожую ИФНС:"
                 : "Скоро появятся первые адреса от верифицированных собственников."}
             </p>
             {hasActiveFilters && (
@@ -2216,7 +2216,7 @@ export default function PublicCatalog({
               </button>
             </header>
             <p style={{ fontSize: 13, color: "var(--ds-slate-500)", marginTop: 0 }}>
-              <Sparkles size={14} style={{ verticalAlign: "-2px" }} /> Расскажи о компании и адресах — мы свяжемся в течение рабочего дня и пришлём приглашение в админку.
+              <Sparkles size={14} style={{ verticalAlign: "-2px" }} /> Расскажите о компании и адресах — мы свяжемся в течение рабочего дня и пришлём приглашение в админку.
             </p>
 
             <label className="field">
@@ -2282,7 +2282,7 @@ export default function PublicCatalog({
             {ownerSuccess ? (
               <div className="success-note">
                 <CheckCircle2 size={16} />
-                Заявка отправлена. Проверь почту — мы напишем в течение рабочего дня.
+                Заявка отправлена. Проверьте почту — мы напишем в течение рабочего дня.
               </div>
             ) : null}
 

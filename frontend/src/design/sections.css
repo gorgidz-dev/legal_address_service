@@ -1116,6 +1116,44 @@ legend.ds-configurator__label {
   font-size: var(--ds-text-body-sm);
   line-height: 1.55;
 }
+/* Расшифровка комплекта документов — полосой под четырьмя шагами. */
+.ds-steps__docs {
+  margin-top: var(--ds-space-4);
+  padding: var(--ds-space-5) var(--ds-space-6);
+  background: var(--ds-indigo-50);
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-xl);
+  display: grid;
+  gap: var(--ds-space-3);
+}
+.ds-steps__docs-label {
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-indigo-600);
+}
+.ds-steps__docs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-text-body-sm);
+  line-height: 1.5;
+  color: var(--ds-slate-500);
+}
+.ds-steps__docs-list b {
+  color: var(--ds-indigo-950);
+  font-weight: 600;
+}
+@media (min-width: 768px) {
+  .ds-steps__docs-list {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--ds-space-6);
+  }
+}
 
 @media (min-width: 640px) {
   .ds-steps__list {

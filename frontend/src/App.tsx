@@ -4510,7 +4510,7 @@ function AdminAddressServicesView() {
 
         <div className="address-services-editor">
           {!selectedAddress ? (
-            <p className="hint">Выбери адрес слева</p>
+            <p className="hint">Выберите адрес слева</p>
           ) : loadingServices ? (
             <LoadingRows />
           ) : (

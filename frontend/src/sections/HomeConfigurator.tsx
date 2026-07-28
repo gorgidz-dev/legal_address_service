@@ -81,7 +81,7 @@ export function HomeConfigurator({
         <div>
           <h2 className="ds-configurator__title">Подберём адрес под задачу</h2>
           <p className="ds-configurator__sub">
-            Расскажи параметры — покажем подходящие. Все адреса с гарантийным
+            Укажите параметры — покажем подходящие. Все адреса с гарантийным
             письмом и свежей выпиской ЕГРН.
           </p>
         </div>
