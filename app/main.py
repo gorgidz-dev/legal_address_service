@@ -45,7 +45,6 @@ from app.routers import (
     providers,
     push,
     registry,
-    templates,
     webhooks,
     workflow,
 )
@@ -282,7 +281,6 @@ api_v1.include_router(egrn.router)
 api_v1.include_router(clients.router)
 api_v1.include_router(applications.router)
 api_v1.include_router(registry.router)
-api_v1.include_router(templates.router)
 # Демо-сид создаёт аккаунты (в т.ч. admin) с известным паролем — только вне прода.
 if settings.app_env != "production":
     api_v1.include_router(demo.router)

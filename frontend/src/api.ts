@@ -24,7 +24,6 @@ import type {
   NotificationInbox,
   AppNotification,
   OwnerDashboard,
-  PackageResult,
   PaymentDocument,
   Provider,
   PublicClientApplicationCreate,
@@ -525,8 +524,6 @@ export const api = {
   applications: () => request<Application[]>("/applications"),
   createApplication: (payload: unknown) =>
     request<Application>("/applications", { method: "POST", body: JSON.stringify(payload) }),
-  generatePackage: (applicationId: string) =>
-    request<PackageResult>(`/applications/${applicationId}/generate-package`, { method: "POST" }),
   promoteToContract: (applicationId: string, payload: unknown) =>
     request<Application>(`/applications/${applicationId}/promote-to-contract`, {
       method: "POST",
@@ -570,9 +567,6 @@ export const api = {
     })
 };
 
-export function packageDownloadUrl(applicationId: string): string {
-  return `${API_BASE}/applications/${applicationId}/download-package`;
-}
 
 /**
  * Путь download_url, который отдаёт бэк, — относительный от версии API

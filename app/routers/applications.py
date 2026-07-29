@@ -5,7 +5,6 @@ from datetime import date, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,13 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import require_staff
 from app.config import settings
 from app.database import get_db
-from app.enums import ApplicationStatus, ApplicationType, GuaranteeVariant, UserRole
+from app.enums import ApplicationStatus, ApplicationType, UserRole
 from app.models.address import Address
 from app.models.application import Application
 from app.models.client import Client
-from app.models.generated_document import GeneratedDocument
 from app.models.provider import Provider
-from app.models.stored_file import StoredFile
 from app.schemas.application import (
     ApplicationCreateAddressChange,
     ApplicationCreateInitial,
@@ -27,24 +24,9 @@ from app.schemas.application import (
     ApplicationRead,
     PromoteToContractRequest,
 )
-from app.schemas.document import (
-    GeneratedDocumentRead,
-    GuaranteeLetterRead,
-    PackageGenerateResult,
-)
 from app.services.client_data import client_values_from_dadata
 from app.services.dadata import DaDataError, DaDataNotConfigured, get_dadata_service
-from app.services.document_generation import (
-    DocumentGenerationError,
-    create_guarantee_letter,
-    create_package_record,
-    current_egrn_extract,
-    ensure_contract,
-    render_contract_docx,
-    render_guarantee_docx,
-)
 from app.services.marketplace_status import role_actions_for_status
-from app.services.storage import local_stored_file_path, read_stored_file_async, resolve_storage_file
 
 router = APIRouter(prefix="/applications", tags=["applications"], dependencies=[Depends(require_staff)])
 
@@ -221,57 +203,6 @@ async def get_application(
     return application_read(application)
 
 
-@router.post(
-    "/{application_id}/issue-guarantee",
-    response_model=GuaranteeLetterRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Выдать гарантийное письмо",
-    description=(
-        "Генерирует гарантийное письмо в варианте, соответствующем типу заявки "
-        "(initial → краткая форма; address_change → полная). "
-        "Заявка переходит в статус `guarantee_issued` (для initial) "
-        "или продолжает свой жизненный цикл."
-    ),
-)
-async def issue_guarantee(
-    application_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> GuaranteeLetterRead:
-    application, provider, address, client = await _load_application_bundle(db, application_id)
-    today = date.today()
-    try:
-        egrn_extract = await current_egrn_extract(db, address.id)
-        contract = None
-        variant = GuaranteeVariant.INITIAL
-        if application.type == ApplicationType.ADDRESS_CHANGE.value:
-            if client is None:
-                raise DocumentGenerationError("Для смены адреса не найден клиент")
-            contract = await ensure_contract(db=db, application=application, address=address, today=today)
-            variant = GuaranteeVariant.FULL
-        guarantee = await create_guarantee_letter(
-            db=db,
-            application=application,
-            egrn_extract=egrn_extract,
-            variant=variant,
-            today=today,
-        )
-        await render_guarantee_docx(
-            db=db,
-            application=application,
-            provider=provider,
-            address=address,
-            client=client,
-            guarantee=guarantee,
-            contract=contract,
-        )
-        application.status = ApplicationStatus.GUARANTEE_ISSUED.value
-        await db.commit()
-        await db.refresh(guarantee)
-        return guarantee
-    except DocumentGenerationError as e:
-        await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
-
 
 @router.post(
     "/{application_id}/promote-to-contract",
@@ -319,228 +250,3 @@ async def promote_to_contract(
     await db.commit()
     await db.refresh(child)
     return application_read(child)
-
-
-@router.post(
-    "/{application_id}/generate-package",
-    response_model=PackageGenerateResult,
-    status_code=status.HTTP_201_CREATED,
-    summary="Сгенерировать ZIP-комплект документов",
-    description=(
-        "Состав ZIP зависит от типа заявки:\n"
-        "- `initial_registration`: гарантийное письмо (.docx + .pdf) + выписка ЕГРН (.pdf)\n"
-        "- `address_change`: договор (.docx + .pdf) + гарантийное письмо (.docx + .pdf) + выписка ЕГРН (.pdf)"
-    ),
-)
-async def generate_package(
-    application_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> PackageGenerateResult:
-    application, provider, address, client = await _load_application_bundle(db, application_id)
-    today = date.today()
-    try:
-        egrn_extract = await current_egrn_extract(db, address.id)
-        documents: list[GeneratedDocument] = []
-
-        if application.type == ApplicationType.INITIAL_REGISTRATION.value:
-            guarantee = await create_guarantee_letter(
-                db=db,
-                application=application,
-                egrn_extract=egrn_extract,
-                variant=GuaranteeVariant.INITIAL,
-                today=today,
-            )
-            documents.append(
-                await render_guarantee_docx(
-                    db=db,
-                    application=application,
-                    provider=provider,
-                    address=address,
-                    client=None,
-                    guarantee=guarantee,
-                    contract=None,
-                )
-            )
-            application.status = ApplicationStatus.GUARANTEE_ISSUED.value
-        elif application.type == ApplicationType.ADDRESS_CHANGE.value:
-            if client is None:
-                raise DocumentGenerationError("Для смены адреса не найден клиент")
-            contract = await ensure_contract(db=db, application=application, address=address, today=today)
-            documents.append(
-                await render_contract_docx(
-                    db=db,
-                    application=application,
-                    provider=provider,
-                    address=address,
-                    client=client,
-                    contract=contract,
-                )
-            )
-            guarantee = await create_guarantee_letter(
-                db=db,
-                application=application,
-                egrn_extract=egrn_extract,
-                variant=GuaranteeVariant.FULL,
-                today=today,
-            )
-            documents.append(
-                await render_guarantee_docx(
-                    db=db,
-                    application=application,
-                    provider=provider,
-                    address=address,
-                    client=client,
-                    guarantee=guarantee,
-                    contract=contract,
-                )
-            )
-            application.status = ApplicationStatus.CONTRACT_SIGNED.value
-        else:
-            raise DocumentGenerationError("Неизвестный тип заявки")
-
-        package = await create_package_record(
-            db=db,
-            application=application,
-            documents=documents,
-            egrn_extract=egrn_extract,
-        )
-        documents.append(package)
-        await db.commit()
-
-        result = await db.execute(
-            select(GeneratedDocument)
-            .where(GeneratedDocument.application_id == application.id)
-            .order_by(GeneratedDocument.generated_at)
-        )
-        all_documents = list(result.scalars().all())
-        return PackageGenerateResult(
-            application_id=application.id,
-            zip_url=package.zip_url or "",
-            documents=all_documents,
-        )
-    except DocumentGenerationError as e:
-        await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
-
-
-@router.get(
-    "/{application_id}/documents",
-    response_model=list[GeneratedDocumentRead],
-    summary="Журнал сгенерированных документов по заявке",
-)
-async def list_application_documents(
-    application_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> list[GeneratedDocument]:
-    result = await db.execute(
-        select(GeneratedDocument)
-        .where(GeneratedDocument.application_id == application_id)
-        .order_by(GeneratedDocument.generated_at.desc())
-    )
-    return list(result.scalars().all())
-
-
-@router.get(
-    "/{application_id}/download-package",
-    response_class=FileResponse,
-    summary="Скачать последний ZIP-комплект по заявке",
-)
-async def download_latest_package(
-    application_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> Response:
-    result = await db.execute(
-        select(GeneratedDocument)
-        .where(
-            GeneratedDocument.application_id == application_id,
-            GeneratedDocument.kind == "package_zip",
-            GeneratedDocument.zip_url.is_not(None),
-        )
-        .order_by(GeneratedDocument.generated_at.desc())
-        .limit(1)
-    )
-    document = result.scalar_one_or_none()
-    if document is None or not document.zip_url:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "ZIP-комплект по заявке не найден")
-
-    if document.zip_url:
-        try:
-            path = resolve_storage_file(document.zip_url)
-            return FileResponse(
-                path,
-                filename=path.name,
-                media_type="application/zip",
-            )
-        except (FileNotFoundError, ValueError):
-            pass
-
-    stored_result = await db.execute(
-        select(StoredFile)
-        .where(
-            StoredFile.application_id == application_id,
-            StoredFile.kind == "package_zip",
-        )
-        .order_by(StoredFile.created_at.desc())
-        .limit(1)
-    )
-    file_record = stored_result.scalar_one_or_none()
-    if file_record is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "ZIP-комплект по заявке не найден в хранилище")
-
-    try:
-        local_path = local_stored_file_path(file_record)
-        if local_path is not None:
-            return FileResponse(
-                local_path,
-                filename=file_record.original_filename,
-                media_type=file_record.content_type,
-            )
-
-        return Response(
-            content=await read_stored_file_async(file_record),
-            media_type=file_record.content_type,
-            headers={"Content-Disposition": f'attachment; filename="{file_record.original_filename}"'},
-        )
-    except (FileNotFoundError, ValueError) as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
-
-
-_GENERATED_DOC_MEDIA_TYPES = {
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "pdf": "application/pdf",
-    "zip": "application/zip",
-}
-
-
-@router.get(
-    "/{application_id}/documents/{document_id}/download",
-    response_class=FileResponse,
-    summary="Скачать сгенерированный документ (договор/гарантийку/комплект) по id",
-)
-async def download_generated_document(
-    application_id: UUID,
-    document_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> Response:
-    document = await db.get(GeneratedDocument, document_id)
-    if document is None or document.application_id != application_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден в этой заявке")
-
-    for url, suffix in (
-        (document.docx_url, "docx"),
-        (document.pdf_url, "pdf"),
-        (document.zip_url, "zip"),
-    ):
-        if not url:
-            continue
-        try:
-            path = resolve_storage_file(url)
-        except (FileNotFoundError, ValueError):
-            continue
-        return FileResponse(
-            path,
-            filename=path.name,
-            media_type=_GENERATED_DOC_MEDIA_TYPES[suffix],
-        )
-
-    raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл сгенерированного документа недоступен")

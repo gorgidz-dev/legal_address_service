@@ -41,23 +41,6 @@ class NoticePeriod(str, Enum):
     ONE_MONTH = "1m"
 
 
-class GuaranteeVariant(str, Enum):
-    INITIAL = "initial"
-    FULL = "full"
-
-
-class TemplateKind(str, Enum):
-    CONTRACT = "contract"
-    GUARANTEE_INITIAL = "guarantee_initial"
-    GUARANTEE_FULL = "guarantee_full"
-
-
-class GeneratedDocumentKind(str, Enum):
-    CONTRACT = "contract"
-    GUARANTEE = "guarantee"
-    PACKAGE_ZIP = "package_zip"
-
-
 class UserRole(str, Enum):
     MANAGER = "manager"
     LAWYER = "lawyer"

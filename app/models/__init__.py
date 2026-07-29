@@ -11,11 +11,8 @@ from app.models.auth_attempt import AuthAttempt
 from app.models.base import Base
 from app.models.client import Client
 from app.models.contract import Contract
-from app.models.document_template import DocumentTemplate
 from app.models.egrn_extract import EgrnExtract
 from app.models.fns_office import FnsOffice
-from app.models.generated_document import GeneratedDocument
-from app.models.guarantee_letter import GuaranteeLetter
 from app.models.incoming_webhook import IncomingWebhook
 from app.models.invitation import Invitation
 from app.models.payment import Payment
@@ -44,11 +41,8 @@ __all__ = [
     "Base",
     "Client",
     "Contract",
-    "DocumentTemplate",
     "EgrnExtract",
     "FnsOffice",
-    "GeneratedDocument",
-    "GuaranteeLetter",
     "IncomingWebhook",
     "Invitation",
     "Payment",

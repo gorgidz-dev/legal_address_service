@@ -35,7 +35,6 @@ import {
   ApiError,
   SESSION_EXPIRED_EVENT,
   api,
-  packageDownloadUrl,
   apiDownloadUrl
 } from "./api";
 import { PhoneInput, formatRuPhone } from "./PhoneInput";
@@ -3163,9 +3162,6 @@ function ApplicationsView({
                     <FileCheck2 size={15} /> Договор
                   </button>
                 ) : null}
-                <DownloadLink className="download-link" href={packageDownloadUrl(application.id)}>
-                  <Download size={16} /> ZIP
-                </DownloadLink>
               </div>
             </div>
           );
@@ -3358,7 +3354,6 @@ function PromoteContractPanel({
 
   useModalDismiss(!!application, null);
   const [error, setError] = useState<string | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   if (!application) return null;
   const currentApplication = application;
@@ -3367,7 +3362,6 @@ function PromoteContractPanel({
     event.preventDefault();
     setBusy(true);
     setError(null);
-    setDownloadUrl(null);
     try {
       const child = await api.promoteToContract(currentApplication.id, {
         client_inn: inn,
@@ -3378,8 +3372,6 @@ function PromoteContractPanel({
         contact_phone: contactPhone || null,
         contact_email: contactEmail || null
       });
-      await api.generatePackage(child.id);
-      setDownloadUrl(packageDownloadUrl(child.id));
       onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -3447,11 +3439,6 @@ function PromoteContractPanel({
             {busy ? <Loader2 className="spin" size={16} /> : <FileArchive size={16} />}
             Создать договор
           </Button>
-          {downloadUrl ? (
-            <DownloadLink className="btn secondary" href={downloadUrl}>
-              <Download size={16} /> Скачать ZIP
-            </DownloadLink>
-          ) : null}
         </div>
       </form>
     </div>
@@ -3481,7 +3468,6 @@ function NewApplicationView({
   const [hasCorrespondence, setHasCorrespondence] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
 
   const availableAddresses = useMemo(
     () => addresses.filter((address) => address.provider_id === providerId),
@@ -3510,7 +3496,6 @@ function NewApplicationView({
     event.preventDefault();
     setBusy(true);
     setError(null);
-    setResultUrl(null);
     try {
       const payload =
         type === "initial_registration"
@@ -3536,8 +3521,6 @@ function NewApplicationView({
               contact_email: contactEmail || null
             };
       const application = await api.createApplication(payload);
-      await api.generatePackage(application.id);
-      setResultUrl(packageDownloadUrl(application.id));
       onCreated();
     } catch (err) {
       setError((err as Error).message);
@@ -3691,11 +3674,6 @@ function NewApplicationView({
             {busy ? <Loader2 className="spin" size={16} /> : <FileArchive size={16} />}
             Сформировать комплект
           </Button>
-          {resultUrl ? (
-            <DownloadLink className="btn secondary" href={resultUrl}>
-              <Download size={16} /> Скачать ZIP
-            </DownloadLink>
-          ) : null}
         </div>
       </section>
 
@@ -3815,9 +3793,6 @@ function RegistryView() {
                 <button className="text-action" onClick={() => setPaymentClient(item)} type="button">
                   <ReceiptText size={15} /> Оплата
                 </button>
-                <DownloadLink className="download-link" href={packageDownloadUrl(item.application_id)}>
-                  <Download size={16} /> ZIP
-                </DownloadLink>
               </div>
             </div>
           ))}

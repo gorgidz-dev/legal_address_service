@@ -258,22 +258,6 @@ export interface DadataLookup {
   };
 }
 
-export interface GeneratedDocument {
-  id: string;
-  application_id: string;
-  kind: "contract" | "guarantee" | "package_zip";
-  docx_url: string | null;
-  pdf_url: string | null;
-  zip_url: string | null;
-  generated_at: string;
-}
-
-export interface PackageResult {
-  application_id: string;
-  zip_url: string;
-  documents: GeneratedDocument[];
-}
-
 export interface ActiveClientRegistryItem {
   application_id: string;
   contract_id: string;
