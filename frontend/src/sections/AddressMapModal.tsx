@@ -11,6 +11,7 @@ import { Loader2, MapPin, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useModalDismiss } from "../useModalDismiss";
 import type { PublicAddress } from "../types";
+import { loadYandexMaps, YANDEX_KEY } from "./yandexMaps";
 
 type Props = {
   open: boolean;
@@ -23,37 +24,6 @@ type Props = {
   onClose: () => void;
   onSelectAddress: (address: PublicAddress) => void;
 };
-
-const YANDEX_KEY = import.meta.env.VITE_YANDEX_MAPS_KEY as string | undefined;
-
-// Глобальный промис загрузки JS API — чтобы скрипт подключался один раз.
-let ymapsPromise: Promise<unknown> | null = null;
-
-function loadYandexMaps(): Promise<unknown> {
-  if (ymapsPromise) return ymapsPromise;
-  ymapsPromise = new Promise((resolve, reject) => {
-    if (!YANDEX_KEY) {
-      reject(new Error("no-key"));
-      return;
-    }
-    const w = window as unknown as { ymaps?: { ready: (cb: () => void) => void } };
-    if (w.ymaps) {
-      w.ymaps.ready(() => resolve(w.ymaps));
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = `https://api-maps.yandex.ru/2.1/?apikey=${YANDEX_KEY}&lang=ru_RU`;
-    script.async = true;
-    script.onload = () => {
-      const ww = window as unknown as { ymaps?: { ready: (cb: () => void) => void } };
-      if (ww.ymaps) ww.ymaps.ready(() => resolve(ww.ymaps));
-      else reject(new Error("load-failed"));
-    };
-    script.onerror = () => reject(new Error("load-failed"));
-    document.head.appendChild(script);
-  });
-  return ymapsPromise;
-}
 
 function formatPrice(value: string): string {
   const n = Number(value);

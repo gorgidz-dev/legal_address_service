@@ -633,6 +633,65 @@
 .ds-address-detail__thumb.selected {
   border-color: var(--ds-indigo-500);
 }
+/* Вкладки «Фото» / «На карте» над галереей. */
+.ds-address-detail__tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.ds-address-detail__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ds-slate-600);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--ds-motion-fast) var(--ds-ease-snappy),
+    border-color var(--ds-motion-fast) var(--ds-ease-snappy),
+    color var(--ds-motion-fast) var(--ds-ease-snappy);
+}
+.ds-address-detail__tab:hover {
+  border-color: var(--ds-indigo-500);
+  color: var(--ds-indigo-700);
+}
+.ds-address-detail__tab.is-active {
+  background: var(--ds-indigo-600);
+  border-color: var(--ds-indigo-600);
+  color: #fff;
+}
+/* Мини-карта занимает место основного фото — высота та же, чтобы карточка
+   не прыгала при переключении вкладок. */
+.ds-address-detail__map {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--ds-radius-lg);
+  overflow: hidden;
+  background: var(--ds-slate-100);
+}
+.ds-address-detail__map-canvas {
+  position: absolute;
+  inset: 0;
+}
+.ds-address-detail__map-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ds-slate-600);
+  background: var(--ds-slate-100);
+}
 .ds-address-detail__info {
   display: flex;
   flex-direction: column;
@@ -670,9 +729,20 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: 12px;
   font-size: 15px;
   font-weight: 600;
   color: var(--ds-indigo-950);
+}
+/* Пояснение к сроку — второй строкой под «6 месяцев» / «11 месяцев». */
+.ds-address-detail__term-hint {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ds-slate-500);
 }
 .ds-address-detail__price-row strong {
   font-weight: 800;
@@ -706,24 +776,46 @@
   flex-direction: column;
   gap: 8px;
 }
+/* Строка услуги: маркер слева, название тянется, цена или подпись справа.
+   Раньше галочка стояла справа, а у платных услуг маркера не было вовсе —
+   два списка читались как один, просто с ценами в части строк. */
 .ds-address-detail__services li {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   font-size: 13px;
   padding: 8px 12px;
   background: var(--ds-slate-50);
   border-radius: var(--ds-radius-md);
 }
+.ds-address-detail__services li > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .ds-address-detail__services li strong {
   color: var(--ds-indigo-700);
   font-weight: 700;
+  flex-shrink: 0;
+}
+.ds-address-detail__svc-tag {
+  flex-shrink: 0;
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: #1f8a55;
 }
 .ds-address-detail__services--included li {
   background: rgba(34, 167, 110, 0.08);
 }
 .ds-address-detail__check {
   color: #1f8a55;
+  flex-shrink: 0;
+}
+.ds-address-detail__plus {
+  color: var(--ds-indigo-600);
   flex-shrink: 0;
 }
 .ds-address-detail__services--extras li {
@@ -735,6 +827,52 @@
 .ds-address-detail__services--extras li strong {
   color: var(--ds-slate-700);
   font-weight: 700;
+}
+/* Блок юридической достоверности. */
+.ds-address-detail__trust {
+  border: 1px solid rgba(34, 167, 110, 0.28);
+  border-radius: var(--ds-radius-lg);
+  background: rgba(34, 167, 110, 0.06);
+  padding: 12px 14px;
+}
+.ds-address-detail__trust h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #146c43;
+  letter-spacing: var(--ds-tracking-snug);
+}
+.ds-address-detail__trust p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ds-slate-600);
+}
+.ds-address-detail__howto {
+  margin-top: 8px;
+}
+.ds-address-detail__howto summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ds-indigo-700);
+}
+.ds-address-detail__howto ol {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ds-slate-600);
+}
+.ds-address-detail__howto a {
+  color: var(--ds-indigo-700);
+  font-weight: 600;
 }
 .ds-address-detail__services-hint {
   font-size: 12px;

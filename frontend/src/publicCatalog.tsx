@@ -12,6 +12,7 @@ import {
   Mail,
   MapPin,
   Menu,
+  PlusCircle,
   Repeat2,
   Search,
   Send,
@@ -34,6 +35,7 @@ import { AddressReviews } from "./sections/AddressReviews";
 import { useModalDismiss } from "./useModalDismiss";
 import type { LegalDoc } from "./router";
 import { AddressMapModal } from "./sections/AddressMapModal";
+import { AddressMiniMap } from "./sections/AddressMiniMap";
 import type {
   AddressChat,
   CurrentUser,
@@ -507,6 +509,10 @@ export default function PublicCatalog({
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
   const [detailScrolled, setDetailScrolled] = useState(false);
   const [detailPhotoIdx, setDetailPhotoIdx] = useState(0);
+  /** Вкладка галереи карточки. Сбрасывается вместе с фото при смене адреса. */
+  const [detailTab, setDetailTab] = useState<"photo" | "map">("photo");
+  const hasCoords =
+    detailAddress?.latitude != null && detailAddress?.longitude != null;
 
   /** Открыть/закрыть карточку — через URL, чтобы работали «Назад» и ссылка. */
   const openDetail = useCallback(
@@ -528,6 +534,7 @@ export default function PublicCatalog({
     const fromList = addresses.find((address) => address.id === openAddressId);
     if (fromList) {
       setDetailPhotoIdx(0);
+      setDetailTab("photo");
       setDetailError(null);
       setDetailAddress(fromList);
       return;
@@ -539,6 +546,7 @@ export default function PublicCatalog({
       .then((address) => {
         if (!alive) return;
         setDetailPhotoIdx(0);
+        setDetailTab("photo");
         setDetailError(null);
         setDetailAddress(address);
       })
@@ -1260,6 +1268,7 @@ export default function PublicCatalog({
         onSelectAddress={(address) => {
           setMapOpen(false);
           setDetailPhotoIdx(0);
+          setDetailTab("photo");
           openDetail(address);
         }}
       />
@@ -1565,6 +1574,7 @@ export default function PublicCatalog({
                     className="ds-card__media ds-card__media--clickable"
                     onClick={() => {
                       setDetailPhotoIdx(0);
+                      setDetailTab("photo");
                       openDetail(address);
                     }}
                     aria-label={`Открыть карточку: ${address.full_address}`}
@@ -1940,6 +1950,52 @@ export default function PublicCatalog({
 
             <div className="ds-address-detail__body">
               <div className="ds-address-detail__gallery">
+                {/* Вкладка карты появляется только когда есть координаты:
+                    geocode_addresses.py прогоняется отдельно, и часть адресов
+                    остаётся без них — пустая вкладка была бы обманом. */}
+                {hasCoords && (
+                  <div className="ds-address-detail__tabs" role="tablist">
+                    <button
+                      aria-selected={detailTab === "photo"}
+                      className={
+                        detailTab === "photo"
+                          ? "ds-address-detail__tab is-active"
+                          : "ds-address-detail__tab"
+                      }
+                      onClick={() => setDetailTab("photo")}
+                      role="tab"
+                      type="button"
+                    >
+                      <Camera size={15} /> Фото
+                      {detailAddress.photos.length > 0
+                        ? ` · ${detailAddress.photos.length}`
+                        : ""}
+                    </button>
+                    <button
+                      aria-selected={detailTab === "map"}
+                      className={
+                        detailTab === "map"
+                          ? "ds-address-detail__tab is-active"
+                          : "ds-address-detail__tab"
+                      }
+                      onClick={() => setDetailTab("map")}
+                      role="tab"
+                      type="button"
+                    >
+                      <MapPin size={15} /> На карте
+                    </button>
+                  </div>
+                )}
+
+                {hasCoords && detailTab === "map" ? (
+                  <AddressMiniMap
+                    active
+                    latitude={Number(detailAddress.latitude)}
+                    longitude={Number(detailAddress.longitude)}
+                    title={detailAddress.full_address}
+                  />
+                ) : (
+                <>
                 <div className="ds-address-detail__photo">
                   <div className="ds-address-detail__photo-fallback">
                     <div className="ds-card__media-fallback-initials">
@@ -2007,6 +2063,8 @@ export default function PublicCatalog({
                     ))}
                   </div>
                 )}
+                </>
+                )}
                 {detailAddress.description && (
                   <p className="ds-address-detail__description">
                     {detailAddress.description}
@@ -2044,11 +2102,21 @@ export default function PublicCatalog({
 
                 <div className="ds-address-detail__prices">
                   <div className="ds-address-detail__price-row">
-                    <span>11 месяцев</span>
+                    <span>
+                      11 месяцев
+                      <em className="ds-address-detail__term-hint">
+                        удобно для продления без перезаключения
+                      </em>
+                    </span>
                     <strong>{formatMoney(detailAddress.price_11m)}</strong>
                   </div>
                   <div className="ds-address-detail__price-row">
-                    <span>6 месяцев</span>
+                    <span>
+                      6 месяцев
+                      <em className="ds-address-detail__term-hint">
+                        оптимально для первичной регистрации
+                      </em>
+                    </span>
                     <strong>{formatMoney(detailAddress.price_6m)}</strong>
                   </div>
                   {detailAddress.correspondence_price && (
@@ -2074,13 +2142,14 @@ export default function PublicCatalog({
                           <ul className="ds-address-detail__services--included">
                             {docs.map((svc) => (
                               <li key={svc.id}>
-                                <span>{serviceLabel(svc.kind)}</span>
                                 <CheckCircle2
+                                  aria-label="включено"
+                                  className="ds-address-detail__check"
                                   size={18}
                                   strokeWidth={2.2}
-                                  className="ds-address-detail__check"
-                                  aria-label="включено"
                                 />
+                                <span>{serviceLabel(svc.kind)}</span>
+                                <em className="ds-address-detail__svc-tag">в цене</em>
                               </li>
                             ))}
                           </ul>
@@ -2091,9 +2160,18 @@ export default function PublicCatalog({
                           <h3 style={{ marginTop: docs.length > 0 ? 12 : 0 }}>
                             Дополнительные услуги
                           </h3>
+                          {/* Маркер «плюс» в пару к галочке выше: цена рядом
+                              читается неоднозначно — можно принять за то, что
+                              уже включено и просто расписано по строкам. */}
                           <ul className="ds-address-detail__services--extras">
                             {extras.map((svc) => (
                               <li key={svc.id}>
+                                <PlusCircle
+                                  aria-label="дополнительно"
+                                  className="ds-address-detail__plus"
+                                  size={18}
+                                  strokeWidth={2.2}
+                                />
                                 <span>{serviceLabel(svc.kind)}</span>
                                 <strong>{formatMoney(svc.price)}</strong>
                               </li>
@@ -2107,6 +2185,48 @@ export default function PublicCatalog({
                     </div>
                   );
                 })()}
+
+                {/*
+                  Юридическая достоверность. Формулировка ровно по тому, что
+                  сервис действительно делает: собственник и документы на
+                  объект проходят ручную проверку, и без неё карточка в каталог
+                  не попадает. Дату выписки ЕГРН здесь не показываем — в
+                  публичной выдаче адреса полей ЕГРН нет.
+                */}
+                <div className="ds-address-detail__trust">
+                  <h3>
+                    <ShieldCheck size={18} strokeWidth={2.2} />
+                    Документы проверены
+                  </h3>
+                  <p>
+                    Собственник и его права на помещение проверены вручную до
+                    публикации. Карточка попадает в каталог только после проверки
+                    администратором.
+                  </p>
+                  <details className="ds-address-detail__howto">
+                    <summary>Как проверить адрес в ФНС самостоятельно</summary>
+                    <ol>
+                      <li>
+                        Откройте сервис ФНС «Прозрачный бизнес»:{" "}
+                        <a
+                          href="https://pb.nalog.ru/"
+                          rel="noopener noreferrer"
+                          target="_blank"
+                        >
+                          pb.nalog.ru
+                        </a>
+                      </li>
+                      <li>
+                        В разделе поиска по адресам введите адрес из этой карточки.
+                      </li>
+                      <li>
+                        Сервис покажет, сколько юридических лиц зарегистрировано по
+                        адресу. Массовым ФНС считает адрес, где после 1 августа
+                        2016 года зарегистрировано более 10 компаний.
+                      </li>
+                    </ol>
+                  </details>
+                </div>
 
                 <div className="ds-address-detail__ctas">
                   <button
