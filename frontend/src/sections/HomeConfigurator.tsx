@@ -30,6 +30,14 @@ export type ConfiguratorProps = {
   loading: boolean;
   /** Скролл к гриду с результатами. */
   onShowResults: () => void;
+  /**
+   * Кнопка «Найти» и Enter в поле.
+   *
+   * Выдача и так обновляется по мере ввода (дебаунс 200 мс), поэтому кнопка
+   * не «запускает поиск» — она снимает задержку и уводит к результатам. Без
+   * неё форма выглядела как набор фильтров без завершающего действия.
+   */
+  onSearch: () => void;
   /** Сброс всех фильтров поиска. */
   onReset: () => void;
   /** Открыть модалку поиска на карте. */
@@ -50,6 +58,7 @@ export function HomeConfigurator({
   totalCount,
   loading,
   onShowResults,
+  onSearch,
   onReset,
   onOpenMap,
 }: ConfiguratorProps) {
@@ -88,30 +97,51 @@ export function HomeConfigurator({
       </header>
 
       <div className="ds-configurator__grid">
-        {/* Строка общего поиска + кнопка поиска на карте */}
-        <div className="ds-configurator__field" data-span="3">
-          <span className="ds-configurator__label">
-            <Search size={14} /> По адресу или ИФНС
-          </span>
+        {/* Строка общего поиска: главное действие формы, поэтому крупнее
+            остальных полей — лупа внутри поля, «Найти» основной кнопкой. */}
+        <form
+          className="ds-configurator__field ds-configurator__field--search"
+          data-span="3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSearch();
+          }}
+          role="search"
+        >
+          <label className="ds-configurator__label" htmlFor="cfg-query">
+            По адресу или ИФНС
+          </label>
           <div className="ds-configurator__search-row">
-            <input
-              type="search"
-              placeholder="Например: «Тверская» или «46»"
-              value={filters.query}
-              onChange={(e) => onChange({ ...filters, query: e.target.value })}
-              className="ds-configurator__input"
-              autoComplete="off"
-              spellCheck={false}
-            />
+            <span className="ds-configurator__search-field">
+              <Search
+                aria-hidden="true"
+                className="ds-configurator__search-icon"
+                size={20}
+                strokeWidth={2}
+              />
+              <input
+                autoComplete="off"
+                className="ds-configurator__input ds-configurator__input--search"
+                id="cfg-query"
+                onChange={(e) => onChange({ ...filters, query: e.target.value })}
+                placeholder="Например: «Тверская» или «46»"
+                spellCheck={false}
+                type="search"
+                value={filters.query}
+              />
+            </span>
+            <button className="ds-configurator__search-btn" type="submit">
+              <Search size={16} /> Найти
+            </button>
             <button
-              type="button"
               className="ds-configurator__map-btn"
               onClick={onOpenMap}
+              type="button"
             >
               <MapPin size={16} /> На карте
             </button>
           </div>
-        </div>
+        </form>
 
         {/* Ряд: Регион → Город → ИФНС */}
         <GeoCascade

@@ -109,9 +109,11 @@
   margin: 0;
   min-width: 0;
 }
-/* Единая высота всех контролов конфигуратора — чтобы поля выровнялись. */
+/* Единая высота всех контролов конфигуратора — чтобы поля выровнялись.
+   Строка поиска выше остальных: это главное действие формы. */
 .ds-configurator {
   --cfg-control-h: 42px;
+  --cfg-search-h: 52px;
 }
 /* Метка фиксированной высоты — иначе строки с одно/двухсловными лейблами
    разъезжаются по вертикали. */
@@ -158,15 +160,74 @@ legend.ds-configurator__label {
 .ds-configurator__input::-webkit-search-decoration {
   -webkit-appearance: none;
 }
-/* Строка поиска: поле + кнопка «На карте» справа. Поле тянется, кнопка
-   фиксированной ширины — поэтому строка поиска визуально стала меньше. */
+/* Строка поиска: поле с лупой + «Найти» + «На карте».
+   Поле тянется, кнопки фиксированной ширины. */
 .ds-configurator__search-row {
   display: flex;
   gap: var(--ds-space-2);
   align-items: stretch;
+  flex-wrap: wrap;
 }
-.ds-configurator__search-row .ds-configurator__input {
-  flex: 1 1 auto;
+.ds-configurator__search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+/* Лупа внутри поля. pointer-events: none — иначе клик по иконке не ставит
+   курсор в поле. */
+.ds-configurator__search-icon {
+  position: absolute;
+  left: 16px;
+  color: var(--ds-slate-400);
+  pointer-events: none;
+}
+.ds-configurator__input--search {
+  height: var(--cfg-search-h);
+  padding-left: 46px;
+  padding-right: 14px;
+  /* 16px — не только акцент: на iOS поле меньше 16px зумит страницу при
+     фокусе, и после ввода пользователь остаётся в увеличенном масштабе. */
+  font-size: 16px;
+  border-radius: var(--ds-radius-xl);
+}
+.ds-configurator__search-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-2);
+  height: var(--cfg-search-h);
+  padding: 0 24px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-xl);
+  background: var(--ds-indigo-600);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--ds-motion-fast) var(--ds-ease-snappy);
+}
+.ds-configurator__search-btn:hover {
+  background: var(--ds-indigo-700);
+}
+.ds-configurator__search-row .ds-configurator__map-btn {
+  height: var(--cfg-search-h);
+  border-radius: var(--ds-radius-xl);
+}
+/* На узком экране поле занимает всю строку, кнопки делят следующую поровну. */
+@media (max-width: 639px) {
+  .ds-configurator__search-field {
+    flex: 1 1 100%;
+  }
+  .ds-configurator__search-btn,
+  .ds-configurator__search-row .ds-configurator__map-btn {
+    flex: 1 1 0;
+    padding: 0 12px;
+  }
 }
 .ds-configurator__map-btn {
   flex: 0 0 auto;

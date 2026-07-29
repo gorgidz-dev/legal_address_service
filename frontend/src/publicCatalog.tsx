@@ -1165,6 +1165,17 @@ export default function PublicCatalog({
             .getElementById("catalog-grid")
             ?.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
+        onSearch={() => {
+          // Снимаем задержку дебаунса — по кнопке выдача должна обновиться
+          // сразу, а не через 200 мс. Правило минимальной длины то же, что в
+          // самом дебаунсе, иначе «Найти» искал бы по одной букве.
+          setDebouncedQuery(
+            filters.query.trim().length >= MIN_QUERY_LEN ? filters.query : "",
+          );
+          document
+            .getElementById("catalog-grid")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
         onReset={resetFilters}
         onOpenMap={() => setMapOpen(true)}
       />
