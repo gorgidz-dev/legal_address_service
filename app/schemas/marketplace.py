@@ -174,6 +174,8 @@ class PublicAddressRead(BaseModel):
     photos: list[AddressPhotoRead] = Field(default_factory=list)
     main_photo_url: Optional[str] = None
     services: list[PublicAddressServiceRead] = Field(default_factory=list)
+    # Характеристики помещения со слов собственника — сервис их не проверяет.
+    amenities: list[str] = Field(default_factory=list)
     # Агрегаты рейтинга: средний балл (None если отзывов нет) и кол-во
     # опубликованных отзывов.
     rating_avg: Optional[float] = None

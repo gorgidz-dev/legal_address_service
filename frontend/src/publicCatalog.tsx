@@ -34,6 +34,7 @@ import { StarRating } from "./sections/StarRating";
 import { AddressReviews } from "./sections/AddressReviews";
 import { useModalDismiss } from "./useModalDismiss";
 import type { LegalDoc } from "./router";
+import { AMENITIES, knownAmenities } from "./amenities";
 import { AddressMapModal } from "./sections/AddressMapModal";
 import { AddressMiniMap } from "./sections/AddressMiniMap";
 import type {
@@ -2064,6 +2065,29 @@ export default function PublicCatalog({
                   </div>
                 )}
                 </>
+                )}
+                {/*
+                  Характеристики помещения — иконками над описанием. Стоят
+                  выше сплошного текста намеренно: описание читают не все, а
+                  «рядом с метро» и «парковка» решают за пару секунд.
+                  Подписаны как слова собственника: сервис их не проверяет,
+                  в отличие от документов.
+                */}
+                {knownAmenities(detailAddress.amenities).length > 0 && (
+                  <div className="ds-address-detail__amenities">
+                    <ul>
+                      {knownAmenities(detailAddress.amenities).map((key) => {
+                        const Icon = AMENITIES[key].icon;
+                        return (
+                          <li key={key}>
+                            <Icon aria-hidden="true" size={16} strokeWidth={2} />
+                            {AMENITIES[key].label}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <p>Со слов собственника — сервис эти пункты не проверяет.</p>
+                  </div>
                 )}
                 {detailAddress.description && (
                   <p className="ds-address-detail__description">

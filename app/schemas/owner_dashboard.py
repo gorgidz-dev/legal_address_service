@@ -28,6 +28,8 @@ class OwnerAddressRead(BaseModel):
     fns_city: Optional[str]
     is_available: bool
     publication_status: AddressPublicationStatus
+    # Характеристики помещения — их же редактирует собственник в кабинете.
+    amenities: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

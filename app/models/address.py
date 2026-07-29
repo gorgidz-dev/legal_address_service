@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Numeric, SmallInteger, Text
-from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -67,6 +67,13 @@ class Address(UUIDPKMixin, TimestampMixin, Base):
     is_available: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text)
     description: Mapped[Optional[str]] = mapped_column(Text)
+    # Характеристики помещения (app.enums.AddressAmenity): метро, парковка,
+    # охрана, консьерж, лифт. Отмечает собственник — сервис не проверяет.
+    # Пустой список вместо NULL: «нечего показать» и «ещё не заполняли» для
+    # витрины одно и то же.
+    amenities: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default="{}", nullable=False, default=list
+    )
     publication_status: Mapped[str] = mapped_column(
         Text,
         server_default="'draft'",

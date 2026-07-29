@@ -390,9 +390,18 @@ export interface PublicAddress {
   photos: AddressPhoto[];
   main_photo_url: string | null;
   services: PublicAddressService[];
+  amenities?: AddressAmenity[];
   rating_avg: number | null;
   rating_count: number;
 }
+
+/** Характеристики помещения со слов собственника (app/enums.py AddressAmenity). */
+export type AddressAmenity =
+  | "metro"
+  | "parking"
+  | "security"
+  | "concierge"
+  | "elevator";
 
 export interface PublicReview {
   id: string;
@@ -686,6 +695,7 @@ export interface OwnerAddress {
   fns_city: string | null;
   is_available: boolean;
   publication_status: "draft" | "moderation" | "published" | "rejected" | "archived";
+  amenities?: AddressAmenity[];
   created_at: string;
   updated_at: string;
 }

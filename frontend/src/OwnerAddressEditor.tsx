@@ -6,15 +6,17 @@
  * - GET/PUT/DELETE /api/v1/owner/addresses/{id}/services/{kind}
  */
 import { FormEvent, useEffect, useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
+import { AMENITIES, AMENITY_ORDER, knownAmenities } from "./amenities";
 import { api } from "./api";
 import { useModalDismiss } from "./useModalDismiss";
-import type { AddressServiceAdmin } from "./types";
+import type { AddressAmenity, AddressServiceAdmin } from "./types";
 
 type Props = {
   addressId: string;
   addressLabel: string;
   initialDescription: string | null;
+  initialAmenities?: AddressAmenity[];
   onClose: () => void;
   onSaved?: () => void;
 };
@@ -36,6 +38,7 @@ export function OwnerAddressEditor({
   addressId,
   addressLabel,
   initialDescription,
+  initialAmenities,
   onClose,
   onSaved
 }: Props) {
@@ -46,6 +49,35 @@ export function OwnerAddressEditor({
   const [descBusy, setDescBusy] = useState(false);
   const [descSaved, setDescSaved] = useState(false);
   const [descError, setDescError] = useState<string | null>(null);
+
+  // --- Характеристики помещения ---
+  // Применяются сразу по клику, без кнопки «Сохранить»: галочка — это одно
+  // решение, и промежуточное состояние «отметил, но не сохранил» здесь только
+  // мешает. При ошибке откатываем к тому, что было.
+  const [amenities, setAmenities] = useState<AddressAmenity[]>(
+    () => knownAmenities(initialAmenities)
+  );
+  const [amenitiesBusy, setAmenitiesBusy] = useState<AddressAmenity | null>(null);
+  const [amenitiesError, setAmenitiesError] = useState<string | null>(null);
+
+  async function toggleAmenity(key: AddressAmenity) {
+    const next = amenities.includes(key)
+      ? amenities.filter((a) => a !== key)
+      : [...amenities, key];
+    const previous = amenities;
+    setAmenities(next);
+    setAmenitiesBusy(key);
+    setAmenitiesError(null);
+    try {
+      await api.ownerUpdateAddressAmenities(addressId, next);
+      onSaved?.();
+    } catch (err) {
+      setAmenities(previous);
+      setAmenitiesError((err as Error).message);
+    } finally {
+      setAmenitiesBusy(null);
+    }
+  }
 
   // --- Услуги ---
   const [services, setServices] = useState<AddressServiceAdmin[]>([]);
@@ -167,6 +199,43 @@ export function OwnerAddressEditor({
             </button>
           </div>
         </form>
+
+        <div className="owner-editor__section">
+          <h3 style={{ margin: 0, fontSize: 14 }}>Характеристики помещения</h3>
+          <p className="hint" style={{ margin: "4px 0 10px" }}>
+            Показываются в карточке иконками. Отмечайте только то, что есть на
+            самом деле: сервис эти пункты не проверяет, за них отвечаете вы.
+          </p>
+          <div className="owner-editor__amenities">
+            {AMENITY_ORDER.map((key) => {
+              const meta = AMENITIES[key];
+              const Icon = meta.icon;
+              const on = amenities.includes(key);
+              return (
+                <button
+                  aria-pressed={on}
+                  className={on ? "cab-chip is-active" : "cab-chip"}
+                  disabled={amenitiesBusy !== null}
+                  key={key}
+                  onClick={() => toggleAmenity(key)}
+                  type="button"
+                >
+                  {amenitiesBusy === key ? (
+                    <Loader2 className="spin" size={14} />
+                  ) : on ? (
+                    <Check size={14} />
+                  ) : (
+                    <Icon size={14} />
+                  )}
+                  {meta.label}
+                </button>
+              );
+            })}
+          </div>
+          {amenitiesError && (
+            <div className="ds-input-error-text">{amenitiesError}</div>
+          )}
+        </div>
 
         <div className="owner-editor__section">
           <h3 style={{ margin: 0, fontSize: 14 }}>Доп. услуги и прайс</h3>

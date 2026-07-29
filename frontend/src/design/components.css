@@ -828,6 +828,46 @@
   color: var(--ds-slate-700);
   font-weight: 700;
 }
+/* Характеристики помещения — иконками над описанием. */
+.ds-address-detail__amenities {
+  margin-top: 12px;
+}
+.ds-address-detail__amenities ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ds-address-detail__amenities li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ds-indigo-950);
+}
+.ds-address-detail__amenities li svg {
+  color: var(--ds-indigo-600);
+  flex-shrink: 0;
+}
+.ds-address-detail__amenities p {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--ds-slate-500);
+}
+/* Галочки характеристик в кабинете собственника. */
+.owner-editor__amenities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Блок юридической достоверности. */
 .ds-address-detail__trust {
   border: 1px solid rgba(34, 167, 110, 0.28);

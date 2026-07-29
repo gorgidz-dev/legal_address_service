@@ -488,6 +488,11 @@ export const api = {
       `/owner/addresses/${addressId}/description`,
       { method: "PATCH", body: JSON.stringify({ description }) }
     ),
+  ownerUpdateAddressAmenities: (addressId: string, amenities: string[]) =>
+    request<{ id: string; amenities: string[] }>(
+      `/owner/addresses/${addressId}/amenities`,
+      { method: "PATCH", body: JSON.stringify({ amenities }) }
+    ),
   ownerListAddressServices: (addressId: string) =>
     request<AddressServiceAdmin[]>(`/owner/addresses/${addressId}/services`),
   ownerUpsertAddressService: (

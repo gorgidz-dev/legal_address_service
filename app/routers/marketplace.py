@@ -138,6 +138,7 @@ def public_address_from_row(
         photos=photo_models,
         main_photo_url=main_url,
         services=service_models,
+        amenities=list(getattr(address, "amenities", None) or []),
         rating_avg=rating[0],
         rating_count=rating[1],
     )

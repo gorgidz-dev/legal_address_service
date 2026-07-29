@@ -2720,6 +2720,7 @@ function OwnerDashboardView({
           <OwnerAddressEditor
             addressId={editorAddress.id}
             addressLabel={editorAddress.full_address}
+            initialAmenities={editorAddress.amenities}
             initialDescription={editorAddress.description ?? null}
             onClose={() => setEditorAddress(null)}
             onSaved={() => setRefreshKey((value) => value + 1)}

@@ -4,13 +4,13 @@ from collections import defaultdict
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_owner
 from app.database import get_db
-from app.enums import NotificationAudience, UserRole
+from app.enums import ADDRESS_AMENITY_VALUES, NotificationAudience, UserRole
 from app.models.address import Address
 from app.models.application import Application
 from app.models.application_event import ApplicationEvent
@@ -156,3 +156,40 @@ async def update_address_description(
     await db.commit()
     await db.refresh(address)
     return {"id": str(address.id), "description": address.description}
+
+
+class AddressAmenitiesUpdate(BaseModel):
+    """Характеристики помещения со слов собственника.
+
+    Отдельным эндпоинтом, а не полем описания: описание — свободный текст с
+    ручным сохранением, а галочки должны применяться сразу по клику.
+    """
+
+    amenities: list[str] = Field(default_factory=list)
+
+    @field_validator("amenities")
+    @classmethod
+    def _known(cls, value: list[str]) -> list[str]:
+        unknown = sorted(set(value) - set(ADDRESS_AMENITY_VALUES))
+        if unknown:
+            raise ValueError(f"Неизвестные характеристики: {', '.join(unknown)}")
+        seen: set[str] = set()
+        return [x for x in value if not (x in seen or seen.add(x))]
+
+
+@router.patch("/addresses/{address_id}/amenities")
+async def update_address_amenities(
+    address_id: UUID,
+    payload: AddressAmenitiesUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> dict:
+    address = await db.get(Address, address_id)
+    if address is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес не найден")
+    if address.provider_id != user.provider_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Адрес не принадлежит вашей организации")
+    address.amenities = list(payload.amenities)
+    await db.commit()
+    await db.refresh(address)
+    return {"id": str(address.id), "amenities": list(address.amenities or [])}

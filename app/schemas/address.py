@@ -6,8 +6,9 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.enums import ADDRESS_AMENITY_VALUES
 from app.validators import CadastralNumber
 
 
@@ -36,6 +37,25 @@ class AddressBase(BaseModel):
     fns_city: Optional[str] = Field(default=None, examples=["Москве"])
 
     notes: Optional[str] = None
+
+    amenities: list[str] = Field(
+        default_factory=list,
+        description="Характеристики помещения: metro, parking, security, concierge, elevator",
+    )
+
+    @field_validator("amenities")
+    @classmethod
+    def _known_amenities(cls, value: list[str]) -> list[str]:
+        """Только значения из справочника и без повторов.
+
+        Порядок сохраняем — собственник отмечает то, что считает важным, и в
+        карточке иконки идут в этом же порядке.
+        """
+        unknown = sorted(set(value) - set(ADDRESS_AMENITY_VALUES))
+        if unknown:
+            raise ValueError(f"Неизвестные характеристики: {', '.join(unknown)}")
+        seen: set[str] = set()
+        return [x for x in value if not (x in seen or seen.add(x))]
 
 
 class AddressCreate(AddressBase):

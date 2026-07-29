@@ -160,6 +160,26 @@ class AddressServiceKind(str, Enum):
 ADDRESS_SERVICE_KIND_VALUES: tuple[str, ...] = tuple(k.value for k in AddressServiceKind)
 
 
+class AddressAmenity(str, Enum):
+    """Характеристики помещения — отмечает собственник, показываются иконками.
+
+    Это не услуги: за них никто не платит и они не входят в комплект
+    документов. Отдельный список, потому что описание адреса сплошным текстом
+    не читают, а «рядом с метро» и «есть парковка» решают.
+
+    Проверить их сервис не может, поэтому в карточке подписаны как слова
+    собственника, а не как проверенный факт.
+    """
+    METRO = "metro"
+    PARKING = "parking"
+    SECURITY = "security"
+    CONCIERGE = "concierge"
+    ELEVATOR = "elevator"
+
+
+ADDRESS_AMENITY_VALUES: tuple[str, ...] = tuple(a.value for a in AddressAmenity)
+
+
 class PaymentProvider(str, Enum):
     CDEK_PAY = "cdek_pay"
     MANUAL_INVOICE = "manual_invoice"  # юр.лица: счёт от собственника или маркетплейса
