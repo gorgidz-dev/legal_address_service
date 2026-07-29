@@ -1,19 +1,21 @@
 import {
   AlertTriangle,
-  ArrowRight,
   ArrowUp,
   Building2,
   Camera,
   CheckCircle2,
   ChevronRight,
+  FileCheck2,
   FileText,
   KeyRound,
   Loader2,
   Mail,
   MapPin,
   Menu,
+  Repeat2,
   Search,
   Send,
+  ShieldCheck,
   Sparkles,
   X,
 } from "lucide-react";
@@ -482,8 +484,6 @@ export default function PublicCatalog({
       return next;
     });
 
-  // Расширенный поиск — модалка с фильтрами (город + ИФНС).
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   // Мобильное меню (бургер).
   const [menuOpen, setMenuOpen] = useState(false);
   // Согласия на обработку ПДн: без отметки отправка форм заблокирована.
@@ -905,7 +905,6 @@ export default function PublicCatalog({
   // прокрутки, иначе случайное нажатие стёрло бы заполненные поля.
   useModalDismiss(!!detailAddress, closeDetail);
   useModalDismiss(!!selectedAddress, null);
-  useModalDismiss(advancedOpen, () => setAdvancedOpen(false));
   useModalDismiss(ownerOpen, () => setOwnerOpen(false));
   useModalDismiss(chatAuthPrompt, () => {
     setChatAuthPrompt(false);
@@ -1056,14 +1055,6 @@ export default function PublicCatalog({
               {canBootstrap ? "Первый вход" : "Войти"}
             </button>
           )}
-          <button
-            className="ds-btn ds-btn--primary ds-btn--md"
-            type="button"
-            onClick={() => setAdvancedOpen(true)}
-          >
-            Подобрать адрес
-            <ArrowRight size={14} />
-          </button>
         </div>
        </div>
 
@@ -1093,6 +1084,26 @@ export default function PublicCatalog({
           Проверенные собственники, готовый комплект документов с гарантийным письмом и выпиской ЕГРН.
           Подходит и для регистрации новой компании, и для смены адреса действующей.
         </motion.p>
+        {/*
+          Три обещания под заголовком. Каждое опирается на раздел 5 оферты
+          («Возврат») и на то, что договор и гарантийное письмо сервис
+          генерирует сам по своим шаблонам (services/document_generation.py),
+          а не принимает от собственника в свободной форме.
+        */}
+        <motion.ul className="ds-hero__promises" variants={childMotion}>
+          <li>
+            <ShieldCheck aria-hidden="true" size={17} strokeWidth={2} />
+            Возврат средств при отказе налоговой
+          </li>
+          <li>
+            <Repeat2 aria-hidden="true" size={17} strokeWidth={2} />
+            Замена адреса без доплат
+          </li>
+          <li>
+            <FileCheck2 aria-hidden="true" size={17} strokeWidth={2} />
+            Документы соответствуют требованиям ФНС
+          </li>
+        </motion.ul>
         <motion.div className="ds-hero__stats ds-stat-row" variants={childMotion}>
           <div className="ds-stat">
             <div className="ds-stat__num">{catalogTotal || "—"}</div>
@@ -2144,99 +2155,13 @@ export default function PublicCatalog({
         </div>
       )}
 
-      {advancedOpen && (
-        <div className="modal-backdrop" onClick={() => setAdvancedOpen(false)}>
-          <div
-            className="modal-panel public-application-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header>
-              <div>
-                <span className="eyebrow">Подбор адреса</span>
-                <h2>Расширенный поиск</h2>
-              </div>
-              <button className="text-action" onClick={() => setAdvancedOpen(false)} type="button">
-                <X size={16} /> Закрыть
-              </button>
-            </header>
-            <p style={{ fontSize: 13, color: "var(--ds-slate-500)", marginTop: 0 }}>
-              Срок и подключение корреспонденции выбираются прямо в карточке адреса —
-              цена обновится автоматически.
-            </p>
-            <div className="form-grid">
-              <label className="field">
-                <span>Город</span>
-                <input
-                  list="ds-public-cities-modal"
-                  value={filters.city}
-                  onChange={(event) => setFilters({ ...filters, city: event.target.value })}
-                  placeholder="Москва"
-                />
-                <datalist id="ds-public-cities-modal">
-                  {cities.map((city) => (
-                    <option key={city} value={city} />
-                  ))}
-                </datalist>
-              </label>
-              <label className="field">
-                <span>ИФНС</span>
-                <select
-                  value={filters.fnsNumber}
-                  onChange={(event) => setFilters({ ...filters, fnsNumber: event.target.value })}
-                >
-                  <option value="">Все ИФНС</option>
-                  {fnsOptions.length > 0
-                    ? fnsOptions.map((opt) => (
-                        <option key={opt.fns_number} value={opt.fns_number}>
-                          ИФНС № {opt.fns_number} · {opt.count}
-                          {opt.count === 1 ? " адрес" : " адр."}
-                        </option>
-                      ))
-                    : MOSCOW_FNS_NUMBERS.map((num) => (
-                        <option key={num} value={num}>
-                          ИФНС № {num}
-                        </option>
-                      ))}
-                </select>
-              </label>
-              <label className="field" style={{ gridColumn: "1 / -1" }}>
-                <span>Поиск по адресу или номеру ИФНС</span>
-                <input
-                  value={filters.query}
-                  onChange={(event) => setFilters({ ...filters, query: event.target.value })}
-                  placeholder="часть адреса, например «Тверская»"
-                />
-              </label>
-            </div>
-
-            <div
-              className="row-actions"
-              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
-            >
-              {hasActiveFilters && (
-                <button
-                  type="button"
-                  className="ds-btn ds-btn--ghost ds-btn--md"
-                  onClick={resetFilters}
-                >
-                  Сбросить
-                </button>
-              )}
-              <button
-                type="button"
-                className="ds-btn ds-btn--primary ds-btn--md"
-                onClick={() => {
-                  setAdvancedOpen(false);
-                  const grid = document.getElementById("catalog-grid");
-                  grid?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-              >
-                Применить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/*
+        Модалка «Расширенный поиск» удалена вместе с кнопкой «Подобрать
+        адрес» в шапке: она дублировала форму подбора на странице (город,
+        ИФНС, строка поиска), а после возврата формы и гео-каскада стала
+        её усечённой копией. Фильтр filters.city остаётся — он приходит из
+        строки запроса и применяется к выдаче.
+      */}
 
       {ownerOpen && (
         <div className="modal-backdrop" onClick={() => setOwnerOpen(false)}>
