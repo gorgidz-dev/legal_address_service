@@ -21,6 +21,7 @@ import type {
   EmailVerificationResult,
   Invitation,
   InvitationCreateResult,
+  LeaseCalendarItem,
   NotificationInbox,
   AppNotification,
   OwnerDashboard,
@@ -520,6 +521,9 @@ export const api = {
     request<void>(`/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`, {
       method: "DELETE"
     }),
+
+  clientLeaseCalendar: () => request<LeaseCalendarItem[]>("/client/lease-calendar"),
+  ownerLeaseCalendar: () => request<LeaseCalendarItem[]>("/owner/lease-calendar"),
 
   applications: () => request<Application[]>("/applications"),
   createApplication: (payload: unknown) =>

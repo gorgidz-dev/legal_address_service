@@ -637,6 +637,24 @@ export interface NotificationInbox {
   items: AppNotification[];
 }
 
+export type RenewalStatus = "overdue" | "due_soon" | "active";
+
+/** Строка календаря аренды. Одна схема на оба кабинета — см. app/schemas/lease_calendar.py. */
+export interface LeaseCalendarItem {
+  application_id: string;
+  contract_id: string;
+  contract_number: string;
+  address_full: string;
+  room_number: string | null;
+  /** Для клиента — собственник, для собственника — компания клиента. */
+  counterparty: string;
+  start_date: string;
+  end_date: string;
+  days_until_renewal: number;
+  renewal_status: RenewalStatus;
+  price_total: string;
+}
+
 export interface PriceLine {
   kind: string;
   label: string;

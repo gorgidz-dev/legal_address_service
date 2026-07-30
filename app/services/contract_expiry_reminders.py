@@ -82,24 +82,31 @@ async def send_contract_expiry_reminders(
             if milestone in already_sent:
                 continue
             title, message = _milestone_titles(milestone)
-            event = ApplicationEvent(
-                application_id=contract.application_id,
-                kind=ApplicationEventKind.CONTRACT_EXPIRING.value,
-                audience=NotificationAudience.CLIENT.value,
-                title=title,
-                message=(
-                    f"{message}. Номер договора {contract.number}, "
-                    f"дата окончания {contract.end_date.isoformat()}."
-                ),
-                payload={
-                    "milestone_days": milestone,
-                    "contract_id": str(contract.id),
-                    "contract_number": contract.number,
-                    "end_date": contract.end_date.isoformat(),
-                },
-                created_at=datetime.now(timezone.utc),
+            body = (
+                f"{message}. Номер договора {contract.number}, "
+                f"дата окончания {contract.end_date.isoformat()}."
             )
-            db.add(event)
+            payload = {
+                "milestone_days": milestone,
+                "contract_id": str(contract.id),
+                "contract_number": contract.number,
+                "end_date": contract.end_date.isoformat(),
+            }
+            # Собственник получает то же напоминание, что и клиент: продление
+            # касается обоих, а до этой правки о приближающемся конце аренды
+            # знала только одна сторона.
+            for audience in (NotificationAudience.CLIENT, NotificationAudience.OWNER):
+                db.add(
+                    ApplicationEvent(
+                        application_id=contract.application_id,
+                        kind=ApplicationEventKind.CONTRACT_EXPIRING.value,
+                        audience=audience.value,
+                        title=title,
+                        message=body,
+                        payload=payload,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                )
             sent.append(
                 ReminderSent(
                     contract_id=contract.id,

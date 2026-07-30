@@ -868,3 +868,88 @@
   line-height: 1.45;
   color: var(--ds-slate-500);
 }
+
+/* --- Календарь аренды --- */
+
+.cab-lease { display: flex; flex-direction: column; gap: 8px; }
+.cab-lease__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+}
+.cab-lease__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-600);
+  flex-shrink: 0;
+}
+.cab-lease__main { min-width: 0; }
+.cab-lease__address {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ds-indigo-950);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cab-lease__meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ds-slate-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cab-lease__dates {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.cab-lease__period {
+  font-size: 12px;
+  color: var(--ds-slate-500);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cab-lease__badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--ds-radius-pill);
+  background: var(--ds-neutral-bg);
+  color: var(--ds-slate-600);
+  white-space: nowrap;
+}
+.cab-lease__badge--soon { background: var(--ds-warning-bg); color: var(--ds-warning-fg); }
+.cab-lease__badge--overdue { background: var(--ds-danger-bg); color: var(--ds-danger-fg); }
+
+/* На телефоне даты уходят под адрес — в три колонки они не помещаются. */
+@media (max-width: 640px) {
+  .cab-lease__row { grid-template-columns: auto minmax(0, 1fr); }
+  .cab-lease__dates {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  /* Адрес переносим, а не обрезаем: в календаре именно он опознаёт строку,
+     и «г. Москва, ул. Нижняя Сыром…» не отличить от соседней аренды. */
+  .cab-lease__address {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}

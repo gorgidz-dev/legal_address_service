@@ -7,6 +7,7 @@
  */
 import {
   Building2,
+  CalendarClock,
   FileClock,
   FileText,
   FolderOpen,
@@ -44,8 +45,8 @@ export type NavGroup = {
  * константой для типа, — и ничто не мешало им разъехаться: пункт меню вёл бы
  * на раздел, которого компонент не знает, и человек видел бы пустой экран.
  */
-export const CLIENT_SECTION_IDS = ["applications", "chats"] as const;
-export const OWNER_SECTION_IDS = ["applications", "addresses", "chats"] as const;
+export const CLIENT_SECTION_IDS = ["applications", "calendar", "chats"] as const;
+export const OWNER_SECTION_IDS = ["applications", "addresses", "calendar", "chats"] as const;
 
 export type ClientSectionId = (typeof CLIENT_SECTION_IDS)[number];
 export type OwnerSectionId = (typeof OWNER_SECTION_IDS)[number];
@@ -55,7 +56,8 @@ const CLIENT_GROUPS: NavGroup[] = [
     title: "Кабинет",
     items: [
       { id: CLIENT_SECTION_IDS[0], label: "Заявки", icon: FolderOpen },
-      { id: CLIENT_SECTION_IDS[1], label: "Чаты", icon: MessageSquare }
+      { id: CLIENT_SECTION_IDS[1], label: "Календарь", icon: CalendarClock },
+      { id: CLIENT_SECTION_IDS[2], label: "Чаты", icon: MessageSquare }
     ]
   }
 ];
@@ -66,7 +68,8 @@ const OWNER_GROUPS: NavGroup[] = [
     items: [
       { id: OWNER_SECTION_IDS[0], label: "Заявки", icon: FolderOpen },
       { id: OWNER_SECTION_IDS[1], label: "Адреса", icon: Home },
-      { id: OWNER_SECTION_IDS[2], label: "Чаты", icon: MessageSquare }
+      { id: OWNER_SECTION_IDS[2], label: "Календарь", icon: CalendarClock },
+      { id: OWNER_SECTION_IDS[3], label: "Чаты", icon: MessageSquare }
     ]
   }
 ];

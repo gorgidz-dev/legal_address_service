@@ -128,12 +128,24 @@ def test_creates_event_for_each_milestone_match() -> None:
     milestones = sorted(item.milestone_days for item in sent)
     assert milestones == [1, 7, 30]
     events = [item for item in db.added if isinstance(item, ApplicationEvent)]
-    assert len(events) == 3
+    # По событию каждой из сторон на веху: продление касается и клиента, и
+    # собственника, поэтому 3 вехи × 2 аудитории.
+    assert len(events) == 6
     for event in events:
         assert event.kind == ApplicationEventKind.CONTRACT_EXPIRING.value
-        assert event.audience == NotificationAudience.CLIENT.value
         assert event.payload["contract_id"]
         assert event.payload["milestone_days"] in (1, 7, 30)
+    assert {event.audience for event in events} == {
+        NotificationAudience.CLIENT.value,
+        NotificationAudience.OWNER.value,
+    }
+    for milestone in (1, 7, 30):
+        audiences = {
+            event.audience
+            for event in events
+            if event.payload["milestone_days"] == milestone
+        }
+        assert len(audiences) == 2, f"веха {milestone} ушла не обеим сторонам"
 
 
 def test_is_idempotent_for_same_milestone() -> None:

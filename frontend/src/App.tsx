@@ -48,6 +48,7 @@ import {
   DrawerRow,
   DrawerTimeline
 } from "./applications/ApplicationDrawer";
+import { LeaseCalendar } from "./applications/LeaseCalendar";
 import { ApplicationsQueue, type QueueFilter } from "./applications/ApplicationsQueue";
 import { AppShell } from "./shell/AppShell";
 import {
@@ -89,6 +90,7 @@ import type {
   DocumentFileKind,
   Invitation,
   InvitationCreateResult,
+  LeaseCalendarItem,
   NoticePeriod,
   AppNotification,
   NotificationInbox,
@@ -1803,6 +1805,42 @@ const paymentStatusLabels: Record<string, string> = {
   refunded: "возвращён"
 };
 
+/**
+ * Обёртка над календарём: загрузка, ошибка, пустое состояние.
+ *
+ * Общая для обоих кабинетов — данные приходят из разных эндпоинтов, но экран
+ * один, и дублировать вокруг него три состояния незачем.
+ */
+function LeaseCalendarSection({
+  load,
+  counterpartyLabel,
+}: {
+  load: () => Promise<LeaseCalendarItem[]>;
+  counterpartyLabel: string;
+}) {
+  const [items, setItems] = useState<LeaseCalendarItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setError(null);
+    load()
+      .then((rows) => {
+        if (alive) setItems(rows);
+      })
+      .catch((err) => {
+        if (alive) setError((err as Error).message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [load]);
+
+  if (error) return <ListError message={error} />;
+  if (items === null) return <ListLoading rows={3} />;
+  return <LeaseCalendar items={items} counterpartyLabel={counterpartyLabel} />;
+}
+
 type ClientCabinetView = ClientSectionId;
 
 function ClientDashboardView({
@@ -1927,13 +1965,17 @@ function ClientDashboardView({
       user={user}
       section={view}
       onSection={(id) => onView(id as ClientCabinetView)}
-      title={view === "applications" ? "Заявки" : "Чаты"}
+      title={
+        view === "applications" ? "Заявки" : view === "calendar" ? "Календарь" : "Чаты"
+      }
       subtitle={
-        view === "applications" && !loading
-          ? applications.length
+        view === "applications"
+          ? !loading && applications.length
             ? `Всего заявок: ${applications.length}`
             : undefined
-          : "Переписка с собственниками адресов"
+          : view === "calendar"
+            ? "Сроки аренды по действующим договорам"
+            : "Переписка с собственниками адресов"
       }
       counts={{ applications: applications.length }}
       onOpenSite={onOpenCatalog}
@@ -2157,6 +2199,10 @@ function ClientDashboardView({
         />
       ))}
 
+      {view === "calendar" && (
+        <LeaseCalendarSection load={api.clientLeaseCalendar} counterpartyLabel="Собственник" />
+      )}
+
       {view === "chats" && (
         <ChatsListPanel
           currentUser={user}
@@ -2353,7 +2399,15 @@ function OwnerDashboardView({
       user={user}
       section={view}
       onSection={(id) => onView(id as OwnerCabinetView)}
-      title={view === "applications" ? "Заявки" : view === "addresses" ? "Адреса" : "Чаты"}
+      title={
+        view === "applications"
+          ? "Заявки"
+          : view === "addresses"
+            ? "Адреса"
+            : view === "calendar"
+              ? "Календарь"
+              : "Чаты"
+      }
       subtitle={
         view === "applications"
           ? actionableCount
@@ -2363,7 +2417,9 @@ function OwnerDashboardView({
               : undefined
           : view === "addresses"
             ? `Опубликовано: ${publishedCount} из ${addresses.length}`
-            : "Входящие сообщения по вашим адресам"
+            : view === "calendar"
+              ? "Сроки аренды по вашим адресам"
+              : "Входящие сообщения по вашим адресам"
       }
       counts={{ applications: applications.length, addresses: addresses.length }}
       onOpenSite={onOpenCatalog}
@@ -2721,6 +2777,10 @@ function OwnerDashboardView({
 
         </section>
         ))}
+
+        {view === "calendar" && (
+          <LeaseCalendarSection load={api.ownerLeaseCalendar} counterpartyLabel="Клиент" />
+        )}
 
         {view === "chats" && (
           <ChatsListPanel
