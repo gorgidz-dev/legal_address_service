@@ -100,6 +100,8 @@ class ApplicationEventKind(str, Enum):
     DISPUTE_OPENED = "dispute_opened"
     CANCELLED = "cancelled"
     CONTRACT_EXPIRING = "contract_expiring"
+    #: Срок этапа подходит или уже вышел. Внутреннее — клиенту не адресуется.
+    STAGE_DEADLINE = "stage_deadline"
 
 
 class NotificationAudience(str, Enum):
