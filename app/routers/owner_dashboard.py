@@ -20,6 +20,8 @@ from app.schemas.marketplace import ApplicationEventRead
 from app.schemas.owner_dashboard import OwnerAddressRead, OwnerApplicationRead, OwnerDashboardRead
 from app.schemas.lease_calendar import LeaseCalendarItem
 from app.services.lease_calendar import lease_calendar_for_owner
+from app.schemas.owner_stats import OwnerAddressStats
+from app.services.owner_address_stats import address_stats_for_owner
 from app.schemas.provider import ProviderRead
 from app.services.marketplace_status import role_actions_for_status
 
@@ -213,3 +215,23 @@ async def owner_lease_calendar(
             "Собственник не привязан к организации исполнителя",
         )
     return await lease_calendar_for_owner(db=db, provider_id=user.provider_id)
+
+
+@router.get(
+    "/address-stats",
+    response_model=list[OwnerAddressStats],
+    summary="Отдача по адресам: заявки, сделки, выручка",
+)
+async def owner_address_stats(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> list[OwnerAddressStats]:
+    if user.provider_id is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Собственник не привязан к организации исполнителя",
+        )
+    stats = await address_stats_for_owner(db=db, provider_id=user.provider_id)
+    # Сортировка «сверху то, что приносит больше» — она же порядок по умолчанию
+    # в кабинете, отдельного «топа» заводить не нужно.
+    return sorted(stats.values(), key=lambda item: item.revenue, reverse=True)

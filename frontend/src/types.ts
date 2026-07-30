@@ -637,6 +637,15 @@ export interface NotificationInbox {
   items: AppNotification[];
 }
 
+/** Отдача по адресу в кабинете собственника. */
+export interface OwnerAddressStats {
+  address_id: string;
+  applications_total: number;
+  deals_paid: number;
+  revenue: string;
+  last_paid_at: string | null;
+}
+
 export type RenewalStatus = "overdue" | "due_soon" | "active";
 
 /** Строка календаря аренды. Одна схема на оба кабинета — см. app/schemas/lease_calendar.py. */

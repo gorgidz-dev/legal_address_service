@@ -94,6 +94,7 @@ import type {
   NoticePeriod,
   AppNotification,
   NotificationInbox,
+  OwnerAddressStats,
   OwnerApplication,
   OwnerConnectionRequestStatus,
   OwnerDashboard,
@@ -2216,6 +2217,8 @@ function ClientDashboardView({
 }
 
 type OwnerCabinetView = OwnerSectionId;
+type AddressSort = "revenue" | "applications" | "address";
+type AddressFilter = "all" | "published" | "earning";
 
 function OwnerDashboardView({
   user,
@@ -2296,6 +2299,59 @@ function OwnerDashboardView({
     () => applications.find((application) => application.id === selectedId) || applications[0] || null,
     [applications, selectedId]
   );
+  /*
+   * Отдача по адресам грузится отдельным запросом, а не приезжает в дашборде:
+   * это агрегат по платежам, он нужен только на вкладке «Адреса», и тянуть его
+   * при каждом открытии заявок незачем.
+   */
+  const [addressStats, setAddressStats] = useState<OwnerAddressStats[]>([]);
+  const [addressSort, setAddressSort] = useState<AddressSort>("revenue");
+  const [addressFilter, setAddressFilter] = useState<AddressFilter>("all");
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .ownerAddressStats()
+      .then((rows) => {
+        if (alive) setAddressStats(rows);
+      })
+      .catch(() => {
+        // Молча: без цифр список адресов остаётся рабочим, а ошибку по
+        // второстепенному запросу поверх дашборда показывать некуда.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [refreshKey]);
+
+  const statsByAddress = useMemo(
+    () => Object.fromEntries(addressStats.map((item) => [item.address_id, item])),
+    [addressStats]
+  );
+
+  const visibleAddresses = useMemo(() => {
+    const withStats = (id: string) => statsByAddress[id];
+    const filtered = addresses.filter((address) => {
+      if (addressFilter === "published") return address.publication_status === "published";
+      if (addressFilter === "earning") return Number(withStats(address.id)?.revenue || 0) > 0;
+      return true;
+    });
+    const sorted = [...filtered];
+    if (addressSort === "revenue") {
+      sorted.sort(
+        (a, b) => Number(withStats(b.id)?.revenue || 0) - Number(withStats(a.id)?.revenue || 0)
+      );
+    } else if (addressSort === "applications") {
+      sorted.sort(
+        (a, b) =>
+          (withStats(b.id)?.applications_total || 0) - (withStats(a.id)?.applications_total || 0)
+      );
+    } else {
+      sorted.sort((a, b) => a.full_address.localeCompare(b.full_address, "ru"));
+    }
+    return sorted;
+  }, [addresses, statsByAddress, addressSort, addressFilter]);
+
   const publishedCount = addresses.filter((address) => address.publication_status === "published").length;
   const availableCount = addresses.filter((address) => address.is_available).length;
   const actionableCount = applications.filter(
@@ -2495,8 +2551,39 @@ function OwnerDashboardView({
                 <Database size={18} />
                 <strong>Мои адреса</strong>
               </div>
-              {addresses.length ? (
-                addresses.map((address) => (
+
+              {/*
+                Сортировка по выручке стоит первой и включена по умолчанию —
+                это и есть «топ объектов по прибыли»: отдельный экран для него
+                не нужен, достаточно порядка в уже существующем списке.
+              */}
+              <div className="owner-addresses__controls">
+                <label>
+                  <span>Сортировка</span>
+                  <select
+                    onChange={(e) => setAddressSort(e.target.value as AddressSort)}
+                    value={addressSort}
+                  >
+                    <option value="revenue">по выручке</option>
+                    <option value="applications">по числу заявок</option>
+                    <option value="address">по адресу</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Показывать</span>
+                  <select
+                    onChange={(e) => setAddressFilter(e.target.value as AddressFilter)}
+                    value={addressFilter}
+                  >
+                    <option value="all">все</option>
+                    <option value="published">только опубликованные</option>
+                    <option value="earning">только приносящие доход</option>
+                  </select>
+                </label>
+              </div>
+
+              {visibleAddresses.length ? (
+                visibleAddresses.map((address) => (
                   <div className="owner-address-item" key={address.id}>
                     <strong>{address.full_address}</strong>
                     <span>
@@ -2504,6 +2591,14 @@ function OwnerDashboardView({
                       {address.is_available ? "доступен" : "недоступен"}
                     </span>
                     <small>{formatMoney(address.price_11m)} за 11 мес.</small>
+                    {/* Выручка — по подтверждённым платежам, а не по прайсу:
+                        цена в карточке говорит, сколько адрес стоит, а не
+                        сколько он принёс. */}
+                    <small className="owner-address-item__yield">
+                      {statsByAddress[address.id]
+                        ? `${formatMoney(statsByAddress[address.id].revenue)} · сделок ${statsByAddress[address.id].deals_paid} из ${statsByAddress[address.id].applications_total}`
+                        : "заявок пока не было"}
+                    </small>
                     <div className="row-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         className="text-action owner-address-photos-link"

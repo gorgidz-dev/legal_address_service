@@ -23,6 +23,7 @@ import type {
   InvitationCreateResult,
   LeaseCalendarItem,
   NotificationInbox,
+  OwnerAddressStats,
   AppNotification,
   OwnerDashboard,
   PaymentDocument,
@@ -524,6 +525,7 @@ export const api = {
 
   clientLeaseCalendar: () => request<LeaseCalendarItem[]>("/client/lease-calendar"),
   ownerLeaseCalendar: () => request<LeaseCalendarItem[]>("/owner/lease-calendar"),
+  ownerAddressStats: () => request<OwnerAddressStats[]>("/owner/address-stats"),
 
   applications: () => request<Application[]>("/applications"),
   createApplication: (payload: unknown) =>
