@@ -22,3 +22,6 @@ frontend/dist/
 .superpowers/
 .worktrees/
 .claude/
+
+# Граф знаний graphify — рабочий артефакт, пересобирается локально.
+graphify-out/
