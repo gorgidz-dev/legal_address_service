@@ -30,6 +30,7 @@ import { HomeFAQ } from "./sections/HomeFAQ";
 import { HomeForOwners } from "./sections/HomeForOwners";
 import { HomeCases } from "./sections/HomeCases";
 import { HomeSteps } from "./sections/HomeSteps";
+import { HomeAbout } from "./sections/HomeAbout";
 import { LEGAL_TITLES } from "./sections/LegalPage";
 import { StarRating } from "./sections/StarRating";
 import { AddressReviews } from "./sections/AddressReviews";
@@ -121,6 +122,7 @@ const MENU_LINKS: Array<{ href: string; label: string }> = [
   { href: "#catalog", label: "Каталог" },
   { href: "#how", label: "Как это работает" },
   { href: "#owners", label: "Для собственников" },
+  { href: "#about", label: "О нас" },
 ];
 
 const VALID_SORTS: CatalogSort[] = ["default", "price_asc", "price_desc", "newest"];
@@ -1725,6 +1727,7 @@ export default function PublicCatalog({
       <HomeForOwners onCTAClick={() => setOwnerOpen(true)} />
       <HomeCases />
       <HomeFAQ />
+      <HomeAbout onOpenLegal={onOpenLegal} />
 
       <footer className="ds-footer">
         <div className="ds-footer__inner">

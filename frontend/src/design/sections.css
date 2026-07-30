@@ -19,7 +19,8 @@
  */
 .ds-faq,
 .ds-owners,
-.ds-cases {
+.ds-cases,
+.ds-about {
   max-width: var(--ds-prose-max-width);
   margin-left: auto;
   margin-right: auto;
@@ -1445,4 +1446,137 @@ legend.ds-configurator__label {
 }
 .email-verify-banner__error {
   color: var(--ds-danger-fg) !important;
+}
+
+/* =====================================================================
+   О НАС (#about) — описание сервиса + реквизиты оператора
+   ===================================================================== */
+.ds-about {
+  margin: var(--ds-space-20) auto;
+  padding: 0 var(--ds-page-pad-x);
+  /* Якорь из верхнего меню — как у .ds-steps. */
+  scroll-margin-top: var(--ds-space-8);
+}
+.ds-about__head {
+  text-align: center;
+  margin-bottom: var(--ds-space-8);
+}
+.ds-about__eyebrow {
+  display: inline-block;
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-indigo-600);
+  margin-bottom: var(--ds-space-2);
+}
+.ds-about__title {
+  font-size: var(--ds-text-display-md);
+  font-weight: 700;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-tight);
+  margin: 0;
+}
+.ds-about__facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ds-space-4);
+}
+@media (min-width: 700px) {
+  .ds-about__facts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.ds-about__fact {
+  background: #ffffff;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-xl);
+  padding: var(--ds-space-6);
+  box-shadow: var(--ds-shadow-sm);
+}
+.ds-about__fact-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-600);
+  margin-bottom: var(--ds-space-4);
+}
+.ds-about__fact h3 {
+  margin: 0 0 var(--ds-space-2);
+  font-size: var(--ds-text-heading-sm);
+  font-weight: 650;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-snug);
+}
+.ds-about__fact p {
+  margin: 0;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+  line-height: 1.55;
+}
+.ds-about__requisites {
+  margin-top: var(--ds-space-4);
+  padding: var(--ds-space-6);
+  background: var(--ds-indigo-50);
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-xl);
+}
+.ds-about__requisites-title {
+  margin: 0 0 var(--ds-space-4);
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-indigo-600);
+}
+.ds-about__req-list {
+  margin: 0;
+  display: grid;
+  gap: var(--ds-space-3);
+}
+/* Метка над значением: на узком экране двухколоночная пара переносится
+   некрасиво, а строкой читается одинаково на любой ширине. */
+.ds-about__req-list > div {
+  display: grid;
+  gap: 2px;
+}
+.ds-about__req-list dt {
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-slate-500);
+}
+.ds-about__req-list dd {
+  margin: 0;
+  font-size: var(--ds-text-body-md);
+  line-height: 1.5;
+  color: var(--ds-indigo-950);
+}
+.ds-about__req-list dd a {
+  color: var(--ds-indigo-600);
+  text-decoration: none;
+}
+.ds-about__req-list dd a:hover {
+  text-decoration: underline;
+}
+.ds-about__req-note {
+  margin: var(--ds-space-4) 0 0;
+  font-size: var(--ds-text-body-sm);
+  color: var(--ds-slate-500);
+}
+.ds-about__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ds-indigo-600);
+  cursor: pointer;
+  text-decoration: underline;
 }
