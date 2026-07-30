@@ -128,6 +128,7 @@ async def get_owner_dashboard(
                 correspondence_price=address.correspondence_price,
                 available_actions=role_actions_for_status(UserRole.OWNER, application.status),
                 events=events_by_application[application.id],
+                sla_due_at=application.sla_due_at,
                 created_at=application.created_at,
                 updated_at=application.updated_at,
             )

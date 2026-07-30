@@ -67,6 +67,9 @@ class OwnerApplicationRead(BaseModel):
     correspondence_price: Optional[Decimal]
     available_actions: list[str] = Field(default_factory=list)
     events: list[ApplicationEventRead] = Field(default_factory=list)
+    # Свой срок собственник видит — в этом весь смысл: напоминание работает
+    # только если понятно, к какому дню ждут. Клиенту это поле не уходит.
+    sla_due_at: Optional[datetime] = None
 
     created_at: datetime
     updated_at: datetime

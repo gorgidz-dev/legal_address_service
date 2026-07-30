@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, SmallInteger, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    SmallInteger,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -81,6 +90,11 @@ class Application(UUIDPKMixin, TimestampMixin, Base):
 
     status: Mapped[str] = mapped_column(Text, server_default="'draft'", nullable=False)
     expires_at: Mapped[Optional[date]] = mapped_column(Date)
+    # Внутренний срок текущего этапа: к этому моменту должен отработать
+    # собственник или оператор. NULL = в этом статусе ждать нечего (заявка
+    # завершена, отменена или мяч на стороне клиента). Клиенту не отдаётся —
+    # см. services/application_sla.py.
+    sla_due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     parent_application_id: Mapped[Optional[UUID]] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("applications.id"),

@@ -4,11 +4,11 @@
  * Раньше одна и та же сущность выглядела по-разному в четырёх местах —
  * .client-application, .owner-application, .simple-item и строка реестра.
  *
- * Колонки макета воспроизведены, кроме SLA: поля дедлайна нет ни в модели, ни
- * в одной из схем, а считать его на клиенте не из чего — updated_at меняется
- * при любом обновлении строки, а не при смене статуса. Вместо выдуманного
- * «просрочено 6 ч» здесь честное «обновлена». Подсветки просроченных строк по
- * той же причине нет.
+ * Колонка срока появилась вместе с полем applications.sla_due_at (30.07.2026).
+ * До него дедлайна не было ни в модели, ни в схемах, и вместо выдуманного
+ * «просрочено 6 ч» здесь стояло честное «обновлена». Теперь срок настоящий —
+ * но только там, где он есть: у клиента дедлайнов нет по решению владельца,
+ * поэтому колонка переключается пропом `showSla`, а не гадает по данным.
  */
 import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -25,6 +25,8 @@ export type QueueRow = {
   status: string;
   /** ISO-дата последнего изменения. */
   updatedAt: string | null;
+  /** Внутренний срок этапа. null — в этом статусе ждать нечего. */
+  slaDueAt?: string | null;
   amount: string;
 };
 
@@ -45,9 +47,32 @@ function relativeDate(value: string | null): string {
   return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(then);
 }
 
+/**
+ * Срок этапа словами. Возвращает и текст, и признак просрочки — подсветку
+ * строки решает вызывающий, чтобы не дублировать здесь разбор даты.
+ */
+function slaState(value: string | null | undefined): { text: string; overdue: boolean } {
+  if (!value) return { text: "—", overdue: false };
+  const due = new Date(value).getTime();
+  if (Number.isNaN(due)) return { text: "—", overdue: false };
+
+  const msLeft = due - Date.now();
+  const dayMs = 86_400_000;
+  if (msLeft < 0) {
+    const days = Math.floor(-msLeft / dayMs);
+    if (days === 0) return { text: "просрочено сегодня", overdue: true };
+    if (days === 1) return { text: "просрочено на день", overdue: true };
+    return { text: `просрочено на ${days} дн.`, overdue: true };
+  }
+  const days = Math.floor(msLeft / dayMs);
+  if (days === 0) return { text: "сегодня", overdue: false };
+  if (days === 1) return { text: "завтра", overdue: false };
+  return { text: `через ${days} дн.`, overdue: false };
+}
+
 /** Экспорт выборки. Полностью на клиенте — эндпоинта выгрузки нет. */
 function exportCsv(rows: QueueRow[]): void {
-  const header = ["Номер", "Субъект", "Адрес", "Статус", "Обновлена", "Сумма"];
+  const header = ["Номер", "Субъект", "Адрес", "Статус", "Обновлена", "Срок", "Сумма"];
   const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
   const body = rows.map((row) =>
     [
@@ -56,6 +81,7 @@ function exportCsv(rows: QueueRow[]): void {
       row.address,
       statusMeta(row.status).label,
       row.updatedAt ? new Date(row.updatedAt).toLocaleString("ru-RU") : "",
+      row.slaDueAt ? new Date(row.slaDueAt).toLocaleString("ru-RU") : "",
       row.amount,
     ]
       .map(escape)
@@ -79,6 +105,7 @@ export function ApplicationsQueue({
   onSelect,
   filters,
   subjectLabel = "Компания",
+  showSla = false,
   drawer,
 }: {
   rows: QueueRow[];
@@ -87,6 +114,8 @@ export function ApplicationsQueue({
   /** Наборы фильтров различаются по ролям — приходят снаружи. */
   filters: QueueFilter[];
   subjectLabel?: string;
+  /** Показывать колонку срока. У клиента дедлайнов нет — колонка остаётся «Обновлена». */
+  showSla?: boolean;
   drawer: React.ReactNode;
 }) {
   const [filterId, setFilterId] = useState<string>(filters[0]?.id || "all");
@@ -171,7 +200,7 @@ export function ApplicationsQueue({
             <span>{subjectLabel}</span>
             <span>Адрес</span>
             <span>Статус</span>
-            <span>Обновлена</span>
+            <span>{showSla ? "Срок" : "Обновлена"}</span>
             <span style={{ textAlign: "right" }}>Сумма</span>
           </div>
 
@@ -236,7 +265,21 @@ export function ApplicationsQueue({
                 {row.address}
               </span>
               <StatusBadge short status={row.status} />
-              <span className="cab-sla">{relativeDate(row.updatedAt)}</span>
+              {showSla ? (
+                (() => {
+                  const sla = slaState(row.slaDueAt);
+                  return (
+                    <span
+                      className={sla.overdue ? "cab-sla cab-sla--overdue" : "cab-sla"}
+                      title={row.slaDueAt ? new Date(row.slaDueAt).toLocaleString("ru-RU") : undefined}
+                    >
+                      {sla.text}
+                    </span>
+                  );
+                })()
+              ) : (
+                <span className="cab-sla">{relativeDate(row.updatedAt)}</span>
+              )}
               <b className="cab-table__amount">{row.amount}</b>
             </div>
           ))}

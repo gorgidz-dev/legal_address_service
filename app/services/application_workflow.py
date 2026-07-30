@@ -11,6 +11,7 @@ from app.models.application import Application
 from app.models.user import User
 from app.schemas.workflow import ApplicationActionResult
 from app.services.marketplace_status import role_actions_for_status
+from app.services.application_sla import apply_sla
 from app.services.notification_events import create_application_event
 
 
@@ -321,6 +322,9 @@ async def apply_application_action(
 
     previous_status = current_status
     application.status = transition.target_status.value
+    # Срок этапа пересчитывается вместе со статусом: он всегда отсчитывается от
+    # входа в текущий статус, а не от создания заявки.
+    apply_sla(application)
 
     payload = {
         "action": action,

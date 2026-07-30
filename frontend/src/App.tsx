@@ -2466,11 +2466,13 @@ function OwnerDashboardView({
                   address: application.full_address,
                   status: application.status,
                   updatedAt: application.updated_at,
+                  slaDueAt: application.sla_due_at,
                   amount: formatMoney(application.selected_price)
                 }))}
                 selectedId={selectedApplication?.id || null}
                 onSelect={onSelect}
                 subjectLabel="Клиент"
+                showSla
                 filters={OWNER_QUEUE_FILTERS}
                 drawer={
                   selectedApplication ? (

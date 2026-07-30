@@ -100,6 +100,10 @@ class ApplicationRead(BaseModel):
     expires_at: Optional[date] = None
     parent_application_id: Optional[UUID] = None
     available_actions: list[str] = Field(default_factory=list)
+    # Внутренний срок этапа. Есть в операторской и в собственнической схеме,
+    # но НЕ в ClientApplicationRead: решение владельца — клиенту о сроках знать
+    # не нужно, мы сами напомним собственнику.
+    sla_due_at: Optional[datetime] = None
 
     created_at: datetime
     updated_at: datetime

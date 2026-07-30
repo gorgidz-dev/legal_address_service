@@ -236,6 +236,8 @@ export interface Application {
   expires_at: string | null;
   parent_application_id: string | null;
   available_actions: string[];
+  /** Внутренний срок этапа. У ClientApplication этого поля нет намеренно. */
+  sla_due_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -710,6 +712,8 @@ export interface OwnerApplication {
   correspondence_price: string | null;
   available_actions: string[];
   events: ClientApplicationEvent[];
+  /** Внутренний срок этапа. У ClientApplication этого поля нет намеренно. */
+  sla_due_at: string | null;
   created_at: string;
   updated_at: string;
 }

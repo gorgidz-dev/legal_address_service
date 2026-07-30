@@ -26,6 +26,7 @@ from app.schemas.application import (
 )
 from app.services.client_data import client_values_from_dadata
 from app.services.dadata import DaDataError, DaDataNotConfigured, get_dadata_service
+from app.services.application_sla import apply_sla
 from app.services.marketplace_status import role_actions_for_status
 
 router = APIRouter(prefix="/applications", tags=["applications"], dependencies=[Depends(require_staff)])
@@ -246,6 +247,7 @@ async def promote_to_contract(
         status=ApplicationStatus.DRAFT.value,
     )
     parent.status = ApplicationStatus.AWAITING_CONTRACT.value
+    apply_sla(parent)
     db.add(child)
     await db.commit()
     await db.refresh(child)

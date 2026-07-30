@@ -22,6 +22,7 @@ from app.schemas.application_document import (
     ApplicationDocumentUploadResult,
 )
 from app.services.application_workflow import next_actions_for_status, workflow_role_for_user
+from app.services.application_sla import apply_sla
 from app.services.notification_events import create_application_event
 from app.services.storage import create_stored_file_record
 
@@ -149,6 +150,8 @@ async def upload_application_document(
         uploaded_by=getattr(user, "id", None),
     )
     application.status = ApplicationStatus.DOCUMENTS_REVIEW.value
+    # Мяч перешёл к оператору — срок теперь наш, а не собственника.
+    apply_sla(application)
 
     document = application_document_read(file_record)
     payload = {
