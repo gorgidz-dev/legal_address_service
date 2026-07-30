@@ -18,6 +18,8 @@ from app.models.provider import Provider
 from app.models.user import User
 from app.schemas.marketplace import ApplicationEventRead
 from app.schemas.owner_dashboard import OwnerAddressRead, OwnerApplicationRead, OwnerDashboardRead
+from app.schemas.lease_calendar import LeaseCalendarItem
+from app.services.lease_calendar import lease_calendar_for_owner
 from app.schemas.provider import ProviderRead
 from app.services.marketplace_status import role_actions_for_status
 
@@ -194,3 +196,20 @@ async def update_address_amenities(
     await db.commit()
     await db.refresh(address)
     return {"id": str(address.id), "amenities": list(address.amenities or [])}
+
+
+@router.get(
+    "/lease-calendar",
+    response_model=list[LeaseCalendarItem],
+    summary="Календарь аренды собственника",
+)
+async def owner_lease_calendar(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> list[LeaseCalendarItem]:
+    if user.provider_id is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Собственник не привязан к организации исполнителя",
+        )
+    return await lease_calendar_for_owner(db=db, provider_id=user.provider_id)

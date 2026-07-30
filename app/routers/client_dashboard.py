@@ -16,13 +16,14 @@ from app.models.application_event import ApplicationEvent
 from app.models.provider import Provider
 from app.models.user import User
 from app.schemas.client_dashboard import ClientApplicationRead, PriceLineRead
+from app.schemas.lease_calendar import LeaseCalendarItem
+from app.services.lease_calendar import lease_calendar_for_client
 from app.services.application_pricing import build_price_breakdown
 from app.schemas.marketplace import ApplicationEventRead
 
 router = APIRouter(prefix="/client", tags=["client"])
 
 
-@router.get("/applications", response_model=list[ClientApplicationRead])
 def _price_fields(application, address) -> dict:
     """Разбивка стоимости для карточки заявки.
 
@@ -45,6 +46,7 @@ def _price_fields(application, address) -> dict:
     }
 
 
+@router.get("/applications", response_model=list[ClientApplicationRead])
 async def list_client_applications(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_client),
@@ -113,3 +115,15 @@ async def list_client_applications(
         )
         for application, address, provider in rows
     ]
+
+
+@router.get(
+    "/lease-calendar",
+    response_model=list[LeaseCalendarItem],
+    summary="Календарь аренды клиента",
+)
+async def client_lease_calendar(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_client),
+) -> list[LeaseCalendarItem]:
+    return await lease_calendar_for_client(db=db, user_id=user.id)
