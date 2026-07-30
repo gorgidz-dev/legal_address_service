@@ -30,6 +30,7 @@ import { HomeFAQ } from "./sections/HomeFAQ";
 import { HomeForOwners } from "./sections/HomeForOwners";
 import { HomeCases } from "./sections/HomeCases";
 import { HomeSteps } from "./sections/HomeSteps";
+import { LEGAL_TITLES } from "./sections/LegalPage";
 import { StarRating } from "./sections/StarRating";
 import { AddressReviews } from "./sections/AddressReviews";
 import { useModalDismiss } from "./useModalDismiss";
@@ -1728,16 +1729,15 @@ export default function PublicCatalog({
       <footer className="ds-footer">
         <div className="ds-footer__inner">
           <span className="ds-footer__brand">uradres.net</span>
+          {/* Подписи берём из самих документов: раньше они были вписаны
+              руками и разошлись с заголовками — в подвале «Политика обработки
+              персональных данных», на странице «Политика конфиденциальности». */}
           <nav className="ds-footer__links" aria-label="Правовая информация">
-            <button type="button" onClick={() => onOpenLegal("privacy")}>
-              Политика обработки персональных данных
-            </button>
-            <button type="button" onClick={() => onOpenLegal("consent")}>
-              Согласие на обработку данных
-            </button>
-            <button type="button" onClick={() => onOpenLegal("offer")}>
-              Публичная оферта
-            </button>
+            {(["privacy", "consent", "offer"] as const).map((doc) => (
+              <button key={doc} onClick={() => onOpenLegal(doc)} type="button">
+                {LEGAL_TITLES[doc]}
+              </button>
+            ))}
           </nav>
           <p className="ds-footer__note">
             Отправляя формы на сайте, вы соглашаетесь с обработкой персональных данных.
