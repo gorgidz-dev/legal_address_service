@@ -2014,10 +2014,6 @@ function ClientDashboardView({
                     <div className="cab-kv">
                       <DrawerRow label="Тип" value={typeLabels[selectedApplication.type]} />
                       <DrawerRow
-                        label="Стоимость"
-                        value={formatMoney(selectedApplication.selected_price)}
-                      />
-                      <DrawerRow
                         label="Срок"
                         value={
                           selectedApplication.term_months
@@ -2048,6 +2044,35 @@ function ClientDashboardView({
                         <DrawerRow label="Помещение" value={selectedApplication.room_number} />
                       ) : null}
                     </div>
+
+                    {/*
+                      Разбивка вместо одной строки «Стоимость»: раньше клиент
+                      видел число и не знал, входит ли в него почта. Строки и
+                      итог приходят с бэкенда, посчитанные тем же кодом, что и
+                      сумма счёта, — считать их здесь заново значило бы завести
+                      вторую формулу.
+                    */}
+                    {selectedApplication.price_lines.length > 0 ? (
+                      <div className="cab-price">
+                        <span className="cab-price__title">Из чего складывается</span>
+                        <ul className="cab-price__lines">
+                          {selectedApplication.price_lines.map((line) => (
+                            <li key={line.kind}>
+                              <span>{line.label}</span>
+                              <b>{formatMoney(line.amount)}</b>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="cab-price__total">
+                          <span>Итого</span>
+                          <b>{formatMoney(selectedApplication.price_total)}</b>
+                        </div>
+                        <p className="cab-price__note">
+                          Дополнительные услуги адреса в счёт не входят — они подключаются
+                          отдельно после оформления заявки.
+                        </p>
+                      </div>
+                    ) : null}
 
                     {selectedApplication.status === "awaiting_payment" ? (
                       <div className="cab-actions">

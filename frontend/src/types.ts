@@ -637,6 +637,12 @@ export interface NotificationInbox {
   items: AppNotification[];
 }
 
+export interface PriceLine {
+  kind: string;
+  label: string;
+  amount: string;
+}
+
 export interface ClientApplication {
   id: string;
   type: ApplicationType;
@@ -662,6 +668,9 @@ export interface ClientApplication {
   parent_application_id: string | null;
   selected_price: string;
   correspondence_price: string | null;
+  /** Разбивка «за что» и итог. Считаются на бэкенде тем же кодом, что и счёт. */
+  price_lines: PriceLine[];
+  price_total: string;
   events: ClientApplicationEvent[];
   created_at: string;
   updated_at: string;

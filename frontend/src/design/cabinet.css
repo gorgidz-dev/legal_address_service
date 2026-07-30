@@ -810,3 +810,61 @@
  * на главной. Держать их в слое с именем «cabinet» значило бы менять лендинг
  * из файла, куда за этим никто не пойдёт смотреть.
  */
+
+/* --- Разбивка стоимости в карточке заявки --- */
+
+.cab-price {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--ds-indigo-50);
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+}
+.cab-price__title {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-indigo-600);
+  margin-bottom: 10px;
+}
+.cab-price__lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.cab-price__lines li,
+.cab-price__total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--ds-slate-600);
+}
+.cab-price__lines b {
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-indigo-950);
+  white-space: nowrap;
+}
+.cab-price__total {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ds-slate-200);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ds-indigo-950);
+}
+.cab-price__total b {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cab-price__note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ds-slate-500);
+}

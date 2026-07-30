@@ -15,13 +15,36 @@ from app.models.application import Application
 from app.models.application_event import ApplicationEvent
 from app.models.provider import Provider
 from app.models.user import User
-from app.schemas.client_dashboard import ClientApplicationRead
+from app.schemas.client_dashboard import ClientApplicationRead, PriceLineRead
+from app.services.application_pricing import build_price_breakdown
 from app.schemas.marketplace import ApplicationEventRead
 
 router = APIRouter(prefix="/client", tags=["client"])
 
 
 @router.get("/applications", response_model=list[ClientApplicationRead])
+def _price_fields(application, address) -> dict:
+    """Разбивка стоимости для карточки заявки.
+
+    Считается тем же кодом, что и сумма счёта: две копии формулы разошлись бы
+    на сроке или на копейке, и клиент увидел бы в разбивке не то, что в счёте.
+    """
+    breakdown = build_price_breakdown(
+        term_months=application.term_months,
+        price_6m=address.price_6m,
+        price_11m=address.price_11m,
+        correspondence_price=address.correspondence_price,
+        has_correspondence_service=application.has_correspondence_service,
+    )
+    return {
+        "price_lines": [
+            PriceLineRead(kind=line.kind, label=line.label, amount=line.amount)
+            for line in breakdown.lines
+        ],
+        "price_total": breakdown.total,
+    }
+
+
 async def list_client_applications(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_client),
@@ -83,6 +106,7 @@ async def list_client_applications(
             parent_application_id=application.parent_application_id,
             selected_price=address.price_6m if application.term_months == 6 else address.price_11m,
             correspondence_price=address.correspondence_price,
+            **_price_fields(application, address),
             events=events_by_application[application.id],
             created_at=application.created_at,
             updated_at=application.updated_at,

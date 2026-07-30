@@ -34,6 +34,7 @@ from app.enums import (
     UserRole,
 )
 from app.models.address import Address
+from app.services.application_pricing import build_price_breakdown
 from app.models.application import Application
 from app.models.payment import Payment
 from app.models.payment_attachment import PaymentAttachment
@@ -69,20 +70,22 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 async def _compute_amount_kopeks(db: AsyncSession, application: Application) -> int:
-    """Сумма к оплате по заявке: цена за выбранный срок + почта (если включена).
+    """Сумма к оплате по заявке.
 
-    Корреспонденция тарифицируется помесячно и оплачивается на весь срок
-    выбранного договора (6 или 11 мес.) — формула едина с marketplace.py.
+    Сама формула живёт в services/application_pricing: по ней же строится
+    разбивка «за что» в кабинете клиента, и две копии разошлись бы.
     """
     address = await db.get(Address, application.address_id)
     if address is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес заявки не найден")
-    term = application.term_months or 11
-    base: Decimal = address.price_6m if term == 6 else address.price_11m
-    total = base
-    if application.has_correspondence_service and address.correspondence_price is not None:
-        total += address.correspondence_price * term
-    kopeks = int((total * 100).quantize(Decimal("1")))
+    breakdown = build_price_breakdown(
+        term_months=application.term_months,
+        price_6m=address.price_6m,
+        price_11m=address.price_11m,
+        correspondence_price=address.correspondence_price,
+        has_correspondence_service=application.has_correspondence_service,
+    )
+    kopeks = breakdown.to_kopeks()
     if kopeks < 100:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,

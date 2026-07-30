@@ -11,6 +11,14 @@ from app.enums import ApplicationStatus, ApplicationType, NoticePeriod
 from app.schemas.marketplace import ApplicationEventRead
 
 
+class PriceLineRead(BaseModel):
+    """Строка разбивки стоимости: за что и сколько."""
+
+    kind: str
+    label: str
+    amount: Decimal
+
+
 class ClientApplicationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,6 +51,11 @@ class ClientApplicationRead(BaseModel):
 
     selected_price: Decimal
     correspondence_price: Optional[Decimal]
+    # Разбивка «за что» и итог. Считаются тем же кодом, что и сумма счёта
+    # (services/application_pricing), поэтому витрина не может разойтись
+    # с тем, что клиент реально платит.
+    price_lines: list[PriceLineRead] = Field(default_factory=list)
+    price_total: Decimal = Decimal("0")
     events: list[ApplicationEventRead] = Field(default_factory=list)
 
     created_at: datetime

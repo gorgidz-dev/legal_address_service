@@ -151,3 +151,14 @@ async def test_client_applications_include_only_owned_applications_with_public_t
     assert application.full_address == "г. Москва, ул. Тверская, д. 1, помещение 5"
     assert application.selected_price == Decimal("25000.00")
     assert [event.title for event in application.events] == ["Заявка создана"]
+
+    # Разбивка стоимости: почта у этой заявки не подключена, поэтому одна
+    # строка, и она должна совпадать с итогом — иначе клиент увидит в
+    # «за что» не то, что в счёте.
+    assert [line.kind for line in application.price_lines] == ["rent"]
+    assert "11 мес." in application.price_lines[0].label
+    assert application.price_total == application.selected_price
+    assert sum(line.amount for line in application.price_lines) == application.price_total
+
+    # Внутренний срок клиенту не отдаётся.
+    assert not hasattr(application, "sla_due_at")
