@@ -108,7 +108,6 @@ const ADMIN_GROUPS: NavGroup[] = [
     title: "Система",
     items: [
       { id: "registry", label: "Действующие клиенты", icon: FileClock, shortLabel: "Клиенты" },
-      { id: "templates", label: "Шаблоны", icon: Settings },
       { id: "access", label: "Доступ", icon: ShieldCheck }
     ]
   }
@@ -118,7 +117,7 @@ const ADMIN_GROUPS: NavGroup[] = [
 const STAFF_GROUPS: NavGroup[] = ADMIN_GROUPS.map((group) => ({
   ...group,
   items: group.items.filter((item) =>
-    ["applications", "new", "registry", "providers", "addresses", "templates"].includes(item.id)
+    ["applications", "new", "registry", "providers", "addresses"].includes(item.id)
   )
 })).filter((group) => group.items.length > 0);
 

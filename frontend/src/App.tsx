@@ -109,7 +109,6 @@ type View =
   | "new"
   | "providers"
   | "addresses"
-  | "templates"
   | "access"
   | "photos"
   | "provider-requests"
@@ -1617,7 +1616,6 @@ export default function App() {
                 onChanged={() => setRefreshKey((value) => value + 1)}
               />
             )}
-            {view === "templates" && <TemplatesView />}
             {view === "photos" && currentUser.role === "admin" && <AdminPhotoModerationView />}
             {view === "provider-requests" && currentUser.role === "admin" && (
               <ProviderRequestsView />
@@ -4569,16 +4567,6 @@ function AdminAddressServicesView() {
         </div>
       </div>
     </section>
-  );
-}
-
-function TemplatesView() {
-  return (
-    <div className="templates-panel">
-      <Database size={26} strokeWidth={1.7} />
-      <strong>Шаблоны .docx подключены</strong>
-      <span>Активные версии можно добавить следующим шагом: загрузка, тестовый рендер и активация.</span>
-    </div>
   );
 }
 
