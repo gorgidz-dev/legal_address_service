@@ -63,16 +63,27 @@ echo
 echo "=== 4. Задания cron ==="
 # Собираем crontab заново из «своих» строк, чтобы повторный запуск не плодил дубли.
 CRON_TMP=$(mktemp)
-crontab -l 2>/dev/null | grep -v 'backup-db.sh\|healthcheck.sh' > "$CRON_TMP" || true
+crontab -l 2>/dev/null \
+  | grep -v 'backup-db.sh\|healthcheck.sh\|send_stage_deadline_reminders\|send_contract_expiry_reminders' \
+  > "$CRON_TMP" || true
+# Рассылки идут через exec в работающий контейнер, а не через `compose run`:
+# run поднимает новый контейнер на каждый запуск, а это ежедневная задача.
+# Если бэкенд лежит — задание просто не отработает, и это правильно.
 cat >> "$CRON_TMP" <<'CRON'
 # uradres: резервная копия БД каждую ночь в 04:15
 15 4 * * * set -a; . /root/ops.env; set +a; /root/backup-db.sh
 # uradres: проверка живости каждые 5 минут
 */5 * * * * set -a; . /root/ops.env; set +a; /root/healthcheck.sh
+# uradres: напоминания по внутренним срокам этапов — 09:10 МСК (сервер в UTC).
+# Дедлайн ставится на 18:00 МСК, поэтому «сегодня последний день» приходит утром
+# того же дня, а не после его окончания.
+10 6 * * * cd /root/legal_address_service && docker compose --env-file .env.production exec -T backend python -m scripts.send_stage_deadline_reminders >> /var/log/uradres-reminders.log 2>&1
+# uradres: напоминания клиентам об истекающих договорах — 09:20 МСК
+20 6 * * * cd /root/legal_address_service && docker compose --env-file .env.production exec -T backend python -m scripts.send_contract_expiry_reminders >> /var/log/uradres-reminders.log 2>&1
 CRON
 crontab "$CRON_TMP"
 rm -f "$CRON_TMP"
-crontab -l | grep -E 'backup-db|healthcheck'
+crontab -l | grep -E 'backup-db|healthcheck|reminders'
 
 echo
 echo "=== 5. Контрольный прогон бэкапа ==="
