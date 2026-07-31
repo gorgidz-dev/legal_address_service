@@ -1,6 +1,7 @@
 """ORM-модели. Импорт всех моделей здесь нужен Alembic-у для автогенерации."""
 
 from app.models.address import Address
+from app.models.address_document import AddressDocument
 from app.models.address_chat import AddressChat, AddressChatMessage
 from app.models.address_photo import AddressPhoto
 from app.models.address_review import AddressReview
@@ -31,6 +32,7 @@ from app.models.webhook_subscription import WebhookSubscription
 __all__ = [
     "Address",
     "AddressChat",
+    "AddressDocument",
     "AddressChatMessage",
     "AddressPhoto",
     "AddressReview",

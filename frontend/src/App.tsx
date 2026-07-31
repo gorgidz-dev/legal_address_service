@@ -11,6 +11,7 @@ import {
   FileArchive,
   FileCheck2,
   FileText,
+  FolderOpen,
   Home,
   KeyRound,
   Loader2,
@@ -49,6 +50,7 @@ import {
   DrawerTimeline
 } from "./applications/ApplicationDrawer";
 import { LeaseCalendar } from "./applications/LeaseCalendar";
+import { AddressDocumentsPanel } from "./sections/AddressDocumentsPanel";
 import { ApplicationsQueue, type QueueFilter } from "./applications/ApplicationsQueue";
 import { AppShell } from "./shell/AppShell";
 import {
@@ -2305,6 +2307,7 @@ function OwnerDashboardView({
    * при каждом открытии заявок незачем.
    */
   const [addressStats, setAddressStats] = useState<OwnerAddressStats[]>([]);
+  const [docsAddress, setDocsAddress] = useState<OwnerAddress | null>(null);
   const [addressSort, setAddressSort] = useState<AddressSort>("revenue");
   const [addressFilter, setAddressFilter] = useState<AddressFilter>("all");
 
@@ -2612,6 +2615,13 @@ function OwnerDashboardView({
                       </button>
                       <button
                         className="text-action owner-address-photos-link"
+                        onClick={() => setDocsAddress(address)}
+                        type="button"
+                      >
+                        <FolderOpen size={14} /> Документы
+                      </button>
+                      <button
+                        className="text-action owner-address-photos-link"
                         onClick={() => setEditorAddress(address)}
                         type="button"
                       >
@@ -2885,6 +2895,14 @@ function OwnerDashboardView({
             onChatOpened={() => setPendingChatId(null)}
           />
         )}
+
+        {docsAddress ? (
+          <AddressDocumentsPanel
+            addressId={docsAddress.id}
+            addressLabel={docsAddress.full_address}
+            onClose={() => setDocsAddress(null)}
+          />
+        ) : null}
 
         {photoAddressId ? (
           <AddressPhotosModal

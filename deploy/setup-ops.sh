@@ -64,7 +64,7 @@ echo "=== 4. Задания cron ==="
 # Собираем crontab заново из «своих» строк, чтобы повторный запуск не плодил дубли.
 CRON_TMP=$(mktemp)
 crontab -l 2>/dev/null \
-  | grep -v 'backup-db.sh\|healthcheck.sh\|send_stage_deadline_reminders\|send_contract_expiry_reminders' \
+  | grep -v 'backup-db.sh\|healthcheck.sh\|send_stage_deadline_reminders\|send_contract_expiry_reminders\|send_document_expiry_reminders' \
   > "$CRON_TMP" || true
 # Рассылки идут через exec в работающий контейнер, а не через `compose run`:
 # run поднимает новый контейнер на каждый запуск, а это ежедневная задача.
@@ -80,6 +80,8 @@ cat >> "$CRON_TMP" <<'CRON'
 10 6 * * * cd /root/legal_address_service && docker compose --env-file .env.production exec -T backend python -m scripts.send_stage_deadline_reminders >> /var/log/uradres-reminders.log 2>&1
 # uradres: напоминания клиентам об истекающих договорах — 09:20 МСК
 20 6 * * * cd /root/legal_address_service && docker compose --env-file .env.production exec -T backend python -m scripts.send_contract_expiry_reminders >> /var/log/uradres-reminders.log 2>&1
+# uradres: напоминания собственникам об истекающих документах адреса — 09:30 МСК
+30 6 * * * cd /root/legal_address_service && docker compose --env-file .env.production exec -T backend python -m scripts.send_document_expiry_reminders >> /var/log/uradres-reminders.log 2>&1
 CRON
 crontab "$CRON_TMP"
 rm -f "$CRON_TMP"

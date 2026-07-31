@@ -5,6 +5,7 @@ import type {
   ActiveClientRegistryItem,
   AddressChat,
   AddressChatMessage,
+  AddressDocument,
   AddressPhotoAdmin,
   AddressServiceAdmin,
   Application,
@@ -526,6 +527,17 @@ export const api = {
   clientLeaseCalendar: () => request<LeaseCalendarItem[]>("/client/lease-calendar"),
   ownerLeaseCalendar: () => request<LeaseCalendarItem[]>("/owner/lease-calendar"),
   ownerAddressStats: () => request<OwnerAddressStats[]>("/owner/address-stats"),
+  addressDocuments: (addressId: string) =>
+    request<AddressDocument[]>(`/owner/addresses/${addressId}/documents`),
+  uploadAddressDocument: (addressId: string, form: FormData) =>
+    request<AddressDocument>(`/owner/addresses/${addressId}/documents`, {
+      method: "POST",
+      body: form
+    }),
+  deleteAddressDocument: (addressId: string, documentId: string) =>
+    request<void>(`/owner/addresses/${addressId}/documents/${documentId}`, {
+      method: "DELETE"
+    }),
 
   applications: () => request<Application[]>("/applications"),
   createApplication: (payload: unknown) =>

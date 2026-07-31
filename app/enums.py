@@ -41,6 +41,23 @@ class NoticePeriod(str, Enum):
     ONE_MONTH = "1m"
 
 
+class AddressDocumentKind(str, Enum):
+    """Правоустанавливающие документы по адресу."""
+
+    OWNERSHIP_CERTIFICATE = "ownership_certificate"   # свидетельство / выписка о праве
+    LEASE_AGREEMENT = "lease_agreement"               # договор с владельцем здания
+    POWER_OF_ATTORNEY = "power_of_attorney"           # доверенность подписанта
+    OTHER = "other"
+
+
+ADDRESS_DOCUMENT_LABELS: dict[str, str] = {
+    AddressDocumentKind.OWNERSHIP_CERTIFICATE.value: "Документ о праве собственности",
+    AddressDocumentKind.LEASE_AGREEMENT.value: "Договор с владельцем здания",
+    AddressDocumentKind.POWER_OF_ATTORNEY.value: "Доверенность",
+    AddressDocumentKind.OTHER.value: "Иной документ",
+}
+
+
 class UserRole(str, Enum):
     MANAGER = "manager"
     LAWYER = "lawyer"

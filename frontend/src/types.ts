@@ -637,6 +637,32 @@ export interface NotificationInbox {
   items: AppNotification[];
 }
 
+export type AddressDocumentKind =
+  | "ownership_certificate"
+  | "lease_agreement"
+  | "power_of_attorney"
+  | "other";
+
+/** `none` — документ бессрочный, а не «срок неизвестен». */
+export type DocumentExpiryState = "none" | "expired" | "soon" | "valid";
+
+export interface AddressDocument {
+  id: string;
+  address_id: string;
+  kind: AddressDocumentKind;
+  kind_label: string;
+  title: string;
+  original_filename: string;
+  size_bytes: number;
+  download_url: string;
+  issued_on: string | null;
+  expires_at: string | null;
+  expiry_state: DocumentExpiryState;
+  days_until_expiry: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
 /** Отдача по адресу в кабинете собственника. */
 export interface OwnerAddressStats {
   address_id: string;
