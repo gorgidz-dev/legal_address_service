@@ -202,7 +202,28 @@ async def serve_photo_raw(
     return _serve_stored_photo(photo)
 
 
+def photo_cache_control(photo: AddressPhoto) -> str:
+    """Кешировать можно только то, что и так публично.
+
+    Одобренное фото видно всем — его не жалко отдать из промежуточного кеша.
+    Pending и rejected закрыты проверкой прав выше, и `public` на них означал
+    бы, что прокси однажды отдаст неодобренное фото анониму по той же ссылке.
+    """
+    if photo.moderation_status == AddressPhotoModerationStatus.APPROVED.value:
+        return "public, max-age=3600"
+    return "private, no-store"
+
+
 def _serve_stored_photo(photo: AddressPhoto) -> Response:
+    """Отдаёт картинку одинаково, чем бы ни было хранилище.
+
+    Ветки различаются только источником байтов. Раньше они расходились ещё и
+    поведением: локальная отдавала `FileResponse(filename=...)`, а это
+    `Content-Disposition: attachment` — в дев-режиме фото скачивалось вместо
+    того, чтобы показаться на странице. Имя файла сохраняем (пригодится для
+    «сохранить как»), но диспозицию просим inline.
+    """
+    headers = {"Cache-Control": photo_cache_control(photo)}
     storage = get_object_storage()
     if isinstance(storage, LocalObjectStorage):
         try:
@@ -213,12 +234,14 @@ def _serve_stored_photo(photo: AddressPhoto) -> Response:
             local_path,
             media_type=photo.content_type,
             filename=photo.original_filename,
+            content_disposition_type="inline",
+            headers=headers,
         )
     if isinstance(storage, S3ObjectStorage):
         return Response(
             content=storage.read_bytes(photo.storage_key),
             media_type=photo.content_type,
-            headers={"Cache-Control": "public, max-age=3600"},
+            headers=headers,
         )
     raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Неизвестный backend хранилища")
 
