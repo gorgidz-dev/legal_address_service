@@ -53,6 +53,7 @@ import { LeaseCalendar } from "./applications/LeaseCalendar";
 import { AddressDocumentsPanel } from "./sections/AddressDocumentsPanel";
 import { OwnerTasks } from "./sections/OwnerTasks";
 import { AdminOwnerTasks } from "./sections/AdminOwnerTasks";
+import { ProviderRatings } from "./sections/ProviderRatings";
 import { ApplicationsQueue, type QueueFilter } from "./applications/ApplicationsQueue";
 import { AppShell } from "./shell/AppShell";
 import {
@@ -1617,6 +1618,7 @@ export default function App() {
               <>
                 <ProvidersView providers={providers} onChanged={() => setRefreshKey((value) => value + 1)} />
                 <AdminOwnerTasks providers={providers} />
+                <ProviderRatings />
               </>
             )}
             {view === "addresses" && (

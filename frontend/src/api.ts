@@ -34,6 +34,7 @@ import type {
   PublicClientApplicationCreate,
   PublicClientApplicationResult,
   OwnerConnectionRequestStatus,
+  ProviderRating,
   ProviderConnectionRequest,
   ProviderConnectionRequestApprove,
   ProviderConnectionRequestApproveResult,
@@ -535,6 +536,7 @@ export const api = {
   staffOwnerTasks: (providerId?: string) =>
     request<OwnerTask[]>(`/admin/owner-tasks${providerId ? `?provider_id=${providerId}` : ""}`),
   ownerTaskTemplates: () => request<OwnerTaskTemplate[]>("/admin/owner-tasks/templates"),
+  providerRatings: () => request<ProviderRating[]>("/admin/provider-ratings"),
   createOwnerTask: (payload: unknown) =>
     request<OwnerTask>("/admin/owner-tasks", { method: "POST", body: JSON.stringify(payload) }),
   cancelOwnerTask: (taskId: string) =>

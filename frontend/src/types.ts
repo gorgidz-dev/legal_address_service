@@ -637,6 +637,23 @@ export interface NotificationInbox {
   items: AppNotification[];
 }
 
+/** Значение метрики оценки. `score` = null — данных нет, в итог не входит. */
+export interface RatingMetric {
+  value: number | null;
+  score: number | null;
+  sample: number;
+}
+
+/** Внутренняя оценка собственника. Клиенту не показывается. */
+export interface ProviderRating {
+  provider_id: string;
+  provider_name: string;
+  response: RatingMetric;
+  cards: RatingMetric;
+  documents: RatingMetric;
+  score: number | null;
+}
+
 export type OwnerTaskStatus = "open" | "done" | "cancelled";
 
 /** Поручение собственнику от оператора. */
