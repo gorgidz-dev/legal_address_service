@@ -195,6 +195,19 @@ async def main() -> int:
         f"STORAGE_BACKEND={settings.storage_backend}"
     )
 
+    # Уборка в том же event loop, что и проверки: пул соединений привязан к
+    # первому циклу, и отдельный asyncio.run падает «attached to a different
+    # loop» — то есть ровно тогда, когда убирать и надо.
+    try:
+        await run_checks()
+    finally:
+        await cleanup_objects()
+
+    print("\n" + ("ВСЁ ЗЕЛЁНОЕ" if not FAILURES else f"ПРОВАЛЫ: {FAILURES}"))
+    return 0 if not FAILURES else 1
+
+
+async def run_checks() -> None:
     ids = await seed()
     tokens = ids["tokens"]
     csrf = secrets.token_urlsafe(16)
@@ -347,16 +360,8 @@ async def main() -> int:
             f"у собственника непрочитано только сообщение юриста: {rows[0]['unread_count']}",
         )
 
-    print("\n" + ("ВСЁ ЗЕЛЁНОЕ" if not FAILURES else f"ПРОВАЛЫ: {FAILURES}"))
-    return 0 if not FAILURES else 1
-
 
 if __name__ == "__main__":
     # Уборка в finally, а не в конце main: падение на середине прогона не должно
     # оставлять файлы в боевом бакете.
-    code = 1
-    try:
-        code = asyncio.run(main())
-    finally:
-        asyncio.run(cleanup_objects())
-    sys.exit(code if not FAILURES else 1)
+    sys.exit(asyncio.run(main()))
