@@ -88,6 +88,17 @@ router = APIRouter(prefix="/chats", tags=["address-chats"])
 MAX_MESSAGE_LENGTH = 2000
 HISTORY_LIMIT = 50
 
+#: Порядок списка веток: свежие сверху, ни разу не писавшие — в конец.
+#:
+#: Порядок вызовов важен и однажды уже стоил работоспособности раздела:
+#: `desc(col.nullslast())` компилируется в «NULLS LAST DESC», а это синтаксическая
+#: ошибка Postgres — весь список чатов отвечал 500. Правильно наоборот:
+#: сначала направление, потом обработка NULL. Компиляция проверяется тестом.
+CHAT_LIST_ORDER = (
+    AddressChat.last_message_at.desc().nullslast(),
+    AddressChat.created_at.desc(),
+)
+
 
 # ============================== Schemas ==============================
 
@@ -536,7 +547,7 @@ async def list_my_chats(
         .join(User, User.id == AddressChat.client_user_id)
         # selectinload provider — иначе в async-сессии будет MissingGreenlet.
         .options(selectinload(Address.provider))
-        .order_by(desc(AddressChat.last_message_at.nullslast()), desc(AddressChat.created_at))
+        .order_by(*CHAT_LIST_ORDER)
     )
     if user.role == UserRole.CLIENT.value:
         stmt = stmt.where(AddressChat.client_user_id == user.id)
