@@ -79,7 +79,11 @@ from app.services.chat_threads import (
 )
 from app.services.email_outbox import send_email
 from app.services.notification_events import write_user_notification
-from app.services.storage import local_stored_file_path, read_stored_file_async
+from app.services.storage import (
+    attachment_disposition,
+    local_stored_file_path,
+    read_stored_file_async,
+)
 from app.services.web_push import send_push_to_user
 
 logger = logging.getLogger("address_chats")
@@ -750,8 +754,8 @@ async def download_chat_attachment(
             media_type=file_record.content_type,
             headers={
                 **headers,
-                "Content-Disposition": (
-                    f'attachment; filename="{file_record.original_filename}"'
+                "Content-Disposition": attachment_disposition(
+                    file_record.original_filename
                 ),
             },
         )

@@ -56,6 +56,7 @@ from app.services.cdek_pay import (
 )
 from app.services.notification_events import create_application_event
 from app.services.storage import (
+    attachment_disposition,
     create_stored_file_record,
     local_stored_file_path,
     read_stored_file_async,
@@ -611,9 +612,7 @@ async def download_payment_attachment(
             content=await read_stored_file_async(file_record),
             media_type=file_record.content_type,
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="{file_record.original_filename}"'
-                )
+                "Content-Disposition": attachment_disposition(file_record.original_filename)
             },
         )
     except (FileNotFoundError, ValueError) as e:

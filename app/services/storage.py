@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -126,6 +127,24 @@ def get_object_storage() -> LocalObjectStorage | S3ObjectStorage:
     if settings.storage_backend.lower() == "s3":
         return S3ObjectStorage()
     return LocalObjectStorage()
+
+
+def attachment_disposition(original_filename: str) -> str:
+    """Заголовок Content-Disposition, переживающий кириллицу в имени файла.
+
+    HTTP-заголовки кодируются latin-1, поэтому `filename="Расписка.pdf"`
+    роняет ответ на кодировании — и это не теория: на проде так падало
+    скачивание любого файла с русским именем из S3 (локально не падало, там
+    другая ветка: FileResponse у Starlette экранирует имя сам).
+
+    Формат RFC 5987: `filename*=utf-8''<percent-encoded>`. Отдельный
+    ASCII-fallback не добавляем — его понимают ровно те же браузеры, что и
+    `filename*`, а лишний вариант имени только путает.
+    """
+    quoted = quote(original_filename)
+    if quoted == original_filename:
+        return f'attachment; filename="{original_filename}"'
+    return f"attachment; filename*=utf-8''{quoted}"
 
 
 def safe_storage_filename(original_filename: str) -> str:

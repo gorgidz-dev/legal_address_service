@@ -21,7 +21,7 @@ from app.services.application_documents import (
     list_application_documents,
     upload_application_document,
 )
-from app.services.storage import local_stored_file_path, read_stored_file_async
+from app.services.storage import attachment_disposition, local_stored_file_path, read_stored_file_async
 
 router = APIRouter(prefix="/workflow/applications", tags=["application-documents"])
 
@@ -93,7 +93,9 @@ async def download_document(
         return Response(
             content=await read_stored_file_async(file_record),
             media_type=file_record.content_type,
-            headers={"Content-Disposition": f'attachment; filename="{file_record.original_filename}"'},
+            headers={
+                "Content-Disposition": attachment_disposition(file_record.original_filename)
+            },
         )
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e

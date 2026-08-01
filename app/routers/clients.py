@@ -27,6 +27,7 @@ from app.services.dadata import (
     get_dadata_service,
 )
 from app.services.storage import (
+    attachment_disposition,
     create_stored_file_record,
     local_stored_file_path,
     read_stored_file_async,
@@ -226,7 +227,9 @@ async def download_payment_document(
         return Response(
             content=await read_stored_file_async(file_record),
             media_type=file_record.content_type,
-            headers={"Content-Disposition": f'attachment; filename="{file_record.original_filename}"'},
+            headers={
+                "Content-Disposition": attachment_disposition(file_record.original_filename)
+            },
         )
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e

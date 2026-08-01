@@ -26,7 +26,7 @@ from app.services.address_documents import (
     list_address_documents,
     load_owner_address,
 )
-from app.services.storage import local_stored_file_path, read_stored_file_async
+from app.services.storage import attachment_disposition, local_stored_file_path, read_stored_file_async
 
 router = APIRouter(prefix="/owner/addresses", tags=["address-documents"])
 
@@ -157,6 +157,6 @@ async def download_document(
         content=content,
         media_type=file_record.content_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{file_record.original_filename}"'
+            "Content-Disposition": attachment_disposition(file_record.original_filename)
         },
     )
