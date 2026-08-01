@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, MetaData, func
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -22,8 +22,21 @@ class Base(DeclarativeBase):
 
 
 class UUIDPKMixin:
+    """Первичный ключ UUID.
+
+    Значение генерируется с обеих сторон: `default` — питоном при вставке через
+    ORM, `server_default` — базой при вставке сырым SQL. Дублирование не
+    избыточно. Пока ключ держался только на server_default, миграция, забывшая
+    `gen_random_uuid()`, давала таблицу, которая проходила все тесты и падала
+    NotNullViolation на первой же настоящей записи — так случилось с
+    address_documents, owner_tasks и таблицами чата (исправлено миграцией 0033).
+    Питоновский default делает такую ошибку невозможной, а тест
+    tests/test_migrations_uuid_default.py всё равно ловит её в схеме.
+    """
+
     id: Mapped[UUID] = mapped_column(
         PgUUID(as_uuid=True),
+        default=uuid4,
         server_default=func.gen_random_uuid(),
         primary_key=True,
     )
