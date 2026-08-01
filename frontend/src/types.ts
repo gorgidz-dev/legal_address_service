@@ -463,16 +463,33 @@ export interface AddressChat {
   provider_name: string;
   client_user_id: string;
   client_email: string;
+  client_name: string;
   last_message_at: string | null;
   created_at: string;
+  /** Чужих сообщений после последнего прочтения этой ветки. */
+  unread_count: number;
+}
+
+/** Чья реплика: клиент, собственник или площадка. */
+export type ChatAuthorSide = "client" | "owner" | "staff";
+
+export interface ChatAttachment {
+  id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  download_url: string;
 }
 
 export interface AddressChatMessage {
   id: string;
   chat_id: string;
   author_user_id: string;
+  author_side: ChatAuthorSide;
+  author_name: string;
   body: string;
   created_at: string;
+  attachments: ChatAttachment[];
 }
 
 export interface ProviderConnectionRequestCreate {

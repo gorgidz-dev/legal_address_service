@@ -1075,6 +1075,120 @@
   box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.15);
 }
 .ds-chat-panel__compose .ds-btn { height: 36px; }
+.ds-chat-attach {
+  height: 36px;
+  width: 36px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-slate-200);
+  background: #fff;
+  color: var(--ds-slate-500);
+  cursor: pointer;
+  transition: border-color var(--ds-motion-fast) var(--ds-ease-snappy),
+    color var(--ds-motion-fast) var(--ds-ease-snappy);
+}
+.ds-chat-attach:hover {
+  border-color: var(--ds-indigo-500);
+  color: var(--ds-indigo-500);
+}
+
+/* --- сторона автора: клиент / собственник / площадка --- */
+.ds-chat-side {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  vertical-align: 1px;
+}
+.ds-chat-side--client { background: var(--ds-slate-100); color: var(--ds-slate-600); }
+.ds-chat-side--owner { background: #e0f2fe; color: #0369a1; }
+/* Площадка выделена сильнее остальных: в ветке на троих важно с одного
+   взгляда отличить ответ сервиса от ответа собственника. */
+.ds-chat-side--staff { background: #ede9fe; color: #6d28d9; }
+
+/* --- вложения в сообщении --- */
+.ds-chat-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.ds-chat-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--ds-radius-sm);
+  border: 1px solid var(--ds-border-soft);
+  background: var(--ds-slate-50);
+  color: var(--ds-indigo-950);
+  font-size: 12px;
+  text-decoration: none;
+  min-width: 0;
+}
+.ds-chat-file:hover { border-color: var(--ds-indigo-300); }
+.ds-chat-file__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-chat-file__size {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 11px;
+  color: var(--ds-slate-500);
+  flex-shrink: 0;
+}
+/* В своём (тёмном) пузыре плашка файла должна оставаться читаемой. */
+.ds-chat-msg--own .ds-chat-file {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.ds-chat-msg--own .ds-chat-file__size { color: rgba(255, 255, 255, 0.75); }
+
+/* --- выбранные, но ещё не отправленные файлы --- */
+.ds-chat-drafts {
+  list-style: none;
+  margin: 0;
+  padding: 8px 18px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ds-chat-draft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 8px;
+  border-radius: 999px;
+  background: var(--ds-indigo-50);
+  border: 1px solid var(--ds-indigo-200);
+  font-size: 11.5px;
+  max-width: 100%;
+}
+.ds-chat-draft__name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-chat-draft__size { color: var(--ds-slate-500); }
+.ds-chat-draft__drop {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: var(--ds-slate-500);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+}
+.ds-chat-draft__drop:hover { color: var(--ds-danger-fg); }
 
 /* ===================== Link ===================== */
 .ds-lnk {

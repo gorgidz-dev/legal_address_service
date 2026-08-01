@@ -3,7 +3,12 @@
 from app.models.address import Address
 from app.models.address_document import AddressDocument
 from app.models.owner_task import OwnerTask
-from app.models.address_chat import AddressChat, AddressChatMessage
+from app.models.address_chat import (
+    AddressChat,
+    AddressChatMessage,
+    ChatMessageAttachment,
+    ChatRead,
+)
 from app.models.address_photo import AddressPhoto
 from app.models.address_review import AddressReview
 from app.models.address_service import AddressService
@@ -43,6 +48,8 @@ __all__ = [
     "ApplicationEvent",
     "AuthAttempt",
     "Base",
+    "ChatMessageAttachment",
+    "ChatRead",
     "Client",
     "Contract",
     "EgrnExtract",
