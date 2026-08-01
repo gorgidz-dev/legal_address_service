@@ -2,6 +2,7 @@
 
 from app.models.address import Address
 from app.models.address_document import AddressDocument
+from app.models.owner_task import OwnerTask
 from app.models.address_chat import AddressChat, AddressChatMessage
 from app.models.address_photo import AddressPhoto
 from app.models.address_review import AddressReview
@@ -33,6 +34,7 @@ __all__ = [
     "Address",
     "AddressChat",
     "AddressDocument",
+    "OwnerTask",
     "AddressChatMessage",
     "AddressPhoto",
     "AddressReview",

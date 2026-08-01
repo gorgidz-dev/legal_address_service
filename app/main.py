@@ -25,6 +25,7 @@ from app.models.user_session import UserSession
 from app.routers import (
     address_chats,
     address_documents,
+    owner_tasks,
     address_moderation,
     address_photos,
     address_reviews,
@@ -276,6 +277,8 @@ api_v1.include_router(address_services.owner_router)
 api_v1.include_router(address_reviews.router)
 api_v1.include_router(address_reviews.admin_router)
 api_v1.include_router(address_documents.router)
+api_v1.include_router(owner_tasks.owner_router)
+api_v1.include_router(owner_tasks.staff_router)
 api_v1.include_router(address_chats.router)
 # WebSocket-роут отдельно — middleware пропускает по public-path рулу ниже.
 api_v1.include_router(address_chats.ws_router)

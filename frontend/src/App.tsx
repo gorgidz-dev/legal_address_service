@@ -51,6 +51,8 @@ import {
 } from "./applications/ApplicationDrawer";
 import { LeaseCalendar } from "./applications/LeaseCalendar";
 import { AddressDocumentsPanel } from "./sections/AddressDocumentsPanel";
+import { OwnerTasks } from "./sections/OwnerTasks";
+import { AdminOwnerTasks } from "./sections/AdminOwnerTasks";
 import { ApplicationsQueue, type QueueFilter } from "./applications/ApplicationsQueue";
 import { AppShell } from "./shell/AppShell";
 import {
@@ -1612,7 +1614,10 @@ export default function App() {
               />
             )}
             {view === "providers" && (
-              <ProvidersView providers={providers} onChanged={() => setRefreshKey((value) => value + 1)} />
+              <>
+                <ProvidersView providers={providers} onChanged={() => setRefreshKey((value) => value + 1)} />
+                <AdminOwnerTasks providers={providers} />
+              </>
             )}
             {view === "addresses" && (
               <AddressesView
@@ -2463,9 +2468,11 @@ function OwnerDashboardView({
           ? "Заявки"
           : view === "addresses"
             ? "Адреса"
-            : view === "calendar"
-              ? "Календарь"
-              : "Чаты"
+            : view === "tasks"
+              ? "Задачи"
+              : view === "calendar"
+                ? "Календарь"
+                : "Чаты"
       }
       subtitle={
         view === "applications"
@@ -2476,9 +2483,11 @@ function OwnerDashboardView({
               : undefined
           : view === "addresses"
             ? `Опубликовано: ${publishedCount} из ${addresses.length}`
-            : view === "calendar"
-              ? "Сроки аренды по вашим адресам"
-              : "Входящие сообщения по вашим адресам"
+            : view === "tasks"
+              ? "Поручения от площадки"
+              : view === "calendar"
+                ? "Сроки аренды по вашим адресам"
+                : "Входящие сообщения по вашим адресам"
       }
       counts={{ applications: applications.length, addresses: addresses.length }}
       onOpenSite={onOpenCatalog}
@@ -2882,6 +2891,10 @@ function OwnerDashboardView({
 
         </section>
         ))}
+
+        {view === "tasks" && (
+          <OwnerTasks onChanged={() => setRefreshKey((value) => value + 1)} />
+        )}
 
         {view === "calendar" && (
           <LeaseCalendarSection load={api.ownerLeaseCalendar} counterpartyLabel="Клиент" />

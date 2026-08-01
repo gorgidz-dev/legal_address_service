@@ -25,6 +25,10 @@ EXPECTED = {
     ("GET", "/api/v1/applications"): "list_applications",
     ("POST", "/api/v1/applications"): "create_application",
     ("GET", "/api/v1/registry/active-clients"): "active_clients_registry",
+    ("GET", "/api/v1/owner/tasks"): "my_tasks",
+    ("POST", "/api/v1/admin/owner-tasks"): "create",
+    ("GET", "/api/v1/owner/address-stats"): "owner_address_stats",
+    ("GET", "/api/v1/owner/addresses/{address_id}/documents"): "list_documents",
 }
 
 

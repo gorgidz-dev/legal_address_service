@@ -25,6 +25,8 @@ import type {
   LeaseCalendarItem,
   NotificationInbox,
   OwnerAddressStats,
+  OwnerTask,
+  OwnerTaskTemplate,
   AppNotification,
   OwnerDashboard,
   PaymentDocument,
@@ -527,6 +529,16 @@ export const api = {
   clientLeaseCalendar: () => request<LeaseCalendarItem[]>("/client/lease-calendar"),
   ownerLeaseCalendar: () => request<LeaseCalendarItem[]>("/owner/lease-calendar"),
   ownerAddressStats: () => request<OwnerAddressStats[]>("/owner/address-stats"),
+  ownerTasks: () => request<OwnerTask[]>("/owner/tasks"),
+  completeOwnerTask: (taskId: string) =>
+    request<OwnerTask>(`/owner/tasks/${taskId}/complete`, { method: "POST" }),
+  staffOwnerTasks: (providerId?: string) =>
+    request<OwnerTask[]>(`/admin/owner-tasks${providerId ? `?provider_id=${providerId}` : ""}`),
+  ownerTaskTemplates: () => request<OwnerTaskTemplate[]>("/admin/owner-tasks/templates"),
+  createOwnerTask: (payload: unknown) =>
+    request<OwnerTask>("/admin/owner-tasks", { method: "POST", body: JSON.stringify(payload) }),
+  cancelOwnerTask: (taskId: string) =>
+    request<OwnerTask>(`/admin/owner-tasks/${taskId}/cancel`, { method: "POST" }),
   addressDocuments: (addressId: string) =>
     request<AddressDocument[]>(`/owner/addresses/${addressId}/documents`),
   uploadAddressDocument: (addressId: string, form: FormData) =>

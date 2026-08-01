@@ -637,6 +637,29 @@ export interface NotificationInbox {
   items: AppNotification[];
 }
 
+export type OwnerTaskStatus = "open" | "done" | "cancelled";
+
+/** Поручение собственнику от оператора. */
+export interface OwnerTask {
+  id: string;
+  provider_id: string;
+  address_id: string | null;
+  address_label: string | null;
+  title: string;
+  description: string | null;
+  status: OwnerTaskStatus;
+  due_on: string | null;
+  /** Отрицательное — срок вышел. null у закрытых и бессрочных. */
+  days_until_due: number | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface OwnerTaskTemplate {
+  title: string;
+  description: string;
+}
+
 export type AddressDocumentKind =
   | "ownership_certificate"
   | "lease_agreement"
