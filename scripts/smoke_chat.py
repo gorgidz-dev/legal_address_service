@@ -11,13 +11,17 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import secrets
 import sys
 from datetime import timedelta
 from decimal import Decimal
-from uuid import uuid4
+from pathlib import Path
+from urllib.parse import unquote
+from uuid import UUID, uuid4
 
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from app.auth import utcnow
 from app.config import settings
@@ -25,19 +29,72 @@ from app.database import AsyncSessionLocal
 from app.enums import AddressPublicationStatus, UserRole
 from app.main import app
 from app.models.address import Address
+from app.models.address_chat import ChatMessageAttachment
 from app.models.provider import Provider
+from app.models.stored_file import StoredFile
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.services.auth_security import hash_token
 from app.services.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
+from app.services.storage import get_object_storage
 
 FAILURES: list[str] = []
+
+#: (backend, key) всего, что скрипт положил в объектное хранилище. При S3 это
+#: боевой бакет — оставлять там мусор нельзя, поэтому в конце всё удаляется.
+created_keys: list[tuple[str, str]] = []
 
 
 def check(condition: bool, label: str) -> None:
     print(f"  {'OK  ' if condition else 'FAIL'} {label}")
     if not condition:
         FAILURES.append(label)
+
+
+def filename_from_disposition(header: str) -> str | None:
+    """Имя файла из Content-Disposition — так же, как его читает браузер."""
+    match = re.search(r"filename\*=utf-8''([^;]+)", header, re.IGNORECASE)
+    if match:
+        return unquote(match.group(1))
+    match = re.search(r'filename="?([^";]+)"?', header, re.IGNORECASE)
+    return match.group(1) if match else None
+
+
+async def _stored_file_of(attachment_id: str) -> StoredFile | None:
+    async with AsyncSessionLocal() as db:
+        return (
+            await db.execute(
+                select(StoredFile)
+                .join(
+                    ChatMessageAttachment,
+                    ChatMessageAttachment.file_id == StoredFile.id,
+                )
+                .where(ChatMessageAttachment.id == UUID(attachment_id))
+            )
+        ).scalar_one_or_none()
+
+
+def cleanup_objects() -> None:
+    """Удаляет из хранилища всё, что положил этот прогон.
+
+    База одноразовая и уедет вместе с DROP DATABASE, а объекты — нет: при
+    STORAGE_BACKEND=s3 они лежат в том же бакете, что и боевые файлы.
+    """
+    if not created_keys:
+        return
+    print("\n== уборка ==")
+    storage = get_object_storage()
+    for backend, key in created_keys:
+        try:
+            if backend == "s3":
+                storage.client.delete_object(Bucket=storage.bucket, Key=key)
+            else:
+                path = Path(storage.root) / key
+                path.unlink(missing_ok=True)
+            print(f"  удалён {backend}: {key}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  НЕ УДАЛЁН {backend}: {key} — {e}")
+            FAILURES.append(f"объект остался в хранилище: {key}")
 
 
 async def seed() -> dict:
@@ -119,6 +176,11 @@ async def main() -> int:
         print("Отказ: скрипт пишет данные и запускается только на базе chat_smoke.")
         return 2
 
+    print(
+        f"окружение: APP_ENV={settings.app_env} "
+        f"STORAGE_BACKEND={settings.storage_backend}"
+    )
+
     ids = await seed()
     tokens = ids["tokens"]
     csrf = secrets.token_urlsafe(16)
@@ -150,17 +212,30 @@ async def main() -> int:
         print("\n== вложение от собственника ==")
         login_as("owner")
         pdf = b"%PDF-1.4 smoke test payload"
+        # Имя нарочно тяжёлое: кириллица, «ё», пробелы, № и скобки. Именно на
+        # таком имени падала отдача файла из S3 — заголовок не кодировался в
+        # latin-1. ASCII-имя этот класс ошибок не ловит.
+        filename = "Договор аренды № 12 (приёмка).pdf"
         r = await http.post(
             f"/api/v1/chats/{chat_id}/messages/upload",
             data={"body": "Договор во вложении"},
-            files={"files": ("Договор.pdf", pdf, "application/pdf")},
+            files={"files": (filename, pdf, "application/pdf")},
         )
         check(r.status_code == 200, f"собственник приложил файл ({r.status_code})")
         message = r.json()
         check(len(message.get("attachments", [])) == 1, "вложение вернулось в ответе")
         attachment = message["attachments"][0]
-        check(attachment["original_filename"] == "Договор.pdf", "имя файла сохранено")
+        check(attachment["original_filename"] == filename, "имя файла сохранено без потерь")
         check(attachment["size_bytes"] == len(pdf), "размер совпал")
+
+        stored = await _stored_file_of(attachment["id"])
+        check(
+            stored is not None and stored.storage_backend == settings.storage_backend,
+            f"файл лёг в хранилище {settings.storage_backend}: "
+            f"{stored.storage_backend if stored else 'записи нет'}",
+        )
+        if stored is not None:
+            created_keys.append((stored.storage_backend, stored.storage_key))
 
         print("\n== файл без текста ==")
         r = await http.post(
@@ -218,9 +293,15 @@ async def main() -> int:
             r.headers.get("x-content-type-options") == "nosniff",
             "заголовок nosniff на месте",
         )
+        disposition = r.headers.get("content-disposition") or ""
+        check("attachment" in disposition, "файл отдаётся вложением, а не страницей")
         check(
-            "attachment" in (r.headers.get("content-disposition") or ""),
-            "файл отдаётся вложением, а не страницей",
+            filename_from_disposition(disposition) == filename,
+            f"имя в заголовке доехало целиком: {filename_from_disposition(disposition)!r}",
+        )
+        check(
+            disposition.encode("latin-1", errors="strict") is not None,
+            "заголовок кодируется в latin-1 (иначе ответ вообще не уйдёт)",
         )
 
         print("\n== чужой ==")
@@ -259,4 +340,10 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    # Уборка в finally, а не в конце main: падение на середине прогона не должно
+    # оставлять файлы в боевом бакете.
+    try:
+        code = asyncio.run(main())
+    finally:
+        cleanup_objects()
+    sys.exit(code)
