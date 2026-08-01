@@ -217,7 +217,9 @@ export function AddressChatPanel({ chat, currentUser, onClose, onRead }: Props) 
               <div key={m.id} className={`ds-chat-msg${own ? " ds-chat-msg--own" : ""}`}>
                 <div className="ds-chat-msg__author">
                   {own ? "Вы" : m.author_name}
-                  {!own && (
+                  {/* Плашку прячем, когда она повторяет подпись: у площадки имя
+                      и сторона совпадают, и выходило «Площадка Площадка». */}
+                  {!own && m.author_name !== SIDE_LABELS[m.author_side] && (
                     <span className={`ds-chat-side ds-chat-side--${m.author_side}`}>
                       {SIDE_LABELS[m.author_side]}
                     </span>
