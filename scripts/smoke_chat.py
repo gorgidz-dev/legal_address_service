@@ -40,9 +40,6 @@ from app.services.storage import get_object_storage
 
 FAILURES: list[str] = []
 
-#: (backend, key) всего, что скрипт положил в объектное хранилище. При S3 это
-#: боевой бакет — оставлять там мусор нельзя, поэтому в конце всё удаляется.
-created_keys: list[tuple[str, str]] = []
 
 
 def check(condition: bool, label: str) -> None:
@@ -74,27 +71,44 @@ async def _stored_file_of(attachment_id: str) -> StoredFile | None:
         ).scalar_one_or_none()
 
 
-def cleanup_objects() -> None:
+async def cleanup_objects() -> None:
     """Удаляет из хранилища всё, что положил этот прогон.
 
-    База одноразовая и уедет вместе с DROP DATABASE, а объекты — нет: при
-    STORAGE_BACKEND=s3 они лежат в том же бакете, что и боевые файлы.
+    Список берём из самой базы, а не из того, что скрипт не забыл записать по
+    дороге: база одноразовая, значит КАЖДАЯ строка stored_files в ней создана
+    этим прогоном. Ручной список уже подводил — «Акт.pdf» из шага «файл без
+    текста» в него не попал и остался в боевом бакете.
+
+    База уедет вместе с DROP DATABASE, а объекты — нет: при STORAGE_BACKEND=s3
+    они лежат в том же бакете, что и боевые файлы.
     """
-    if not created_keys:
+    try:
+        async with AsyncSessionLocal() as db:
+            rows = (
+                await db.execute(
+                    select(StoredFile.storage_backend, StoredFile.storage_key)
+                )
+            ).all()
+    except Exception as e:  # noqa: BLE001
+        print(f"\n== уборка ==\n  не удалось прочитать список файлов: {e}")
+        return
+
+    if not rows:
         return
     print("\n== уборка ==")
     storage = get_object_storage()
-    for backend, key in created_keys:
+    for backend, key in rows:
         try:
             if backend == "s3":
                 storage.client.delete_object(Bucket=storage.bucket, Key=key)
             else:
-                path = Path(storage.root) / key
-                path.unlink(missing_ok=True)
+                (Path(storage.root) / key).unlink(missing_ok=True)
             print(f"  удалён {backend}: {key}")
         except Exception as e:  # noqa: BLE001
             print(f"  НЕ УДАЛЁН {backend}: {key} — {e}")
             FAILURES.append(f"объект остался в хранилище: {key}")
+    if FAILURES:
+        print(f"  ПРОВАЛЫ УБОРКИ: {FAILURES}")
 
 
 async def seed() -> dict:
@@ -234,8 +248,6 @@ async def main() -> int:
             f"файл лёг в хранилище {settings.storage_backend}: "
             f"{stored.storage_backend if stored else 'записи нет'}",
         )
-        if stored is not None:
-            created_keys.append((stored.storage_backend, stored.storage_key))
 
         print("\n== файл без текста ==")
         r = await http.post(
@@ -342,8 +354,9 @@ async def main() -> int:
 if __name__ == "__main__":
     # Уборка в finally, а не в конце main: падение на середине прогона не должно
     # оставлять файлы в боевом бакете.
+    code = 1
     try:
         code = asyncio.run(main())
     finally:
-        cleanup_objects()
-    sys.exit(code)
+        asyncio.run(cleanup_objects())
+    sys.exit(code if not FAILURES else 1)
