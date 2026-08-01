@@ -245,7 +245,14 @@ async def main() -> int:
 
         login_as("owner")
         rows = (await http.get("/api/v1/chats")).json()
-        check(rows[0]["unread_count"] == 2, f"у собственника своё непрочитанное: {rows[0]['unread_count']}")
+        # Отправка помечает ветку прочитанной, поэтому вопрос клиента для
+        # собственника уже не новый — новым осталось только сообщение юриста,
+        # пришедшее позже. Счётчик у каждого свой, и это ровно то поведение,
+        # которого ждёшь от переписки на троих.
+        check(
+            rows[0]["unread_count"] == 1,
+            f"у собственника непрочитано только сообщение юриста: {rows[0]['unread_count']}",
+        )
 
     print("\n" + ("ВСЁ ЗЕЛЁНОЕ" if not FAILURES else f"ПРОВАЛЫ: {FAILURES}"))
     return 0 if not FAILURES else 1
