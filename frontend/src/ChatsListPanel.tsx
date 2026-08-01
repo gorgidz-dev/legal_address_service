@@ -1,10 +1,13 @@
 /**
- * Список чатов текущего пользователя.
+ * Список веток переписки текущего пользователя.
  *
  * Backend `/api/v1/chats` сам решает что показывать:
- * - клиент видит свои чаты;
- * - собственник — все чаты по адресам своей организации;
- * - админ — все чаты.
+ * - клиент видит свои ветки;
+ * - собственник — по адресам своей организации;
+ * - площадка (админ, менеджер, юрист) — все.
+ *
+ * Счётчик непрочитанного приходит с сервера и гаснет, когда ветку открыли и
+ * история действительно показалась, — см. onRead в AddressChatPanel.
  *
  * При клике на строку открывается `AddressChatPanel` в модалке поверх.
  */
@@ -101,11 +104,22 @@ export function ChatsListPanel({
     onChatOpened?.();
   }, [autoOpenChatId, items, loading, onChatOpened]);
 
+  function clearUnread(chatId: string) {
+    setItems((prev) =>
+      prev.map((chat) => (chat.id === chatId ? { ...chat, unread_count: 0 } : chat))
+    );
+  }
+
+  const totalUnread = items.reduce((sum, chat) => sum + (chat.unread_count || 0), 0);
+
   return (
     <section className="ds-chatlist">
       <header className="ds-chatlist__head">
         <span className="ds-chatlist__count">
           {loading ? "…" : `${items.length} ${items.length === 1 ? "чат" : "чатов"}`}
+          {totalUnread > 0 ? (
+            <span className="ds-chatlist__unread-total">{totalUnread} новых</span>
+          ) : null}
         </span>
         <button
           type="button"
@@ -128,10 +142,10 @@ export function ChatsListPanel({
           <MessageSquare size={20} strokeWidth={1.6} />
           <span>
             {currentUser.role === "client"
-              ? "Пока нет переписок с собственниками."
+              ? "Пока нет переписок по адресам."
               : currentUser.role === "owner"
                 ? "Пока нет входящих сообщений."
-                : "Чаты ещё не созданы."}
+                : "Переписок ещё нет."}
           </span>
         </div>
       ) : (
@@ -140,7 +154,7 @@ export function ChatsListPanel({
             <li key={chat.id}>
               <button
                 type="button"
-                className="ds-chatlist__row"
+                className={`ds-chatlist__row${chat.unread_count > 0 ? " ds-chatlist__row--unread" : ""}`}
                 onClick={() => setSelected(chat)}
               >
                 <div className="ds-chatlist__row-main">
@@ -148,10 +162,13 @@ export function ChatsListPanel({
                   <span>
                     {currentUser.role === "client"
                       ? chat.provider_name
-                      : chat.client_email}
+                      : chat.client_name || chat.client_email}
                   </span>
                 </div>
                 <div className="ds-chatlist__row-meta">
+                  {chat.unread_count > 0 ? (
+                    <span className="ds-chatlist__unread">{chat.unread_count}</span>
+                  ) : null}
                   {formatTime(chat.last_message_at || chat.created_at)}
                 </div>
               </button>
@@ -171,6 +188,7 @@ export function ChatsListPanel({
               chat={selected}
               currentUser={currentUser}
               onClose={() => setSelected(null)}
+              onRead={clearUnread}
             />
           </div>
         </div>

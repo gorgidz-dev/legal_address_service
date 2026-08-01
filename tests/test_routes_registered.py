@@ -30,6 +30,15 @@ EXPECTED = {
     ("GET", "/api/v1/owner/address-stats"): "owner_address_stats",
     ("GET", "/api/v1/owner/addresses/{address_id}/documents"): "list_documents",
     ("GET", "/api/v1/admin/provider-ratings"): "provider_ratings",
+    ("GET", "/api/v1/chats"): "list_my_chats",
+    ("POST", "/api/v1/chats/applications/{application_id}"): "open_chat_for_application",
+    ("POST", "/api/v1/chats/{chat_id}/messages"): "post_chat_message",
+    ("POST", "/api/v1/chats/{chat_id}/messages/upload"): "post_chat_message_with_files",
+    ("POST", "/api/v1/chats/{chat_id}/read"): "mark_chat_read",
+    (
+        "GET",
+        "/api/v1/chats/{chat_id}/attachments/{attachment_id}/download",
+    ): "download_chat_attachment",
 }
 
 

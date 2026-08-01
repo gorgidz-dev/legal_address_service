@@ -475,9 +475,12 @@ export const api = {
       method: "DELETE"
     }),
 
-  // ===== Address chats =====
+  // ===== Переписка по адресу =====
   openChatForAddress: (addressId: string) =>
     request<AddressChat>(`/chats/addresses/${addressId}`, { method: "POST" }),
+  /** Ветка по заявке — доступна всем троим: клиенту, собственнику и площадке. */
+  openChatForApplication: (applicationId: string) =>
+    request<AddressChat>(`/chats/applications/${applicationId}`, { method: "POST" }),
   listMyChats: () => request<AddressChat[]>(`/chats`),
   getChatMessages: (chatId: string) =>
     request<AddressChatMessage[]>(`/chats/${chatId}/messages`),
@@ -486,6 +489,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ body })
     }),
+  postChatMessageWithFiles: (chatId: string, form: FormData) =>
+    request<AddressChatMessage>(`/chats/${chatId}/messages/upload`, {
+      method: "POST",
+      body: form
+    }),
+  markChatRead: (chatId: string) =>
+    request<void>(`/chats/${chatId}/read`, { method: "POST" }),
 
   // ===== Owner address description =====
   ownerUpdateAddressDescription: (addressId: string, description: string | null) =>

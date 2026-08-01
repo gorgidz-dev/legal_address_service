@@ -68,6 +68,7 @@ import { ListEmpty, ListError, ListLoading } from "./ui/ListState";
 import { useModalDismiss } from "./useModalDismiss";
 import { ChatsListPanel } from "./ChatsListPanel";
 import { DownloadLink } from "./DownloadLink";
+import { formatFileSize } from "./fileSize";
 import { OwnerAddressEditor } from "./OwnerAddressEditor";
 import { PushToggle } from "./PushToggle";
 import { AdminReviewModeration } from "./sections/AdminReviewModeration";
@@ -293,12 +294,6 @@ function formatMoney(value: string | number | null | undefined): string {
     currency: "RUB",
     maximumFractionDigits: 0
   }).format(Number(value));
-}
-
-function formatFileSize(value: number): string {
-  if (value < 1024) return `${value} Б`;
-  if (value < 1024 * 1024) return `${Math.round(value / 102.4) / 10} КБ`;
-  return `${Math.round(value / 1024 / 102.4) / 10} МБ`;
 }
 
 function ownerCanUploadDocuments(application: OwnerApplication | null): boolean {
@@ -1956,13 +1951,14 @@ function ClientDashboardView({
     setChatError(null);
   }, [selectedApplication?.id]);
 
-  async function openApplicationChat(addressId: string) {
+  async function openApplicationChat(applicationId: string) {
     setChatBusy(true);
     setChatError(null);
     try {
-      // Чат заводится по паре «адрес × клиент», отдельной привязки к заявке в
-      // модели нет. Для клиента это безопасно: свой адрес — свой чат.
-      setApplicationChat(await api.openChatForAddress(addressId));
+      // Ветка та же, что видят собственник и площадка: сервер находит её по
+      // паре «адрес × клиент заявки». Раньше клиент открывал чат по адресу, а
+      // собственник искал его перебором — и находил не всегда.
+      setApplicationChat(await api.openChatForApplication(applicationId));
     } catch (err) {
       setChatError((err as Error).message);
     } finally {
@@ -2188,16 +2184,17 @@ function ClientDashboardView({
                     ) : (
                       <>
                         <p className="cab-timeline__text">
-                          Переписка с собственником по адресу этой заявки.
+                          Переписка по этой заявке: собственник и площадка в одной
+                          ветке. Сюда же прикладываются документы.
                         </p>
                         <button
                           className="cab-chat-cta"
                           disabled={chatBusy}
-                          onClick={() => openApplicationChat(selectedApplication.address_id)}
+                          onClick={() => openApplicationChat(selectedApplication.id)}
                           type="button"
                         >
                           {chatBusy ? <Loader2 className="spin" size={15} /> : <MessageSquare size={15} />}
-                          Открыть чат с собственником
+                          Открыть переписку по заявке
                         </button>
                       </>
                     )}
@@ -2393,36 +2390,37 @@ function OwnerDashboardView({
   }, [selectedApplication?.id, documentsRefreshKey]);
 
   /**
-   * Чат по адресу заявки. Собственник не может его создать — сервер разрешает
-   * это только клиенту, — поэтому ищем уже существующий среди своих.
+   * Ветка переписки по заявке — ровно та же, что у клиента и у площадки.
    *
-   * Совпадение только по адресу: привязки чата к заявке в модели нет. Если по
-   * одному адресу переписываются несколько клиентов, подходящих чатов будет
-   * больше одного, и открывать первый попавшийся нельзя — это чужая переписка.
-   * В таком случае вкладка остаётся пустой, а разговоры доступны в разделе
-   * «Чаты», где видно, кто собеседник.
+   * Раньше здесь перебирались свои чаты в поисках совпадения по адресу, и если
+   * по одному адресу писали двое клиентов, вкладка молча оставалась пустой:
+   * открыть первый попавшийся значило показать чужую переписку. Теперь ветку
+   * отдаёт сервер по самой заявке — угадывать нечего.
    */
   const [ownerChat, setOwnerChat] = useState<AddressChat | null>(null);
+  const [ownerChatError, setOwnerChatError] = useState<string | null>(null);
 
   useEffect(() => {
-    const addressId = selectedApplication?.address_id;
-    if (!addressId) {
+    const applicationId = selectedApplication?.id;
+    if (!applicationId) {
       setOwnerChat(null);
+      setOwnerChatError(null);
       return;
     }
     let alive = true;
+    setOwnerChatError(null);
     api
-      .listMyChats()
-      .then((chats) => {
+      .openChatForApplication(applicationId)
+      .then((chat) => alive && setOwnerChat(chat))
+      .catch((err: Error) => {
         if (!alive) return;
-        const matching = chats.filter((chat) => chat.address_id === addressId);
-        setOwnerChat(matching.length === 1 ? matching[0] : null);
-      })
-      .catch(() => alive && setOwnerChat(null));
+        setOwnerChat(null);
+        setOwnerChatError(err.message);
+      });
     return () => {
       alive = false;
     };
-  }, [selectedApplication?.address_id]);
+  }, [selectedApplication?.id]);
 
   async function runOwnerAction(action: string) {
     if (!selectedApplication) return;
@@ -2684,9 +2682,7 @@ function OwnerDashboardView({
                       status={selectedApplication.status}
                       docsCount={documents.length || null}
                       chatDisabledReason={
-                        ownerChat
-                          ? null
-                          : "Чат по адресу открывает клиент — здесь появится уже начатая переписка"
+                        ownerChat ? null : ownerChatError || "Переписка загружается…"
                       }
                       main={
                         <>
@@ -2878,8 +2874,8 @@ function OwnerDashboardView({
                             />
                           ) : (
                             <p className="cab-timeline__text">
-                              Переписки по адресу этой заявки пока нет. Создать её может
-                              только клиент — из карточки адреса или из своей заявки.
+                              {ownerChatError ||
+                                "Загружаем переписку по этой заявке…"}
                             </p>
                           )}
                         </div>

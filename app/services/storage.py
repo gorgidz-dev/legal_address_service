@@ -143,12 +143,15 @@ def object_storage_key(
     content_hash: str,
     client_id: UUID | str | None = None,
     application_id: UUID | str | None = None,
+    chat_id: UUID | str | None = None,
 ) -> str:
     parts: list[str] = []
     if client_id is not None:
         parts.extend(["clients", str(client_id)])
     if application_id is not None:
         parts.extend(["applications", str(application_id)])
+    if chat_id is not None:
+        parts.extend(["chats", str(chat_id)])
     if not parts:
         parts.append("unassigned")
     parts.extend([kind, content_hash[:16], safe_storage_filename(original_filename)])
@@ -164,6 +167,7 @@ async def create_stored_file_record(
     content_type: str,
     client_id: UUID | str | None = None,
     application_id: UUID | str | None = None,
+    chat_id: UUID | str | None = None,
     uploaded_by: UUID | str | None = None,
 ) -> StoredFile:
     content_hash = hashlib.sha256(content).hexdigest()
@@ -173,6 +177,7 @@ async def create_stored_file_record(
         content_hash=content_hash,
         client_id=client_id,
         application_id=application_id,
+        chat_id=chat_id,
     )
     stored_object = await asyncio.to_thread(
         get_object_storage().put_bytes,

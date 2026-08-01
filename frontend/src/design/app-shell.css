@@ -633,6 +633,38 @@ h1 {
   color: var(--ds-slate-500);
   white-space: nowrap;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Ветка с непрочитанным читается как невыполненное дело, поэтому выделена
+   рамкой и жирным адресом, а не только счётчиком сбоку. */
+.ds-chatlist__row--unread {
+  background: #fff;
+  border-color: var(--ds-indigo-200);
+}
+.ds-chatlist__row--unread .ds-chatlist__row-main strong { font-weight: 700; }
+.ds-chatlist__unread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ds-indigo-500);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.ds-chatlist__unread-total {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-700, #4338ca);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 /* ===================== Address services admin ===================== */
