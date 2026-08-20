@@ -79,8 +79,12 @@ export function HomeAbout({ onOpenLegal }: { onOpenLegal: (doc: LegalDoc) => voi
               <dd>{OPERATOR.inn}</dd>
             </div>
             <div>
-              <dt>ОГРНИП</dt>
-              <dd>{OPERATOR.ogrnip}</dd>
+              <dt>КПП</dt>
+              <dd>{OPERATOR.kpp}</dd>
+            </div>
+            <div>
+              <dt>ОГРН</dt>
+              <dd>{OPERATOR.ogrn}</dd>
             </div>
             <div>
               <dt>Адрес</dt>
