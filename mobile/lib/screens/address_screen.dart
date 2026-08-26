@@ -105,7 +105,7 @@ class _AddressScreenState extends State<AddressScreen> {
                     ),
                   if (address.roomNumber != null)
                     ToneBadge(
-                      label: 'офис ${address.roomNumber}',
+                      label: address.roomNumber!,
                       tone: StatusTone.neutral,
                     ),
                   if (address.ratingAvg != null)

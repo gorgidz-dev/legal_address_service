@@ -53,16 +53,21 @@ class DsButton extends StatelessWidget {
           BorderSide.none
         ),
     };
-    final child = busy
-        ? SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2, color: fg),
-          )
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+    // mainAxisSize по expanded, а не alignment у Container: Container с
+    // alignment разворачивается на всю доступную высоту, и в bottomNavigationBar
+    // кнопка занимала весь экран.
+    final child = Row(
+      mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: busy
+          ? [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+              ),
+            ]
+          : [
               if (icon != null) ...[
                 Icon(icon, size: 18, color: fg),
                 const SizedBox(width: 8),
@@ -72,7 +77,7 @@ class DsButton extends StatelessWidget {
                 style: DsText.headingSm.copyWith(color: fg),
               ),
             ],
-          );
+    );
     final button = Material(
       color: bg,
       shape: RoundedRectangleBorder(
@@ -85,7 +90,6 @@ class DsButton extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-          alignment: Alignment.center,
           child: child,
         ),
       ),

@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "net.uradres.uradres_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage (Keychain/Keystore для токенов) требует API 37;
+    // flutter.compileSdkVersion пока отдаёт 36, поэтому задаём явно.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -218,7 +218,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
         crossAxisCount: 2,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        childAspectRatio: 3.4,
+        mainAxisExtent: 62,
         mainAxisSpacing: 12,
         crossAxisSpacing: 20,
         children: [
@@ -380,7 +380,9 @@ class _AddressCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   [
-                    if (address.roomNumber != null) 'офис ${address.roomNumber}',
+                    // room_number приходит уже со словом «офис» — как в вебе,
+                    // выводим как есть, иначе получается «офис офис 1704».
+                    if (address.roomNumber != null) address.roomNumber!,
                     if (address.fnsNumber != null) 'ИФНС № ${address.fnsNumber}',
                   ].join(' · '),
                   style: DsText.muted,
