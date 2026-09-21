@@ -93,10 +93,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _ApplicationCard(
                       application: application,
-                      onOpen: () => context.push(
-                        '/cabinet/requests/${application.id}',
-                        extra: application,
-                      ),
+                      // После экрана заявки перечитываем список: там могли
+                      // оплатить, и статус в карточке устарел бы.
+                      onOpen: () async {
+                        await context.push(
+                          '/cabinet/requests/${application.id}',
+                          extra: application,
+                        );
+                        if (mounted) _load();
+                      },
                     ),
                   ),
             ],

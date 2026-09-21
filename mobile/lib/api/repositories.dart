@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/address.dart';
 import '../models/application.dart';
 import '../models/misc.dart';
+import '../models/payment.dart';
 import 'client.dart';
 
 /// Каталог — публичные эндпоинты, токен не нужен.
@@ -92,6 +93,32 @@ class CabinetRepository {
       for (final item in response.data ?? const [])
         LeaseCalendarItem.fromJson(item as Map<String, dynamic>),
     ];
+  }
+
+  /// Текущий платёж по заявке — только чтение: открытие экрана не должно
+  /// создавать заказ у банка (так же делает веб).
+  Future<Payment?> paymentForApplication(String applicationId) async {
+    final response = await _api.dio
+        .get<Map<String, dynamic>>('/payments/by-application/$applicationId');
+    final data = response.data;
+    return data == null ? null : Payment.fromJson(data);
+  }
+
+  /// «Оплатить»: бэк отдаёт живую ссылку на форму банка или выдаёт новую
+  /// вместо просроченной. Для DEMO-терминала не-тестировщику — 403 с текстом.
+  Future<Payment> initiatePayment(String applicationId) async {
+    final response = await _api.dio.post<Map<String, dynamic>>(
+      '/payments/initiate',
+      data: {'application_id': applicationId, 'payer_type': 'individual'},
+    );
+    return Payment.fromJson(response.data ?? const {});
+  }
+
+  /// Статус платежа; бэк сам сверяется с банком (не чаще раза в 20 секунд).
+  Future<Payment> payment(String paymentId) async {
+    final response =
+        await _api.dio.get<Map<String, dynamic>>('/payments/$paymentId');
+    return Payment.fromJson(response.data ?? const {});
   }
 
   Future<List<ChatSummary>> chats() async {

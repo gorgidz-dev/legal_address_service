@@ -121,9 +121,19 @@ class ApiClient {
 /// Человеческое сообщение об ошибке для показа в интерфейсе.
 String apiErrorMessage(Object error) {
   if (error is DioException) {
-    final detail = error.response?.data;
-    if (detail is Map && detail['detail'] is String) {
-      return detail['detail'] as String;
+    final body = error.response?.data;
+    // Версионированный API отвечает {"error": {"code", "message"}}
+    // (app/api_errors.py); {"detail": "..."} — старый формат, терпим и его.
+    // Раньше читался только detail, и понятные тексты сервера («оплата в
+    // тестовом режиме», «банк не отвечает») подменялись общей фразой.
+    if (body is Map) {
+      final errorObj = body['error'];
+      if (errorObj is Map && errorObj['message'] is String) {
+        return errorObj['message'] as String;
+      }
+      if (body['detail'] is String) {
+        return body['detail'] as String;
+      }
     }
     return switch (error.type) {
       DioExceptionType.connectionTimeout ||

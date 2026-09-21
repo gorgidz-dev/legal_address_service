@@ -103,6 +103,7 @@ class _UradresAppState extends State<UradresApp> {
                     path: ':id',
                     builder: (_, state) => RequestDetailScreen(
                       application: state.extra! as ClientApplication,
+                      cabinet: widget.cabinet,
                     ),
                   ),
                 ],

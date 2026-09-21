@@ -11,9 +11,11 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_secure_storage: ^11.0.0
+  flutter_svg: ^2.3.0
   go_router: ^17.5.0
   google_fonts: ^8.2.1
   intl: ^0.20.3
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -22,3 +24,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Знак СБП для кнопки оплаты — официальные векторы НСПК (logo.zip), см.
+  # lib/widgets/sbp_pay_button.dart.
+  assets:
+    - assets/sbp/sbp-logo-on-dark.svg
