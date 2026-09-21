@@ -55,11 +55,20 @@ class TBankNotConfigured(RuntimeError):
 
 
 class TBankError(RuntimeError):
-    """Сеть, HTTP 5xx, невалидный ответ или бизнес-ошибка (Success=false)."""
+    """Сеть, HTTP 5xx, невалидный ответ или бизнес-ошибка (Success=false).
 
-    def __init__(self, message: str, *, error_code: Optional[str] = None):
+    not_sent=True — запрос ТОЧНО не дошёл до банка (открыт предохранитель, не
+    удалось установить соединение). Для операций без ключа идемпотентности
+    (закрывающий чек) это разница между «можно спокойно повторить» и «исход
+    неизвестен, повтор может задвоить».
+    """
+
+    def __init__(
+        self, message: str, *, error_code: Optional[str] = None, not_sent: bool = False
+    ):
         super().__init__(message)
         self.error_code = error_code
+        self.not_sent = not_sent
 
     @property
     def is_business_refusal(self) -> bool:
@@ -154,12 +163,22 @@ def _as_int(value: Any) -> Optional[int]:
 
 
 class TBankClient:
-    def __init__(self, *, terminal_key: str, password: str, base_url: str, timeout: float):
+    def __init__(
+        self,
+        *,
+        terminal_key: str,
+        password: str,
+        base_url: str,
+        timeout: float,
+        cashbox_url: str = "https://securepay.tinkoff.ru/cashbox",
+    ):
         if not terminal_key or not password:
             raise TBankNotConfigured("TBANK_TERMINAL_KEY / TBANK_PASSWORD не заданы")
         self.terminal_key = terminal_key
         self._password = password
         self._base_url = base_url.rstrip("/")
+        # Методы чеков живут не под /v2, а под /cashbox (OpenAPI v1.32).
+        self._cashbox_url = cashbox_url.rstrip("/")
         self._timeout = timeout
 
     @property
@@ -240,13 +259,33 @@ class TBankClient:
             new_amount_kopeks=_as_int(data.get("NewAmount")),
         )
 
-    async def _call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def send_closing_receipt(self, *, payment_id: str, receipt: dict[str, Any]) -> None:
+        """Закрывающий чек «полный расчёт» по оплаченному платежу с чеком предоплаты.
+
+        Ключа идемпотентности у метода нет: повтор после обрыва связи может
+        пробить второй чек. Решать, повторять ли, — вызывающему (tbank_receipts).
+        """
+        await self._call(
+            "SendClosingReceipt",
+            {"PaymentId": payment_id, "Receipt": receipt},  # Receipt в подпись не входит
+            url=f"{self._cashbox_url}/SendClosingReceipt",
+        )
+
+    async def _call(
+        self, method: str, params: dict[str, Any], *, url: Optional[str] = None
+    ) -> dict[str, Any]:
         body = {"TerminalKey": self.terminal_key, **params}
         body["Token"] = make_token(body, self._password)
-        url = f"{self._base_url}/{method}"
+        url = url or f"{self._base_url}/{method}"
         try:
             async with httpx.AsyncClient(timeout=self._timeout, verify=tbank_ssl_context()) as client:
                 resp = await client.post(url, json=body)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+            # Соединение не установлено (клиент новый на каждый вызов) — тело
+            # запроса банку не ушло.
+            raise TBankError(
+                f"Т-Банк недоступен ({method}): {e or type(e).__name__}", not_sent=True
+            ) from e
         except httpx.HTTPError as e:
             # У таймаутов httpx пустой текст — без имени класса причина терялась.
             raise TBankError(f"Т-Банк недоступен ({method}): {e or type(e).__name__}") from e
@@ -302,9 +341,14 @@ class TBankService:
     async def cancel(self, **kwargs) -> TBankCancelResult:
         return await self._wrap(lambda: self._client.cancel(**kwargs))
 
+    async def send_closing_receipt(self, *, payment_id: str, receipt: dict[str, Any]) -> None:
+        return await self._wrap(
+            lambda: self._client.send_closing_receipt(payment_id=payment_id, receipt=receipt)
+        )
+
     async def _wrap(self, op):
         if not self._breaker.allow_request():
-            raise TBankError("Т-Банк временно недоступен (предохранитель открыт).")
+            raise TBankError("Т-Банк временно недоступен (предохранитель открыт).", not_sent=True)
         try:
             result = await op()
         except TBankError as e:
@@ -335,6 +379,7 @@ def get_tbank_service() -> TBankService:
                 password=settings.tbank_password,
                 base_url=settings.tbank_base_url,
                 timeout=settings.tbank_request_timeout_seconds,
+                cashbox_url=settings.tbank_cashbox_url,
             ),
             CircuitBreaker(
                 failure_threshold=settings.tbank_circuit_failure_threshold,

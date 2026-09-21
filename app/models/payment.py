@@ -54,6 +54,16 @@ class Payment(UUIDPKMixin, TimestampMixin, Base):
             unique=True,
             postgresql_where="status IN ('pending', 'awaiting_user')",
         ),
+        CheckConstraint(
+            "closing_receipt_status IS NULL OR closing_receipt_status IN "
+            "('due', 'sending', 'sent', 'failed', 'unknown')",
+            name="closing_receipt_status_valid",
+        ),
+        Index(
+            "ix_payments_closing_receipt_pending",
+            "closing_receipt_status",
+            postgresql_where="closing_receipt_status IN ('due', 'sending', 'failed')",
+        ),
     )
 
     application_id: Mapped[UUID] = mapped_column(
@@ -102,6 +112,20 @@ class Payment(UUIDPKMixin, TimestampMixin, Base):
     # Когда последний раз спрашивали статус у банка (GetState) — чтобы опрос
     # страницы оплаты раз в 3 секунды не превращался в запрос к банку раз в 3 секунды.
     provider_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    # Чеки 54-ФЗ (Т-Банк + облачная касса). receipt — Receipt, отправленный в
+    # Init («предоплата 100%»): закрывающий чек повторяет его позиции.
+    # none_as_null: иначе Python None пишется как JSON-значение 'null', и фильтр
+    # «receipt IS NOT NULL» считал бы платёж без чека платежом с чеком.
+    receipt: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB(none_as_null=True))
+    # Закрывающий чек «полный расчёт» при выдаче документов: NULL | due |
+    # sending | sent | failed | unknown (см. app/services/tbank_receipts.py).
+    closing_receipt_status: Mapped[Optional[str]] = mapped_column(Text)
+    closing_receipt_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    closing_receipt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    closing_receipt_error: Mapped[Optional[str]] = mapped_column(Text)
 
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

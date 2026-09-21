@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import require_admin, utcnow
 from app.config import settings
 from app.database import get_db
+from app.enums import ApplicationEventKind, NotificationAudience
 from app.models.incoming_webhook import IncomingWebhook
 from app.models.user import User
 from app.models.webhook_delivery import WebhookDelivery
@@ -38,6 +39,8 @@ from app.services.cdek_pay import (
     get_cdek_pay_service,
     verify_callback_signature,
 )
+from app.services import tbank_receipts
+from app.services.notification_events import create_application_event
 from app.services.tbank_acquiring import TBankError, TBankNotConfigured, get_tbank_service
 from app.services.tbank_payments import (
     apply_bank_state,
@@ -492,6 +495,62 @@ async def tbank_notification(
         ):
             await db.commit()
 
+    raw_pid = body.get("PaymentId")
+    provider_payment_id = (
+        str(raw_pid) if not isinstance(raw_pid, bool) and _DIGITS_RE.match(str(raw_pid)) else None
+    )
+    order_id = body.get("OrderId")
+
+    if status_value == "RECEIPT":
+        # Итог фискализации чека. Касса пробивает чек уже ПОСЛЕ оплаты, и её
+        # отказ (не оплачена аренда, кончился ФН, не совпали СНО/ФФД) платёж не
+        # останавливает — узнать о нём можно только отсюда. Поэтому ошибку
+        # показываем админу. Тело здесь не проверить у банка, но от него
+        # зависит лишь оповещение, а не деньги.
+        if await _store_idempotent(
+            db, provider="tbank", external_id=event_id, event_type="RECEIPT", body=stored_body
+        ):
+            if body.get("Success") is not True or str(body.get("ErrorCode") or "0") != "0":
+                payment = await find_payment_for_notification(
+                    db,
+                    provider_payment_id=provider_payment_id,
+                    order_id=None if order_id is None else str(order_id),
+                )
+                log.warning(
+                    "T-Bank receipt failed: PaymentId=%r ErrorCode=%r", raw_pid, body.get("ErrorCode")
+                )
+                if payment is not None:
+                    reason = str(
+                        body.get("ErrorMessage") or body.get("Message") or body.get("Details") or ""
+                    )[:300]
+                    closing = tbank_receipts.receipt_notification_is_closing(body)
+                    if closing and payment.closing_receipt_status == tbank_receipts.SENT:
+                        # Банк принял закрывающий чек, а касса его не пробила — открываем
+                        # ручной повтор (автоповтор — нет: причину сначала устраняют в ЛК).
+                        locked = await lock_payment(db, payment.id)
+                        if locked is not None and locked.closing_receipt_status == tbank_receipts.SENT:
+                            tbank_receipts.mark_closing_receipt_rejected_by_kassa(
+                                locked, reason or f"код {body.get('ErrorCode')}"
+                            )
+                    await create_application_event(
+                        db=db,
+                        application_id=payment.application_id,
+                        kind=ApplicationEventKind.STATUS_CHANGED,
+                        audience=NotificationAudience.ADMIN,
+                        title="Касса не пробила чек",
+                        message=(
+                            f"Т-Банк сообщил об ошибке фискализации"
+                            f"{' закрывающего чека' if closing else (' чека предоплаты' if closing is False else '')}"
+                            f" (код {body.get('ErrorCode')}{': ' + reason if reason else ''}). "
+                            "Оплата при этом прошла. Проверьте кассу в ЛК Т-Бизнеса (аренда, ФН, "
+                            "СНО, ФФД) и пробейте чек повторно или чеком коррекции."
+                        ),
+                        payload={"payment_id": str(payment.id), "error_code": str(body.get("ErrorCode"))},
+                        created_by=None,
+                    )
+            await db.commit()
+        return _ok()
+
     if (
         status_value in _TBANK_SERVICE_NOTIFICATIONS
         or str(body.get("NotificationType") or "") in _TBANK_SERVICE_TYPES
@@ -499,11 +558,6 @@ async def tbank_notification(
         await journal(status_value or str(body.get("NotificationType"))[:40])
         return _ok()
 
-    raw_pid = body.get("PaymentId")
-    provider_payment_id = (
-        str(raw_pid) if not isinstance(raw_pid, bool) and _DIGITS_RE.match(str(raw_pid)) else None
-    )
-    order_id = body.get("OrderId")
     payment = await find_payment_for_notification(
         db,
         provider_payment_id=provider_payment_id,

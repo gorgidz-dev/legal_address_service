@@ -475,3 +475,81 @@ def test_card_expiry_is_not_stored() -> None:
     stored = sanitize_for_storage({"Pan": "430000******0777", "ExpDate": "1129", "Status": "CONFIRMED"})
     assert "ExpDate" not in stored
     assert stored["Pan"] == "430000******0777"
+
+
+# ============================================================
+# Чеки 54-ФЗ: связь автомата статусов с закрывающим чеком (ревизия)
+# ============================================================
+
+
+def _with_receipt(**kw):
+    from app.services.tbank_receipts import build_prepayment_receipt
+
+    return build_prepayment_receipt(amount_kopeks=AMOUNT, email="a@b.ru", phone=None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bank", ["ASYNC_REFUNDING", "REFUNDED"])
+async def test_refund_from_cabinet_after_closing_receipt_alerts(bank) -> None:
+    payment, application, db = _linked(
+        status=PaymentStatus.SUCCEEDED, app_status=ApplicationStatus.COMPLETED,
+        receipt=_with_receipt(), closing_receipt_status="sent",
+    )
+    await _apply(db, payment, bank)
+    assert "Проверьте чек возврата" in db.titles(NotificationAudience.ADMIN)
+
+
+@pytest.mark.asyncio
+async def test_refund_from_cabinet_without_closing_receipt_is_quiet_about_receipts() -> None:
+    payment, application, db = _linked(status=PaymentStatus.SUCCEEDED, app_status=ApplicationStatus.PAID)
+    await _apply(db, payment, "REFUNDED")
+    assert "Проверьте чек возврата" not in db.titles(NotificationAudience.ADMIN)
+
+
+@pytest.mark.asyncio
+async def test_partial_refund_takes_pending_closing_receipt_off_automation() -> None:
+    payment, application, db = _linked(
+        status=PaymentStatus.SUCCEEDED, app_status=ApplicationStatus.READY_FOR_CLIENT,
+        receipt=_with_receipt(), closing_receipt_status="due", closing_receipt_attempts=0,
+    )
+    await _apply(db, payment, "PARTIAL_REFUNDED")
+    assert payment.closing_receipt_status == "failed"
+    assert payment.closing_receipt_attempts >= tbank_payments.settings.tbank_closing_receipt_max_attempts
+
+
+@pytest.mark.asyncio
+async def test_rejected_refund_after_documents_issued_queues_closing_receipt(monkeypatch) -> None:
+    # Документы выдали, пока шёл возврат (чек тогда не заводился); возврат не прошёл.
+    from app.services import tbank_receipts
+
+    calls: list = []
+
+    async def fake_mark(_db, application_id):
+        calls.append(application_id)
+
+    monkeypatch.setattr(tbank_receipts, "mark_closing_receipt_due", fake_mark)
+    payment, application, db = _linked(
+        status=PaymentStatus.REFUND_REQUESTED, app_status=ApplicationStatus.READY_FOR_CLIENT,
+        receipt=_with_receipt(), refund_key="refund:x:1", refund_attempts=1,
+    )
+    await _apply(db, payment, "REJECTED")
+    assert payment.status == PaymentStatus.SUCCEEDED.value
+    assert calls == [application.id]
+
+
+@pytest.mark.asyncio
+async def test_rejected_refund_before_documents_does_not_touch_receipts(monkeypatch) -> None:
+    from app.services import tbank_receipts
+
+    calls: list = []
+
+    async def fake_mark(_db, application_id):
+        calls.append(application_id)
+
+    monkeypatch.setattr(tbank_receipts, "mark_closing_receipt_due", fake_mark)
+    payment, application, db = _linked(
+        status=PaymentStatus.REFUND_REQUESTED, app_status=ApplicationStatus.PAID,
+        refund_key="refund:x:1", refund_attempts=1,
+    )
+    await _apply(db, payment, "REJECTED")
+    assert calls == []

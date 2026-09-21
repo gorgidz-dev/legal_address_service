@@ -13,6 +13,10 @@
 Каждая сверка — тот же recheck_payment, что и у страницы оплаты: слот с
 троттлингом и SKIP LOCKED, отпечаток платежа, автомат apply_bank_state.
 
+Там же — закрывающие чеки 54-ФЗ (app/services/tbank_receipts.py): досылаем
+те, что не ушли сразу при выдаче документов (банк не ответил, процесс
+перезапустился), и переводим зависшие отправки в «неизвестно» с алертом.
+
 Запуск (cron на проде, см. deploy/setup-ops.sh):
 
     python -m scripts.reconcile_tbank_payments [--limit 200]
@@ -32,6 +36,11 @@ from app.enums import PaymentProvider, PaymentStatus
 from app.models.payment import Payment
 from app.services.tbank_acquiring import TBankNotConfigured, get_tbank_service
 from app.services.tbank_payments import NON_MONEY, recheck_payment
+from app.services.tbank_receipts import (
+    closing_receipts_to_send,
+    expire_stale_sending,
+    send_closing_receipt,
+)
 
 # Свежие платежи не трогаем: их статус придёт уведомлением или сверкой страницы.
 _MIN_AGE = timedelta(minutes=2)
@@ -88,6 +97,25 @@ async def _run(limit: int) -> Counter:
                 moved["error"] += 1
                 continue
             moved[f"{before}->{payment.status}" if payment.status != before else "unchanged"] += 1
+
+    # Закрывающие чеки: сначала зависшие отправки → unknown (их не повторяем
+    # вслепую), потом досылка тех, что пора отправить.
+    async with AsyncSessionLocal() as db:
+        stale = await expire_stale_sending(db, utcnow())
+        receipt_ids = await closing_receipts_to_send(db, limit=limit)
+    if stale:
+        moved["closing_receipt:stale->unknown"] += stale
+    for payment_id in receipt_ids:
+        async with AsyncSessionLocal() as db:
+            try:
+                outcome = await send_closing_receipt(db, payment_id)
+            except Exception as e:  # noqa: BLE001
+                await db.rollback()
+                print(f"{payment_id}: ошибка закрывающего чека: {e!r}")
+                moved["closing_receipt:error"] += 1
+                continue
+        if outcome is not None:
+            moved[f"closing_receipt:{outcome}"] += 1
     return moved
 
 

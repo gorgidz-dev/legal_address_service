@@ -44,6 +44,7 @@ from app.models.payment import Payment
 from app.models.user import User
 from app.services.notification_events import create_application_event
 from app.services.tbank_acquiring import TBankError, TBankNotConfigured, get_tbank_service
+from app.services import tbank_receipts
 
 log = logging.getLogger(__name__)
 
@@ -264,6 +265,7 @@ async def apply_bank_state(
             # Возврат запустили мимо нас — из ЛК Т-Бизнеса (refund_key пуст).
             payment.status = PaymentStatus.REFUND_REQUESTED.value
             payment.provider_status = status
+            await tbank_receipts.alert_if_closing_receipt_may_exist(db, payment)
             return True
         if local in OPEN or local in _UNPAID_CLOSED:
             await _paid_and_returned(db, payment, status=status, finished=False)
@@ -273,6 +275,9 @@ async def apply_bank_state(
         return False
 
     if status == REFUNDED:
+        if local == PaymentStatus.SUCCEEDED.value:
+            # Возврат из ЛК, которого мы не видели «в пути».
+            await tbank_receipts.alert_if_closing_receipt_may_exist(db, payment)
         if local in (PaymentStatus.SUCCEEDED.value, PaymentStatus.REFUND_REQUESTED.value):
             payment.status = PaymentStatus.REFUNDED.value
             payment.provider_status = status
@@ -306,6 +311,12 @@ async def apply_bank_state(
             payment.status = PaymentStatus.SUCCEEDED.value
             payment.provider_status = status
             payment.refund_key = None
+            if payment.closing_receipt_status in (tbank_receipts.DUE, tbank_receipts.FAILED):
+                # Чек предоплаты был на всю сумму — автоматический «полный расчёт»
+                # теперь неверен; закрывающий на остаток — только в ЛК.
+                tbank_receipts.give_up_closing_receipt(
+                    payment, "После частичного возврата — закрывающий чек на остаток только в ЛК"
+                )
             await _admin_event(
                 db, payment,
                 title="Частичный возврат в ЛК Т-Бизнеса",
@@ -445,6 +456,10 @@ async def refund_failed(db: AsyncSession, payment: Payment, *, reason: str) -> N
     application = await _lock_application(db, payment.application_id)
     if application is not None and application.status == ApplicationStatus.AWAITING_PAYMENT.value:
         await _on_paid(db, payment, previous_local=PaymentStatus.REFUND_REQUESTED.value)
+    elif application is not None and application.status in tbank_receipts.DOCUMENTS_ISSUED:
+        # Документы выдали, пока шёл возврат (закрывающий чек тогда не заводился:
+        # платёж не был оплачен). Деньги остались у нас — чек теперь нужен.
+        await tbank_receipts.mark_closing_receipt_due(db, payment.application_id)
 
 
 async def _lock_application(db: AsyncSession, application_id: UUID) -> Optional[Application]:

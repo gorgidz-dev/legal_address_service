@@ -295,3 +295,57 @@ def test_redirect_due_format_is_documented_shape() -> None:
     )
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+03:00", value)
     assert value == "2026-02-01T01:30:00+03:00"
+
+
+@pytest.mark.asyncio
+async def test_closing_receipt_goes_to_cashbox_and_is_signed_without_receipt(monkeypatch) -> None:
+    # Методы чеков живут под /cashbox, а не под /v2 (OpenAPI v1.32).
+    seen = _patch_transport(
+        monkeypatch, lambda _r: httpx.Response(200, json={"Success": True, "ErrorCode": "0"})
+    )
+    receipt = {"Taxation": "osn", "Items": [{"Name": "x", "Amount": 100}], "Email": "a@b.ru"}
+    await _client().send_closing_receipt(payment_id="9287980194", receipt=receipt)
+    sent = seen[0]["json"]
+    assert seen[0]["url"] == "https://securepay.tinkoff.ru/cashbox/SendClosingReceipt"
+    assert sent["PaymentId"] == "9287980194"
+    assert sent["Receipt"] == receipt
+    # Подпись — по корневым скалярам (TerminalKey, PaymentId), Receipt в неё не входит.
+    expected = make_token({"TerminalKey": "1234567890DEMO", "PaymentId": "9287980194"}, PASSWORD)
+    assert sent["Token"] == expected
+
+
+@pytest.mark.asyncio
+async def test_closing_receipt_refusal_is_a_business_error(monkeypatch) -> None:
+    _patch_transport(
+        monkeypatch,
+        lambda _r: httpx.Response(200, json={"Success": False, "ErrorCode": "1051", "Message": "Нет чека"}),
+    )
+    with pytest.raises(TBankError) as exc:
+        await _client().send_closing_receipt(payment_id="1", receipt={"Items": []})
+    assert exc.value.is_business_refusal
+
+
+
+@pytest.mark.asyncio
+async def test_connection_failure_is_marked_not_sent(monkeypatch) -> None:
+    # Соединение не установлено — тело банку не ушло: закрывающий чек можно повторить.
+    def boom(_r):
+        raise httpx.ConnectError("refused")
+
+    _patch_transport(monkeypatch, boom)
+    with pytest.raises(TBankError) as exc:
+        await _client().send_closing_receipt(payment_id="1", receipt={"Items": []})
+    assert exc.value.not_sent
+
+
+@pytest.mark.asyncio
+async def test_read_timeout_is_not_marked_not_sent(monkeypatch) -> None:
+    # Запрос мог дойти до банка — исход неизвестен.
+    def slow(_r):
+        raise httpx.ReadTimeout("slow")
+
+    _patch_transport(monkeypatch, slow)
+    with pytest.raises(TBankError) as exc:
+        await _client().send_closing_receipt(payment_id="1", receipt={"Items": []})
+    assert not exc.value.not_sent
+    assert not exc.value.is_business_refusal

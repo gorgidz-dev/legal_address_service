@@ -1038,3 +1038,222 @@ async def test_cdek_double_click_returns_the_winner(tbank, monkeypatch) -> None:
         db, _ExpiringApplication(application, db), PaymentInitiateRequest(application_id=application.id), user
     )
     assert result is winner
+
+
+# ============================================================
+# Чеки 54-ФЗ: предоплата в Init, закрывающий чек вручную, возврат после него
+# ============================================================
+
+
+def _admin_titles(db) -> list[str]:
+    from app.models.application_event import ApplicationEvent
+
+    return [e.title for e in db.added if isinstance(e, ApplicationEvent) and e.audience == "admin"]
+
+
+@pytest.mark.asyncio
+async def test_init_without_receipts_by_default(tbank) -> None:
+    db, application, _, user = _setup()
+    result = await _initiate(db, application, user)
+    [(_, kw)] = tbank.service.calls
+    assert kw["receipt"] is None
+    assert result.receipt is None
+
+
+@pytest.mark.asyncio
+async def test_init_sends_prepayment_receipt_to_the_applicant(tbank, monkeypatch) -> None:
+    monkeypatch.setattr(payments_router.settings, "tbank_receipts_enabled", True)
+    db, application, _, _ = _setup()
+    # Платёж создаёт админ за клиента — чек всё равно уходит заявителю.
+    result = await _initiate(db, application, ADMIN)
+    [(_, kw)] = tbank.service.calls
+    receipt = kw["receipt"]
+    assert receipt["Email"] == "ivan@example.ru"
+    assert receipt["Taxation"] == "osn"
+    [item] = receipt["Items"]
+    assert item["Amount"] == AMOUNT and item["PaymentMethod"] == "full_prepayment"
+    assert item["Tax"] == "vat122"
+    assert result.receipt == receipt  # снимок для закрывающего чека
+
+
+@pytest.mark.asyncio
+async def test_init_without_buyer_contact_is_refused(tbank, monkeypatch) -> None:
+    monkeypatch.setattr(payments_router.settings, "tbank_receipts_enabled", True)
+    db, application, _, user = _setup()
+    application.contact_email = None
+    application.contact_phone = None
+    with pytest.raises(HTTPException) as exc:
+        await _initiate(db, application, user)
+    assert exc.value.status_code == 422
+    assert tbank.service.calls == []
+    assert db.new_payments() == []
+
+
+def _closed(app, **kw):
+    from app.services.tbank_receipts import build_prepayment_receipt
+
+    return _tbank_payment(
+        app, status=kw.pop("status", PaymentStatus.SUCCEEDED),
+        provider_status=kw.pop("provider_status", "CONFIRMED"),
+        receipt=build_prepayment_receipt(amount_kopeks=AMOUNT, email="ivan@example.ru", phone=None),
+        closing_receipt_attempts=kw.pop("closing_receipt_attempts", 5),
+        **kw,
+    )
+
+
+async def _closing(db, payment, action):
+    from app.schemas.payment import ClosingReceiptAction
+
+    return await payments_router.closing_receipt_action(
+        payment_id=payment.id, payload=ClosingReceiptAction(action=action), db=db, _admin=ADMIN
+    )
+
+
+@pytest.mark.asyncio
+async def test_admin_marks_closing_receipt_found_in_cabinet(tbank) -> None:
+    db, application, payment, _ = _setup(
+        lambda app: _closed(app, closing_receipt_status="unknown"),
+        app_status=ApplicationStatus.READY_FOR_CLIENT,
+    )
+    result = await _closing(db, payment, "mark_sent")
+    assert result.closing_receipt_status == "sent"
+    assert result.closing_receipt_at is not None
+
+
+@pytest.mark.asyncio
+async def test_admin_resend_resets_attempts_and_sends(tbank, monkeypatch) -> None:
+    from app.services import tbank_receipts
+
+    sent: list = []
+
+    async def fake_send(_db, payment_id):
+        sent.append(payment_id)
+        return "sent"
+
+    monkeypatch.setattr(tbank_receipts, "send_closing_receipt", fake_send)
+    db, application, payment, _ = _setup(
+        lambda app: _closed(app, closing_receipt_status="failed"),
+        app_status=ApplicationStatus.READY_FOR_CLIENT,
+    )
+    await _closing(db, payment, "send")
+    assert sent == [payment.id]
+    assert payment.closing_receipt_status == "due" and payment.closing_receipt_attempts == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("closing_status", "app_status"),
+    [
+        ("sent", ApplicationStatus.READY_FOR_CLIENT),  # второй «полный расчёт» — нельзя
+        ("sending", ApplicationStatus.READY_FOR_CLIENT),
+        ("failed", ApplicationStatus.DOCUMENTS_PREPARING),  # документы ещё не выданы
+    ],
+)
+async def test_admin_resend_is_refused_when_it_would_be_wrong(tbank, monkeypatch, closing_status, app_status) -> None:
+    from app.services import tbank_receipts
+
+    async def fake_send(_db, _payment_id):
+        raise AssertionError("не должно отправляться")
+
+    monkeypatch.setattr(tbank_receipts, "send_closing_receipt", fake_send)
+    db, application, payment, _ = _setup(
+        lambda app: _closed(app, closing_receipt_status=closing_status), app_status=app_status
+    )
+    with pytest.raises(HTTPException) as exc:
+        await _closing(db, payment, "send")
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_closing_receipt_action_needs_prepayment_receipt(tbank) -> None:
+    db, application, payment, _ = _setup(_paid, app_status=ApplicationStatus.READY_FOR_CLIENT)
+    with pytest.raises(HTTPException) as exc:
+        await _closing(db, payment, "send")
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_refund_after_closing_receipt_asks_to_check_refund_receipt(tbank) -> None:
+    db, application, payment, _ = _setup(
+        lambda app: _closed(app, closing_receipt_status="sent"), app_status=ApplicationStatus.COMPLETED
+    )
+    tbank.service = _FakeTBank(cancel_status="REFUNDED")
+    await _refund(db, payment)
+    assert "Проверьте чек возврата" in _admin_titles(db)
+
+
+# ============================================================
+# Чеки: находки ревизии
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_link_issued_before_receipts_were_enabled_is_replaced(tbank, monkeypatch) -> None:
+    # Иначе клиент оплатил бы по старой ссылке без чека предоплаты.
+    monkeypatch.setattr(payments_router.settings, "tbank_receipts_enabled", True)
+    db, application, old, user = _setup(
+        lambda app: _tbank_payment(app, expires_at=_now() + timedelta(hours=5))  # живая, но без чека
+    )
+    tbank.active = old
+    tbank.service = _FakeTBank(state="NEW")
+    result = await _initiate(db, application, user)
+    assert tbank.service.names() == ["get_state", "cancel", "init"]
+    assert old.status == PaymentStatus.EXPIRED.value
+    assert isinstance(result.receipt, dict)
+    assert tbank.service.calls[-1][1]["receipt"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("closing_status", [None, "sent", "sending"])
+async def test_mark_sent_refused_when_nothing_to_mark(tbank, closing_status) -> None:
+    db, application, payment, _ = _setup(
+        lambda app: _closed(app, closing_receipt_status=closing_status),
+        app_status=ApplicationStatus.READY_FOR_CLIENT,
+    )
+    with pytest.raises(HTTPException) as exc:
+        await _closing(db, payment, "mark_sent")
+    assert exc.value.status_code == 409
+    assert payment.closing_receipt_status == closing_status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("closing_status", "app_status", "extra"),
+    [
+        (None, ApplicationStatus.READY_FOR_CLIENT, {}),  # чек по этому платежу не заводился
+        ("unknown", ApplicationStatus.DOCUMENTS_REVIEW, {}),
+        ("unknown", ApplicationStatus.DOCUMENTS_UPLOADED, {}),
+        ("unknown", ApplicationStatus.CANCELLED, {}),
+        ("failed", ApplicationStatus.READY_FOR_CLIENT, {"provider_status": "PARTIAL_REFUNDED"}),
+        ("failed", ApplicationStatus.READY_FOR_CLIENT, {"refunded_kopeks": 100_000}),
+        ("failed", ApplicationStatus.READY_FOR_CLIENT, {"status": PaymentStatus.REFUNDED}),
+    ],
+)
+async def test_manual_send_refused_where_it_would_be_wrong(tbank, monkeypatch, closing_status, app_status, extra) -> None:
+    from app.services import tbank_receipts
+
+    async def fake_send(_db, _payment_id):
+        raise AssertionError("не должно отправляться")
+
+    monkeypatch.setattr(tbank_receipts, "send_closing_receipt", fake_send)
+    db, application, payment, _ = _setup(
+        lambda app: _closed(app, closing_receipt_status=closing_status, **extra), app_status=app_status
+    )
+    with pytest.raises(HTTPException) as exc:
+        await _closing(db, payment, "send")
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("closing_status", "alerted"),
+    [("sent", True), ("sending", True), ("unknown", True), (None, False), ("due", False), ("failed", False)],
+)
+async def test_refund_alert_depends_on_closing_receipt_state(tbank, closing_status, alerted) -> None:
+    db, application, payment, _ = _setup(
+        lambda app: _closed(app, closing_receipt_status=closing_status),
+        app_status=ApplicationStatus.COMPLETED,
+    )
+    tbank.service = _FakeTBank(cancel_status="REFUNDED")
+    await _refund(db, payment)
+    assert ("Проверьте чек возврата" in _admin_titles(db)) is alerted

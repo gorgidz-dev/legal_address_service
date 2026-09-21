@@ -386,3 +386,90 @@ async def test_card_expiry_never_reaches_storage(env) -> None:
     await _post(env, _signed(env.payment))
     assert env.stored and all("ExpDate" not in r["body"] for r in env.stored)
     assert "ExpDate" not in (env.payment.last_callback_payload or {})
+
+
+# ============================================================
+# Уведомления о фискализации (Status: RECEIPT)
+# ============================================================
+
+
+def _admin_titles(env) -> list[str]:
+    from app.models.application_event import ApplicationEvent
+
+    return [e.title for e in env.db.added if isinstance(e, ApplicationEvent) and e.audience == "admin"]
+
+
+@pytest.mark.asyncio
+async def test_failed_receipt_alerts_admin(env) -> None:
+    # Касса не пробила чек (кончился ФН, не оплачена аренда) — платёж при этом прошёл,
+    # узнать об этом можно только из этого уведомления.
+    body = _signed(env.payment, Status="RECEIPT", Success=False, ErrorCode="1051", Message="Касса недоступна")
+    response = await _post(env, body)
+    assert response.body == b"OK"
+    assert env.bank.asked == []  # состояние платежа не трогаем
+    assert env.payment.status == PaymentStatus.AWAITING_USER.value
+    assert _admin_titles(env) == ["Касса не пробила чек"]
+    assert env.db.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_successful_receipt_is_only_journaled(env) -> None:
+    await _post(env, _signed(env.payment, Status="RECEIPT"))
+    assert _admin_titles(env) == []
+    [record] = env.stored
+    assert record["type"] == "RECEIPT"
+
+
+@pytest.mark.asyncio
+async def test_replayed_failed_receipt_does_not_alert_twice(env) -> None:
+    env.replay = True
+    await _post(env, _signed(env.payment, Status="RECEIPT", Success=False, ErrorCode="1051"))
+    assert _admin_titles(env) == []
+
+
+
+def _receipt_failed(env, *, method: str | None, **extra) -> dict:
+    fields = {"Status": "RECEIPT", "Success": False, "ErrorCode": "1051", "ErrorMessage": "ФН переполнен"}
+    fields.update(extra)
+    body = _signed(env.payment, **fields)
+    if method is not None:
+        # Receipt — объект, в подпись не входит; банк мог бы прислать его в уведомлении.
+        body["Receipt"] = {"Items": [{"PaymentMethod": method}]}
+    return body
+
+
+@pytest.mark.asyncio
+async def test_receipt_error_text_comes_from_error_message(env) -> None:
+    from app.models.application_event import ApplicationEvent
+
+    await _post(env, _receipt_failed(env, method=None))
+    [event] = [e for e in env.db.added if isinstance(e, ApplicationEvent)]
+    assert "ФН переполнен" in event.message
+
+
+@pytest.mark.asyncio
+async def test_kassa_rejected_sent_closing_receipt_reopens_manual_resend(env) -> None:
+    env.payment.status = PaymentStatus.SUCCEEDED.value
+    env.payment.closing_receipt_status = "sent"
+    await _post(env, _receipt_failed(env, method="full_payment"))
+    assert env.payment.closing_receipt_status == "failed"
+    assert "ФН переполнен" in env.payment.closing_receipt_error
+    assert "закрывающего чека" in [e.message for e in env.db.added if hasattr(e, "message")][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["full_prepayment", None])
+async def test_prepayment_or_unknown_receipt_error_keeps_closing_state(env, method) -> None:
+    env.payment.status = PaymentStatus.SUCCEEDED.value
+    env.payment.closing_receipt_status = "sent"
+    await _post(env, _receipt_failed(env, method=method))
+    assert env.payment.closing_receipt_status == "sent"
+
+
+@pytest.mark.asyncio
+async def test_receipt_error_for_unknown_payment_is_only_journaled(env) -> None:
+    env.found = None
+    response = await _post(env, _receipt_failed(env, method=None))
+    assert response.body == b"OK"
+    assert _admin_titles(env) == []
+    assert env.db.commits == 1

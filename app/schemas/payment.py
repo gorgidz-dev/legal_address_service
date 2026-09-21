@@ -41,6 +41,12 @@ class PaymentRead(BaseModel):
     provider_payment_id: Optional[str] = None
     provider_status: Optional[str] = None
     refunded_kopeks: int = 0
+    # Закрывающий чек «полный расчёт» (54-ФЗ): NULL | due | sending | sent |
+    # failed | unknown — см. app/services/tbank_receipts.py. Сам Receipt (с
+    # e-mail покупателя) в API не отдаём.
+    closing_receipt_status: Optional[str] = None
+    closing_receipt_at: Optional[datetime] = None
+    closing_receipt_error: Optional[str] = None
     expires_at: Optional[datetime] = None
     paid_at: Optional[datetime] = None
     refunded_at: Optional[datetime] = None
@@ -59,6 +65,12 @@ class PaymentRefundRequest(BaseModel):
     """Только админ. value_refund_kopeks по умолчанию — полная сумма."""
     value_refund_kopeks: Optional[int] = Field(default=None, gt=0)
     reason: str = Field(min_length=2, max_length=500)
+
+
+class ClosingReceiptAction(BaseModel):
+    """Только админ. send — (повторно) отправить закрывающий чек; mark_sent —
+    чек найден в ЛК Т-Бизнеса (после обрыва связи), повторять не нужно."""
+    action: Literal["send", "mark_sent"]
 
 
 class PaymentManualConfirmRequest(BaseModel):

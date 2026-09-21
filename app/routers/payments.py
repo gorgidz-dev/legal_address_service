@@ -47,6 +47,7 @@ from app.models.payment_attachment import PaymentAttachment
 from app.models.stored_file import StoredFile
 from app.models.user import User
 from app.schemas.payment import (
+    ClosingReceiptAction,
     PaymentAttachmentRead,
     PaymentInitiateRequest,
     PaymentManualConfirmRequest,
@@ -81,6 +82,8 @@ from app.services.tbank_payments import (
     recheck_payment,
     refund_failed,
 )
+from app.services import tbank_receipts
+from app.services.tbank_receipts import ReceiptContactMissing, build_prepayment_receipt
 from app.services.storage import (
     attachment_disposition,
     create_stored_file_record,
@@ -358,6 +361,21 @@ async def _initiate_tbank(db: AsyncSession, application: Application, user: User
     # После rollback все объекты сессии устаревают, и чтение application.id
     # полезло бы в базу синхронно (MissingGreenlet) — запоминаем заранее.
     application_id = application.id
+    receipt = None
+    if settings.tbank_receipts_enabled:
+        # Чек «предоплата 100%» (54-ФЗ). Покупатель — заявитель: если платёж
+        # создаёт админ за клиента, чек всё равно уходит клиенту.
+        try:
+            receipt = build_prepayment_receipt(
+                amount_kopeks=amount_kopeks,
+                email=application.contact_email,
+                phone=application.contact_phone,
+            )
+        except ReceiptContactMissing as e:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Для кассового чека нужен e-mail или телефон — укажите их в заявке.",
+            ) from e
     payment = Payment(
         application_id=application_id,
         provider=PaymentProvider.TBANK.value,
@@ -368,6 +386,7 @@ async def _initiate_tbank(db: AsyncSession, application: Application, user: User
         pay_for=_pay_for_label(application),
         provider_account=service.terminal_key,
         initiated_by=user.id,
+        receipt=receipt,
     )
     db.add(payment)
     try:
@@ -392,6 +411,7 @@ async def _initiate_tbank(db: AsyncSession, application: Application, user: User
             success_url=_tbank_return_url("success", application_id),
             fail_url=_tbank_return_url("fail", application_id),
             redirect_due=redirect_due,
+            receipt=receipt,
         )
     except TBankError as e:
         payment.status = PaymentStatus.FAILED.value
@@ -495,6 +515,11 @@ async def _initiate(db: AsyncSession, payload: PaymentInitiateRequest, user: Use
                 _assert_may_pay_on_terminal(service, user)
                 # Ссылка с другого терминала (DEMO до перехода на боевой) мертва сразу.
                 dead = dead or _foreign_terminal(active, service)
+                # Ссылка выдана до включения чеков: оплата по ней прошла бы без
+                # чека предоплаты. Закрываем и выдаём новую — с Receipt.
+                dead = dead or (
+                    settings.tbank_receipts_enabled and not isinstance(active.receipt, dict)
+                )
         if not dead:
             return active
         still_open = await _retire_dead_tbank_payment(db, active)
@@ -935,9 +960,83 @@ async def _refund_tbank(
         ) from e
 
     await apply_bank_state(db, payment=locked, status=result.status, amount_kopeks=None)
+    # Закрывающий чек пробит (или мог быть пробит) — пусть бухгалтер сверит чек возврата.
+    await tbank_receipts.alert_if_closing_receipt_may_exist(db, locked)
     await db.commit()
     await db.refresh(locked)
     return locked
+
+
+@router.post("/{payment_id}/closing-receipt", response_model=PaymentRead)
+async def closing_receipt_action(
+    payment_id: UUID,
+    payload: ClosingReceiptAction,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> Payment:
+    """Закрывающий чек вручную: повторить отправку или отметить найденный в ЛК.
+
+    Нужен, когда автоматика остановилась: банк отказал N раз подряд (failed)
+    или связь оборвалась посреди отправки (unknown — чек мог и уйти; прежде
+    чем отправлять снова, админ проверяет ЛК, иначе будет второй чек).
+    """
+    locked = await lock_payment(db, payment_id)
+    if locked is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Платёж не найден")
+    if locked.provider != PaymentProvider.TBANK.value or not isinstance(locked.receipt, dict):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "По этому платежу чек предоплаты не пробивался"
+        )
+    current = locked.closing_receipt_status
+    if payload.action == "mark_sent":
+        if current not in (tbank_receipts.UNKNOWN, tbank_receipts.FAILED, tbank_receipts.DUE):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Закрывающий чек в состоянии «{current}» — отмечать нечего",
+            )
+        locked.closing_receipt_status = tbank_receipts.SENT
+        locked.closing_receipt_at = utcnow()
+        locked.closing_receipt_error = "Отмечен отправленным вручную (найден в ЛК)"
+        await db.commit()
+        await db.refresh(locked)
+        return locked
+
+    if locked.status != PaymentStatus.SUCCEEDED.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Платёж в статусе {locked.status} — закрывающий чек не нужен",
+        )
+    if current not in (tbank_receipts.DUE, tbank_receipts.FAILED, tbank_receipts.UNKNOWN):
+        # sent — второй «полный расчёт» пробивать нельзя; sending — идёт прямо сейчас;
+        # NULL — чек по этому платежу не заводился (один чек на заявку — его заводит
+        # выдача документов).
+        messages = {
+            tbank_receipts.SENT: "Закрывающий чек уже отправлен",
+            tbank_receipts.SENDING: "Закрывающий чек отправляется прямо сейчас",
+        }
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            messages.get(current, "Закрывающий чек по этому платежу не заводился"),
+        )
+    if locked.refunded_kopeks or locked.provider_status == PARTIAL_REFUNDED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "После частичного возврата закрывающий чек на остаток пробейте в ЛК Т-Бизнеса.",
+        )
+    application = await db.get(Application, locked.application_id)
+    if application is None or application.status not in tbank_receipts.DOCUMENTS_ISSUED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Документы клиенту ещё не выданы — закрывающий чек пробивается при выдаче.",
+        )
+    # Сброс счётчика: админ разобрался с причиной и явно просит отправить.
+    locked.closing_receipt_status = tbank_receipts.DUE
+    locked.closing_receipt_attempts = 0
+    await db.commit()
+    await tbank_receipts.send_closing_receipt(db, payment_id)
+    fresh = await lock_payment(db, payment_id)
+    await db.commit()
+    return fresh
 
 
 # ============================================================

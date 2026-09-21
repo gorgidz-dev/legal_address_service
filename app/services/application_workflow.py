@@ -13,6 +13,7 @@ from app.schemas.workflow import ApplicationActionResult
 from app.services.marketplace_status import role_actions_for_status
 from app.services.application_sla import apply_sla
 from app.services.notification_events import create_application_event
+from app.services.tbank_receipts import mark_closing_receipt_due
 
 
 @dataclass(frozen=True)
@@ -325,6 +326,11 @@ async def apply_application_action(
     # Срок этапа пересчитывается вместе со статусом: он всегда отсчитывается от
     # входа в текущий статус, а не от создания заявки.
     apply_sla(application)
+    if transition.target_status == ApplicationStatus.READY_FOR_CLIENT:
+        # Документы у клиента — услуга по оферте (п. 3.3) оказана: ставим в
+        # очередь закрывающий чек «полный расчёт». В той же транзакции, что и
+        # смена статуса: не будет статуса без чека и чека без статуса.
+        await mark_closing_receipt_due(db, application.id)
 
     payload = {
         "action": action,

@@ -180,6 +180,10 @@ export interface Payment {
   provider_payment_id: string | null;
   provider_status: string | null;
   refunded_kopeks: number;
+  /** Закрывающий чек «полный расчёт» (54-ФЗ): null | due | sending | sent | failed | unknown. */
+  closing_receipt_status: string | null;
+  closing_receipt_at: string | null;
+  closing_receipt_error: string | null;
   cdek_access_key: string | null;
   cdek_order_id: number | null;
   cdek_payment_id: number | null;
