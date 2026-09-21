@@ -43,6 +43,9 @@ import PublicCatalog from "./publicCatalog";
 import { parsePath, routeToPath, useRouter } from "./router";
 import { LegalPage } from "./sections/LegalPage";
 import { EmailVerificationPage } from "./sections/EmailVerification";
+import { PaymentReturnPage } from "./payment/PaymentReturnPage";
+import { takePaymentReturn } from "./payment/paymentReturn";
+import { SbpPayButton } from "./payment/SbpPayButton";
 import { AddressChatPanel } from "./AddressChatPanel";
 import {
   ApplicationDrawer,
@@ -1389,6 +1392,19 @@ export default function App() {
       navigate({ name: "cabinet", section: nextSection, id }),
     [navigate]
   );
+  /** Возврат с формы банка: в карточку заявки, где идёт проверка оплаты. */
+  const openPaidApplication = useCallback(
+    (id: string | null) => navigate({ name: "cabinet", section: "applications", id }, { replace: true }),
+    [navigate]
+  );
+  const loginToPaidApplication = useCallback(
+    (id: string | null) =>
+      navigate({
+        name: "login",
+        next: routeToPath({ name: "cabinet", section: "applications", id })
+      }),
+    [navigate]
+  );
   /** Выбор карточки внутри раздела — это не «переход», историю не засоряем. */
   const selectInSection = useCallback(
     (id: string | null) => navigate({ name: "cabinet", section, id }, { replace: true }),
@@ -1475,6 +1491,20 @@ export default function App() {
   // Ссылку из письма открывают в любом браузере — авторизация не нужна.
   if (route.name === "verify") {
     return <EmailVerificationPage token={route.token} onHome={goHome} />;
+  }
+
+  // Возврат с платёжной формы Т-Банка — открыт без входа: из мобильного
+  // приложения форму открывают во встроенной вкладке, где сессии сайта нет.
+  if (route.name === "paymentReturn") {
+    return (
+      <PaymentReturnPage
+        applicationId={route.applicationId}
+        onLogin={loginToPaidApplication}
+        onOpenApplication={openPaidApplication}
+        result={route.result}
+        signedIn={currentUser !== null}
+      />
+    );
   }
 
   // Правовые документы доступны всем и по прямой ссылке.
@@ -1651,6 +1681,30 @@ export default function App() {
   );
 }
 
+/** Сколько ждать подтверждения банка после возврата с формы, прежде чем сказать «пока нет». */
+const PAYMENT_WAIT_MS = 2 * 60 * 1000;
+/** Статусы Т-Банка «деньги сейчас движутся»: вторую оплату не предлагаем. */
+const TBANK_PROCESSING = new Set([
+  "PREAUTHORIZING",
+  "AUTHORIZING",
+  "3DS_CHECKED",
+  "PAY_CHECKING",
+  "AUTHORIZED",
+  "CONFIRMING",
+  "CONFIRM_CHECKING",
+]);
+
+/**
+ * Оплата заявки физлицом.
+ *
+ * Открытие карточки только ЧИТАЕТ текущий платёж. Раньше каждый просмотр
+ * вызывал /payments/initiate, и у платёжного провайдера копились заказы,
+ * которые никто не собирался оплачивать. Теперь заказ создаётся по кнопке
+ * «Оплатить» (стиль СБП, см. payment/SbpPayButton.tsx): бэкенд либо отдаёт
+ * живую ссылку, либо закрывает просроченную и выдаёт новую, а фронт уводит на
+ * форму Т-Банка. Вернувшегося с формы (метка из payment/paymentReturn.ts)
+ * карточка ждёт: опрашивает статус, пока банк не подтвердит оплату.
+ */
 function SbpPaymentPanel({
   applicationId,
   onPaid
@@ -1660,30 +1714,46 @@ function SbpPaymentPanel({
 }) {
   const [payment, setPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  // Метка одноразовая: читаем при монтировании (панель пересоздаётся на каждую заявку).
+  const [returned] = useState(() => takePaymentReturn(applicationId));
+  const [waitUntil, setWaitUntil] = useState<number | null>(() =>
+    returned === "success" ? Date.now() + PAYMENT_WAIT_MS : null
+  );
 
-  // Initiate (or fetch existing active) payment on mount.
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     api
-      .initiatePayment(applicationId)
+      .getPaymentByApplication(applicationId)
       .then((p) => alive && setPayment(p))
-      .catch((err: Error) => alive && setError(err.message))
+      .catch((err: Error) => alive && setLoadError(err.message))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
   }, [applicationId, retryKey]);
 
-  // Poll status every 3s while awaiting_user or pending.
+  const waiting =
+    waitUntil !== null &&
+    payment !== null &&
+    (payment.status === "awaiting_user" || payment.status === "pending");
+
+  // Ждём подтверждения банка: GET /payments/{id} сам сверяется с Т-Банком
+  // (не чаще раза в 20 секунд), опрос раз в 3 секунды его не перегружает.
   useEffect(() => {
-    if (!payment) return;
-    if (payment.status !== "awaiting_user" && payment.status !== "pending") return;
+    if (!waiting || !payment || waitUntil === null) return;
     let alive = true;
     const timer = setInterval(async () => {
+      if (Date.now() > waitUntil) {
+        clearInterval(timer);
+        if (alive) setWaitUntil(null);
+        return;
+      }
       try {
         const fresh = await api.getPayment(payment.id);
         if (!alive) return;
@@ -1692,38 +1762,51 @@ function SbpPaymentPanel({
           clearInterval(timer);
           onPaid();
         }
-      } catch (err) {
-        if (alive) setError((err as Error).message);
+      } catch {
+        // Сбой одного опроса не повод пугать — следующий повторит.
       }
     }, 3000);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, [payment?.id, payment?.status, onPaid]);
+  }, [waiting, payment?.id, waitUntil, onPaid]);
 
-  const cardStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-    padding: 16,
-    border: "1px solid #dfe3dc",
-    borderRadius: 12,
-    background: "#fdfdfb"
-  };
+  async function pay() {
+    setBusy(true);
+    setPayError(null);
+    try {
+      const fresh = await api.initiatePayment(applicationId);
+      setPayment(fresh);
+      if (fresh.status === "succeeded") {
+        onPaid();
+      } else if (fresh.provider === "tbank") {
+        if (fresh.payment_url) {
+          // Уходим на форму банка; кнопка остаётся в «загрузке» до перехода.
+          window.location.assign(fresh.payment_url);
+          return;
+        }
+        setPayError("Онлайн-оплата сейчас недоступна. Напишите в поддержку — поможем оплатить.");
+      }
+    } catch (err) {
+      setPayError((err as Error).message);
+    }
+    setBusy(false);
+  }
 
   if (loading) {
     return (
-      <div style={cardStyle}>
-        <Loader2 className="spin" size={18} /> Создаём платёж…
+      <div className="pay-panel">
+        <span className="pay-panel__muted">
+          <Loader2 className="spin" size={16} /> Загружаем оплату…
+        </span>
       </div>
     );
   }
-  if (error) {
-    // Без «Повторить» экран оплаты залипал: единственным выходом был F5.
+  if (loadError) {
     return (
-      <div style={cardStyle}>
-        <InlineError message={error} />
+      <div className="pay-panel">
+        <InlineError message={loadError} />
         <div className="row-actions">
           <Button onClick={() => setRetryKey((value) => value + 1)} variant="secondary">
             <RefreshCw size={16} /> Повторить
@@ -1732,28 +1815,26 @@ function SbpPaymentPanel({
       </div>
     );
   }
-  if (!payment) return null;
 
-  if (payment.status === "succeeded") {
+  if (payment?.status === "succeeded") {
     return (
-      <div style={{ ...cardStyle, background: "#eaf6ed", borderColor: "#3AB663" }}>
+      <div className="pay-panel pay-panel--ok">
         <CheckCircle2 size={18} /> Оплата получена. Заявка ушла на проверку администратора.
       </div>
     );
   }
 
-  const amountRub = (payment.amount_kopeks / 100).toLocaleString("ru-RU");
-
-  if (payment.provider === "manual_invoice") {
+  if (payment?.provider === "manual_invoice") {
+    const amountRub = (payment.amount_kopeks / 100).toLocaleString("ru-RU");
     return (
-      <div style={cardStyle}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div className="pay-panel">
+        <div className="pay-panel__head">
           <strong>Оплата по счёту от юридического лица</strong>
           <span>
             {amountRub} ₽ · статус: <b>{paymentStatusLabels[payment.status]}</b>
           </span>
         </div>
-        <p style={{ margin: 0, color: "#596259" }}>
+        <p className="pay-panel__muted">
           Скачайте счёт от собственника, оплатите по реквизитам и приложите
           платёжное поручение. После подтверждения собственником заявка перейдёт
           к подготовке документов.
@@ -1764,37 +1845,91 @@ function SbpPaymentPanel({
           paymentStatus={payment.status}
         />
         {payment.status === "failed" ? (
-          <small style={{ color: "#c0392b" }}>
-            Оплата не подтверждена. Свяжитесь с поддержкой.
-          </small>
+          <small className="pay-panel__error">Оплата не подтверждена. Свяжитесь с поддержкой.</small>
         ) : null}
       </div>
     );
   }
 
-  return (
-    <div style={cardStyle}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+  // Старый путь CDEK Pay: QR и ссылка в банк (провайдер так и не включался).
+  if (
+    payment?.provider === "cdek_pay" &&
+    (payment.status === "awaiting_user" || payment.status === "pending") &&
+    (payment.qr_image_base64 || payment.qr_link)
+  ) {
+    return (
+      <div className="pay-panel">
         <strong>Оплата заявки через СБП</strong>
-        <span>
-          {amountRub} ₽ · CDEK Pay · статус: <b>{paymentStatusLabels[payment.status]}</b>
-        </span>
+        {payment.qr_image_base64 ? (
+          <img
+            alt="QR для оплаты СБП"
+            className="pay-panel__qr"
+            src={`data:image/png;base64,${payment.qr_image_base64}`}
+          />
+        ) : null}
+        {payment.qr_link ? (
+          <a className="btn primary" href={payment.qr_link} rel="noreferrer" target="_blank">
+            Открыть в банке
+          </a>
+        ) : null}
+        {payment.expires_at ? (
+          <small>Ссылка/QR действительны до {formatDate(payment.expires_at)}</small>
+        ) : null}
       </div>
-      {payment.qr_image_base64 ? (
-        <img
-          alt="QR для оплаты СБП"
-          src={`data:image/png;base64,${payment.qr_image_base64}`}
-          style={{ width: 240, height: 240, alignSelf: "center" }}
-        />
+    );
+  }
+
+  // «Банк обрабатывает» — только пока ссылка жива: зависшую операцию после
+  // срока бэкенд закроет сам, и клиенту снова нужна кнопка.
+  const processing =
+    payment?.provider === "tbank" &&
+    payment.status === "awaiting_user" &&
+    TBANK_PROCESSING.has(payment.provider_status ?? "") &&
+    (!payment.expires_at || new Date(payment.expires_at).getTime() > Date.now());
+
+  return (
+    <div className="pay-panel">
+      {waiting ? (
+        <p className="pay-panel__status" role="status">
+          <Loader2 className="spin" size={16} /> Проверяем оплату в банке — обычно это занимает до
+          минуты.
+        </p>
+      ) : processing ? (
+        <p className="pay-panel__status" role="status">
+          Банк обрабатывает платёж. Как только он подтвердит оплату, заявка перейдёт в статус
+          «Оплачена».
+        </p>
+      ) : returned === "success" ? (
+        <p className="pay-panel__status" role="status">
+          Банк пока не подтвердил оплату. Если деньги списались, статус обновится сам в течение
+          нескольких минут — повторно платить не нужно.
+        </p>
+      ) : returned === "fail" ? (
+        <p className="pay-panel__status pay-panel__status--warn" role="status">
+          Оплата не завершена. Попробуйте ещё раз.
+        </p>
+      ) : payment?.status === "refund_requested" || payment?.status === "refunded" ? (
+        <p className="pay-panel__status" role="status">
+          Предыдущий платёж по заявке возвращается банком. Оплатить заявку можно заново.
+        </p>
       ) : null}
-      {payment.qr_link ? (
-        <a className="btn primary" href={payment.qr_link} rel="noreferrer" target="_blank">
-          Открыть в банке
-        </a>
+
+      {waiting || processing ? null : (
+        <>
+          <SbpPayButton busy={busy} onClick={pay} />
+          <small className="pay-panel__muted">Откроется защищённая страница оплаты Т-Банка.</small>
+        </>
+      )}
+      {!waiting && (returned === "success" || processing) ? (
+        <button
+          className="text-action"
+          onClick={() => setWaitUntil(Date.now() + PAYMENT_WAIT_MS)}
+          type="button"
+        >
+          <RefreshCw size={14} /> Проверить ещё раз
+        </button>
       ) : null}
-      {payment.expires_at ? (
-        <small>Ссылка/QR действительны до {formatDate(payment.expires_at)}</small>
-      ) : null}
+      <InlineError message={payError} />
     </div>
   );
 }
@@ -2125,6 +2260,7 @@ function ClientDashboardView({
                     {selectedApplication.status === "awaiting_payment" ? (
                       <div className="cab-actions">
                         <SbpPaymentPanel
+                          key={selectedApplication.id}
                           applicationId={selectedApplication.id}
                           onPaid={() => setRefreshKey((value) => value + 1)}
                         />

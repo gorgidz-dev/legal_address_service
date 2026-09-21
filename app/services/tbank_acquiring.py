@@ -248,7 +248,8 @@ class TBankClient:
             async with httpx.AsyncClient(timeout=self._timeout, verify=tbank_ssl_context()) as client:
                 resp = await client.post(url, json=body)
         except httpx.HTTPError as e:
-            raise TBankError(f"Т-Банк недоступен ({method}): {e}") from e
+            # У таймаутов httpx пустой текст — без имени класса причина терялась.
+            raise TBankError(f"Т-Банк недоступен ({method}): {e or type(e).__name__}") from e
 
         try:
             data = resp.json()

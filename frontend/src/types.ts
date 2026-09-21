@@ -161,7 +161,7 @@ export type PaymentStatus =
   | "refund_requested"
   | "refunded";
 
-export type PaymentProvider = "cdek_pay" | "manual_invoice";
+export type PaymentProvider = "cdek_pay" | "manual_invoice" | "tbank";
 export type PaymentPayerType = "individual" | "juridical";
 
 export interface Payment {
@@ -175,6 +175,11 @@ export interface Payment {
   pay_for: string;
   qr_link: string | null;
   qr_image_base64: string | null;
+  /** Ссылка на платёжную форму Т-Банка; null, если её видеть нельзя (DEMO-терминал). */
+  payment_url: string | null;
+  provider_payment_id: string | null;
+  provider_status: string | null;
+  refunded_kopeks: number;
   cdek_access_key: string | null;
   cdek_order_id: number | null;
   cdek_payment_id: number | null;

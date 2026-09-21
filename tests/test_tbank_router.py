@@ -270,6 +270,25 @@ async def test_initiate_creates_tbank_payment(tbank) -> None:
     assert kw["order_id"] == str(result.id)  # OrderId = наш id — по нему найдём платёж
     assert kw["amount_kopeks"] == AMOUNT
     assert kw["notification_url"].endswith("/api/v1/webhooks/tbank/notification")
+    # Возврат — на страницу фронта с id заявки (frontend/src/payment/PaymentReturnPage.tsx).
+    assert kw["success_url"].endswith(f"/payment/success?application={application.id}")
+    assert kw["fail_url"].endswith(f"/payment/fail?application={application.id}")
+
+
+def test_return_urls_can_be_overridden(monkeypatch) -> None:
+    monkeypatch.setattr(payments_router.settings, "tbank_success_url", "https://x.test/ok")
+    monkeypatch.setattr(payments_router.settings, "tbank_fail_url", "")
+    app_id = uuid4()
+    assert payments_router._tbank_return_url("success", app_id) == "https://x.test/ok"
+    assert payments_router._tbank_return_url("fail", app_id).endswith(f"/payment/fail?application={app_id}")
+
+
+def test_return_page_route_exists_in_frontend_router() -> None:
+    # Бэкенд строит адрес /payment/<result>, фронт обязан его разбирать.
+    from pathlib import Path
+
+    router_ts = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "router.ts").read_text(encoding="utf-8")
+    assert 'head === "payment"' in router_ts
 
 
 @pytest.mark.asyncio
@@ -314,10 +333,22 @@ async def test_init_error_marks_payment_failed(tbank) -> None:
     with pytest.raises(HTTPException) as exc:
         await _initiate(db, application, user)
     assert exc.value.status_code == 502
+    assert "код 201" in exc.value.detail and "поддержку" in exc.value.detail
     [payment] = db.new_payments()
     assert payment.status == PaymentStatus.FAILED.value
     assert payment.provider_status == "INIT_ERROR:201"
     assert db.commits == 1  # провал сохранён, а не потерян
+
+
+@pytest.mark.asyncio
+async def test_init_network_error_shows_buyer_a_plain_message(tbank) -> None:
+    # Найдено проверкой в браузере: покупатель видел «Т-Банк недоступен (Init):».
+    tbank.service = _FakeTBank(init_error=TBankError("Т-Банк недоступен (Init): ConnectTimeout"))
+    db, application, _, user = _setup()
+    with pytest.raises(HTTPException) as exc:
+        await _initiate(db, application, user)
+    assert exc.value.status_code == 502
+    assert exc.value.detail == "Банк сейчас не отвечает. Попробуйте ещё раз через минуту."
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ from __future__ import annotations
 Физлица платят через провайдера из settings.payment_provider: эквайринг Т-Банка
 (боевой) или CDEK Pay (так и не включался). Юрлица — по счёту (manual_invoice).
 """
+import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -88,6 +89,7 @@ from app.services.storage import (
 )
 
 router = APIRouter(prefix="/payments", tags=["payments"])
+log = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -162,6 +164,21 @@ def _base_url() -> str:
 
 def _tbank_notification_url() -> str:
     return settings.tbank_notification_url or f"{_base_url()}{TBANK_NOTIFICATION_PATH}"
+
+
+def _tbank_return_url(result: str, application_id: UUID) -> str:
+    """Куда банк вернёт покупателя после формы оплаты.
+
+    Публичная страница фронта (frontend/src/payment/PaymentReturnPage.tsx):
+    с сессией на сайте она сразу ведёт в карточку заявки, где идёт проверка
+    оплаты, а в мобильной вкладке без сессии просит вернуться в приложение.
+    Страница только показывает текст — оплату засчитывает бэкенд по банку,
+    поэтому подделать «успех» адресом возврата нельзя.
+    """
+    override = settings.tbank_success_url if result == "success" else settings.tbank_fail_url
+    if override:
+        return override
+    return f"{_base_url()}/payment/{result}?application={application_id}"
 
 
 def _assert_may_pay_on_terminal(service: TBankService, user: User) -> None:
@@ -372,15 +389,24 @@ async def _initiate_tbank(db: AsyncSession, application: Application, user: User
             order_id=str(payment.id),
             description=payment.pay_for,
             notification_url=_tbank_notification_url(),
-            success_url=settings.tbank_success_url or f"{_base_url()}/?payment=success",
-            fail_url=settings.tbank_fail_url or f"{_base_url()}/?payment=fail",
+            success_url=_tbank_return_url("success", application_id),
+            fail_url=_tbank_return_url("fail", application_id),
             redirect_due=redirect_due,
         )
     except TBankError as e:
         payment.status = PaymentStatus.FAILED.value
         payment.provider_status = f"INIT_ERROR:{e.error_code}" if e.error_code else "INIT_ERROR"
         await db.commit()
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+        # Этот текст видит покупатель — технические подробности только в лог.
+        log.warning("T-Bank Init failed for payment %s: %s", payment.id, e)
+        if e.is_business_refusal:
+            detail = (
+                f"Банк не принял платёж (код {e.error_code}). Напишите в поддержку — "
+                "поможем оплатить."
+            )
+        else:
+            detail = "Банк сейчас не отвечает. Попробуйте ещё раз через минуту."
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail) from e
 
     payment.status = PaymentStatus.AWAITING_USER.value
     payment.provider_payment_id = result.payment_id

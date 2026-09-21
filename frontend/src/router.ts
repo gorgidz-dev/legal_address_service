@@ -29,10 +29,19 @@ export type Route =
   /** Подтверждение e-mail по ссылке из письма. */
   | { name: "verify"; token: string }
   /**
+   * Возврат с платёжной формы Т-Банка: /payment/success|fail?application=<id>.
+   * Адрес строит бэкенд (app/routers/payments.py, _tbank_return_url).
+   */
+  | { name: "paymentReturn"; result: PaymentReturnResult; applicationId: string | null }
+  /**
    * Кабинет (админ/клиент/собственник): section — раздел, id — выбранная
    * карточка внутри раздела (заявка), чтобы F5 не сбрасывал выбор.
    */
   | { name: "cabinet"; section: string | null; id: string | null };
+
+export type PaymentReturnResult = "success" | "fail";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Ключ, под которым в history.state лежит глубина навигации внутри приложения. */
 const DEPTH_KEY = "uradresDepth";
@@ -72,6 +81,15 @@ export function parseRoute(pathname: string, search = ""): Route {
   if (head === "verify" && rest.length) {
     return { name: "verify", token: rest.join("/") };
   }
+  if (head === "payment" && (rest[0] === "success" || rest[0] === "fail")) {
+    // id заявки проверяем по формату: он уходит в путь кабинета.
+    const applicationId = new URLSearchParams(search).get("application");
+    return {
+      name: "paymentReturn",
+      result: rest[0],
+      applicationId: applicationId && UUID_RE.test(applicationId) ? applicationId : null,
+    };
+  }
   if (head === "legal" && rest.length) {
     const doc = LEGAL_DOCS.find((item) => item === rest[0]);
     if (doc) return { name: "legal", doc };
@@ -105,6 +123,10 @@ export function routeToPath(route: Route): string {
       return `/invite/${encodeURIComponent(route.token)}`;
     case "verify":
       return `/verify/${encodeURIComponent(route.token)}`;
+    case "paymentReturn":
+      return route.applicationId
+        ? `/payment/${route.result}?application=${encodeURIComponent(route.applicationId)}`
+        : `/payment/${route.result}`;
     case "cabinet": {
       if (!route.section) return "/app";
       const base = `/app/${encodeURIComponent(route.section)}`;
