@@ -27,7 +27,8 @@
 
 - `main` = прод. Оплата на проде — по-прежнему `cdek_pay` (фактически выключена:
   ключей нет, initiate → 503).
-- Ветка **`feat/tbank-acquiring`** — интернет-эквайринг Т-Банка, в прод не выкатывалась:
+- Ветка **`feat/tbank-acquiring`** (в GitHub с 2026-09-21) — интернет-эквайринг Т-Банка,
+  в `main` не слита и в прод не выкатывалась:
   - `f9df82e` бэкенд (Init/GetState/Cancel, уведомления, сверка, возвраты);
   - `6ee2d13` веб-кнопка «Оплатить» по руководству НСПК + страница возврата из банка;
   - `722efe8` мобайл: оплата во встроенной вкладке (url_launcher);
@@ -108,6 +109,19 @@
   POST `/api/v1/auth/bootstrap-admin`, затем POST `/api/v1/demo/seed` `{"password":"demo12345"}`.
 - Локальный бэкенд отдаёт только `/` и `/invite`; глубокие пути на проде обслуживает
   nginx `try_files`.
+
+## Локальная разработка (macOS)
+
+- С 2026-09-21 работа переезжает на MacBook. Инструменты — через Homebrew:
+  `brew install python@3.12 postgresql@16 node`, `brew services start postgresql@16`.
+- База под дефолтный `DATABASE_URL` (`postgres:postgres@localhost:5432/legal_address`):
+  `createuser -s postgres && createdb -O postgres legal_address`, затем
+  `python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt` и
+  `.venv/bin/alembic upgrade head`. Тесты: `.venv/bin/pytest -q`.
+- Для смоуков — отдельные базы (`createdb -O postgres tbank_smoke`), команды те же,
+  что в разделе «Как проверять».
+- GitHub: пуш по SSH-алиасу `github-uradres` (ключ `~/.ssh/uradres-github`), если его
+  публичная часть добавлена в GitHub; иначе — HTTPS со входом в GitHub.
 
 ## Как проверять
 
