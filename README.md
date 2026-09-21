@@ -71,9 +71,12 @@ APP_ENV=production python -c "from app.config import Settings; Settings()"  # у
 
 ```bash
 cp .env.production.example .env.production   # заполнить реальными значениями
-docker compose --env-file .env.production up -d --build
-docker compose run --rm backend alembic upgrade head
+docker compose --env-file .env.production build
+docker compose --env-file .env.production run --rm backend alembic upgrade head   # до переключения
+docker compose --env-file .env.production up -d
 ```
+
+Или всё разом — `bash scripts/deploy.sh`.
 
 Подробности — в `docs/runbook.md` и `docs/deploy-selectel.md`.
 

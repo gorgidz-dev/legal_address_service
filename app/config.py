@@ -97,6 +97,34 @@ class Settings(BaseSettings):
     cdek_circuit_failure_threshold: int = 3
     cdek_circuit_recovery_seconds: float = 30.0
 
+    # Кто принимает оплату физлиц в POST /payments/initiate. CDEK Pay так и не
+    # включался; боевой провайдер — Т-Банк (PAYMENT_PROVIDER=tbank).
+    payment_provider: Literal["cdek_pay", "tbank"] = "cdek_pay"
+
+    # Интернет-эквайринг Т-Банка. Пустые ключ/пароль ⇒ интеграция выключена
+    # (initiate и приём уведомлений отвечают 503). Разбор API и грабли —
+    # docs/tbank-acquiring.md. API живёт на tinkoff.ru и для боевого, и для
+    # DEMO-терминала; rest-api-test требует белого списка IP и нам не нужен.
+    tbank_terminal_key: str = ""
+    tbank_password: str = ""
+    tbank_base_url: str = "https://securepay.tinkoff.ru/v2"
+    # Пусто → {public_base_url}/api/v1/webhooks/tbank/notification. Тот же адрес
+    # обязан стоять в настройках терминала в ЛК: уведомления о фискализации
+    # банк шлёт только туда, игнорируя переданный в Init.
+    tbank_notification_url: str = ""
+    # Куда банк вернёт покупателя после оплаты. Пусто → на сайт с ?payment=...
+    tbank_success_url: str = ""
+    tbank_fail_url: str = ""
+    # Срок жизни ссылки на оплату (RedirectDueDate). Документация: от 1 минуты до 90 дней.
+    tbank_link_ttl_minutes: int = 24 * 60
+    # 10 с, а не 15: в отмене и возврате запрос идёт под блокировкой строки платежа.
+    tbank_request_timeout_seconds: float = 10.0
+    tbank_circuit_failure_threshold: int = 3
+    tbank_circuit_recovery_seconds: float = 30.0
+    # DEMO-терминал на проде: платить им могут только эти адреса (через запятую)
+    # и админы. Иначе настоящий клиент «оплатил» бы заявку ненастоящими деньгами.
+    tbank_test_payer_emails: str = ""
+
     # Web Push (VAPID). Если ключи пустые — push выключен (subscribe возвращает
     # 503, существующие подписки игнорируются при попытке отправки).
     # Сгенерировать новые: см. scripts/gen_vapid_keys.py.

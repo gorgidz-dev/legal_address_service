@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-"""Платёж за заявку через CDEK Pay (СБП для физлиц, в будущем — другие)."""
+"""Платёж за заявку: эквайринг Т-Банка или CDEK Pay (физлица), счёт (юрлица)."""
 from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index, Text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,8 +21,15 @@ class Payment(UUIDPKMixin, TimestampMixin, Base):
             name="status_valid",
         ),
         CheckConstraint("payer_type IN ('individual','juridical')", name="payer_type_valid"),
-        CheckConstraint("provider IN ('cdek_pay', 'manual_invoice')", name="provider_valid"),
+        CheckConstraint(
+            "provider IN ('cdek_pay', 'manual_invoice', 'tbank')", name="provider_valid"
+        ),
         CheckConstraint("amount_kopeks > 0", name="amount_positive"),
+        # Вернуть больше, чем заплатили, нельзя.
+        CheckConstraint(
+            "refunded_kopeks >= 0 AND refunded_kopeks <= amount_kopeks",
+            name="refunded_non_negative",
+        ),
         Index("ix_payments_application_id", "application_id"),
         Index("ix_payments_status_created", "status", "created_at"),
         Index("ix_payments_cdek_access_key", "cdek_access_key", unique=True),
@@ -31,6 +38,21 @@ class Payment(UUIDPKMixin, TimestampMixin, Base):
             "cdek_payment_id",
             unique=True,
             postgresql_where="cdek_payment_id IS NOT NULL",
+        ),
+        Index(
+            "ux_payments_provider_payment_id",
+            "provider",
+            "provider_payment_id",
+            unique=True,
+            postgresql_where="provider_payment_id IS NOT NULL",
+        ),
+        # Один незавершённый платёж на заявку. Без этого два одновременных
+        # нажатия «Оплатить» создавали два платежа — и клиент мог оплатить дважды.
+        Index(
+            "ux_payments_one_active_per_application",
+            "application_id",
+            unique=True,
+            postgresql_where="status IN ('pending', 'awaiting_user')",
         ),
     )
 
@@ -53,6 +75,33 @@ class Payment(UUIDPKMixin, TimestampMixin, Base):
     cdek_payment_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     qr_link: Mapped[Optional[str]] = mapped_column(Text)
     qr_image_base64: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Общие для провайдеров с внешним идентификатором (Т-Банк). PaymentId банка —
+    # строкой: как число он теряет точность в JS.
+    provider_payment_id: Mapped[Optional[str]] = mapped_column(Text)
+    # Последний сырой статус банка (NEW, CONFIRMED, REFUNDED…) — для поддержки и сверки.
+    provider_status: Mapped[Optional[str]] = mapped_column(Text)
+    # Терминал, на котором создан платёж. После смены DEMO на боевой старые
+    # платежи новому терминалу неизвестны — спрашивать о них банк бессмысленно.
+    provider_account: Mapped[Optional[str]] = mapped_column(Text)
+    payment_url: Mapped[Optional[str]] = mapped_column(Text)
+    # Сколько возвращено — только то, что банк ПОДТВЕРДИЛ.
+    refunded_kopeks: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    # Счётчик наших попыток возврата. Растёт только при НОВОЙ попытке — после
+    # окончательного отказа банка; повтор незавершённой попытки идёт тем же ключом.
+    refund_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    # ExternalRequestId нашего текущего возврата (refund:<id>:<попытка>). NULL —
+    # нашего возврата «в пути» нет; при refund_requested это значит, что возврат
+    # запустили мимо нас (из ЛК Т-Бизнеса). Повтор тем же ключом банк не
+    # исполнит дважды — поэтому незавершённую попытку безопасно отправить снова.
+    refund_key: Mapped[Optional[str]] = mapped_column(Text)
+    # Когда последний раз спрашивали статус у банка (GetState) — чтобы опрос
+    # страницы оплаты раз в 3 секунды не превращался в запрос к банку раз в 3 секунды.
+    provider_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

@@ -207,6 +207,7 @@ ADDRESS_AMENITY_VALUES: tuple[str, ...] = tuple(a.value for a in AddressAmenity)
 class PaymentProvider(str, Enum):
     CDEK_PAY = "cdek_pay"
     MANUAL_INVOICE = "manual_invoice"  # юр.лица: счёт от собственника или маркетплейса
+    TBANK = "tbank"  # интернет-эквайринг Т-Банка: карта, СБП, T-Pay (docs/tbank-acquiring.md)
 
 
 class PaymentPayerType(str, Enum):

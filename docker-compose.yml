@@ -2,9 +2,11 @@
 # TLS терминирует внешний прокси (Caddy/Cloudflare/хостовый nginx) перед портом 8080
 # фронт-контейнера. Если нужен MinIO для S3 локально — раскомментировать секцию.
 #
-# Запуск:
-#   docker compose --env-file .env.production up -d --build
-#   docker compose run --rm backend alembic upgrade head
+# Запуск (миграции — ДО переключения на новый код, иначе новый бэкенд успеет
+# обратиться к колонкам, которых ещё нет; так же делает scripts/deploy.sh):
+#   docker compose --env-file .env.production build
+#   docker compose --env-file .env.production run --rm backend alembic upgrade head
+#   docker compose --env-file .env.production up -d
 #   docker compose run --rm backend python -m scripts.seed_marketplace_demo
 
 services:

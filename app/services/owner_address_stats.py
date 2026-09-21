@@ -6,6 +6,10 @@
 
 Оплаченным считается платёж в статусе `succeeded` — тот же признак, по которому
 заявка переходит дальше по рабочему процессу (см. routers/payments).
+`refund_requested` сюда сознательно не входит: так помечен и возврат «в пути»,
+и оплата, которую покупатель провёл в момент закрытия ссылки и которая
+уходит обратно, — заявка по ней оплаченной не стала. Если возврат банк
+отклонит, платёж вернётся в `succeeded` и снова попадёт в выручку.
 """
 from __future__ import annotations
 
@@ -43,8 +47,12 @@ async def address_stats_for_owner(
             # distinct — иначе заявка с двумя платежами посчиталась бы дважды.
             func.count(func.distinct(Application.id)).label("applications_total"),
             func.count(case((paid, Payment.id))).label("deals_paid"),
+            # За вычетом подтверждённых банком возвратов: после частичного
+            # возврата платёж остаётся succeeded, но выручка уже меньше.
             func.coalesce(
-                func.sum(case((paid, cast(Payment.amount_kopeks, Numeric)))),
+                func.sum(
+                    case((paid, cast(Payment.amount_kopeks - Payment.refunded_kopeks, Numeric)))
+                ),
                 0,
             ).label("revenue_kopeks"),
             func.max(case((paid, Payment.paid_at))).label("last_paid_at"),

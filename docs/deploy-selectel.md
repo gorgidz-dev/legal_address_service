@@ -114,8 +114,8 @@ docker run --rm -v "$PWD":/app -w /app python:3.12-slim sh -c \
 ## 5. Запуск
 
 **Быстрый путь — один скрипт.** Автогенерит `POSTGRES_PASSWORD` и
-`PAYMENT_WEBHOOK_SECRET`, проверяет внешние секреты, собирает, ждёт health,
-прогоняет миграции:
+`PAYMENT_WEBHOOK_SECRET`, проверяет внешние секреты, собирает, прогоняет
+миграции новым образом, переключает контейнеры и ждёт health:
 
 ```bash
 bash scripts/deploy.sh
@@ -124,11 +124,13 @@ bash scripts/deploy.sh
 Если скрипт ругается на незаполненный секрет — впиши его в `.env.production`
 и запусти снова (скрипт идемпотентен).
 
-**Ручной путь** (то же самое по шагам):
+**Ручной путь** (то же самое по шагам; миграции — до `up`, иначе новый код
+успеет обратиться к ещё не созданным колонкам):
 
 ```bash
-docker compose --env-file .env.production up -d --build
+docker compose --env-file .env.production build
 docker compose --env-file .env.production run --rm backend alembic upgrade head
+docker compose --env-file .env.production up -d
 ```
 
 Первый админ создаётся через сайт (см. ниже), демо-данные — по желанию:
@@ -182,9 +184,13 @@ find /var/backups -name 'uradres-*.sql.gz' -mtime +14 -delete
 ```bash
 cd legal_address_service
 git pull
-docker compose --env-file .env.production up -d --build
-docker compose --env-file .env.production run --rm backend alembic upgrade head
+bash scripts/deploy.sh
 ```
+
+Скрипт сначала применяет миграции новым образом и только потом переключает
+контейнеры. Миграции должны быть аддитивными (новые колонки nullable или с
+умолчанием) — тогда старый код, работающий до переключения, их не замечает.
+Удалить или переименовать колонку — в два релиза.
 
 ---
 

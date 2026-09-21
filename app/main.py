@@ -125,6 +125,8 @@ def _is_public_path(path: str, method: str) -> bool:
     if path in {
         f"{API_PREFIX}/webhooks/cdek_pay/payment",
         f"{API_PREFIX}/webhooks/cdek_pay/refund",
+        # Защита — подпись Token и сверка TerminalKey внутри обработчика.
+        f"{API_PREFIX}/webhooks/tbank/notification",
     }:
         return True
     if path == f"{API_PREFIX}/marketplace/addresses" and method == "GET":

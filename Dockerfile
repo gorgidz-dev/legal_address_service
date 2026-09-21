@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.6
 # Backend FastAPI image. Минимальный prod-образ: Python 3.12-slim + uvicorn.
-# Миграции в этом образе не запускаются автоматически — отдельная команда:
-#   docker compose run --rm backend alembic upgrade head
+# Миграции в этом образе не запускаются автоматически — отдельная команда,
+# до переключения контейнеров (см. scripts/deploy.sh):
+#   docker compose --env-file .env.production run --rm backend alembic upgrade head
 
 FROM python:3.12-slim AS base
 

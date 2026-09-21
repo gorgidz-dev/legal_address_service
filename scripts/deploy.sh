@@ -6,7 +6,8 @@
 #   1. Проверяет .env.production.
 #   2. Автогенерит POSTGRES_PASSWORD и PAYMENT_WEBHOOK_SECRET, если плейсхолдеры.
 #   3. Проверяет, что внешние секреты (DaData / S3 / Yandex) заполнены.
-#   4. docker compose up --build, ждёт health бэка, прогоняет миграции.
+#   4. Собирает образы и прогоняет миграции НОВЫМ образом — до переключения
+#      контейнеров; затем up и ждёт health бэка.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -48,9 +49,21 @@ if [ "$missing" -ne 0 ]; then
   exit 1
 fi
 
-# --- 3. Сборка и запуск ---
-echo "==> docker compose up --build"
-$COMPOSE up -d --build
+# --- 3. Сборка, миграции, запуск ---
+# Миграции — ДО переключения контейнеров. Иначе новый код стартует раньше
+# схемы: ORM читает колонки, которых ещё нет, и все запросы к изменённым
+# таблицам падают UndefinedColumn, пока миграция не догонит (найдено ревизией
+# при добавлении колонок платежей Т-Банка). Работает, пока миграции аддитивные
+# (новые колонки nullable/с умолчанием): старый код их не замечает. Удалять и
+# переименовывать колонки — в два деплоя (сначала код перестаёт их читать).
+echo "==> docker compose build"
+$COMPOSE build
+
+echo "==> alembic upgrade head (новым образом, до переключения)"
+$COMPOSE run --rm backend alembic upgrade head
+
+echo "==> docker compose up"
+$COMPOSE up -d
 
 # --- 4. Ждём health бэкенда ---
 echo "==> жду backend /health"
@@ -65,10 +78,6 @@ if [ "$ok" -ne 1 ]; then
   echo "✗ backend не поднялся. Логи:  $COMPOSE logs backend"
   exit 1
 fi
-
-# --- 5. Миграции ---
-echo "==> alembic upgrade head"
-$COMPOSE run --rm backend alembic upgrade head
 
 echo
 echo "==> статус"

@@ -4,15 +4,17 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, utcnow
 from app.config import settings
 from app.database import get_db
 from app.models.incoming_webhook import IncomingWebhook
@@ -35,6 +37,14 @@ from app.services.cdek_pay import (
     CdekPayNotConfigured,
     get_cdek_pay_service,
     verify_callback_signature,
+)
+from app.services.tbank_acquiring import TBankError, TBankNotConfigured, get_tbank_service
+from app.services.tbank_payments import (
+    apply_bank_state,
+    find_payment_for_notification,
+    lock_payment,
+    notification_event_id,
+    sanitize_for_storage,
 )
 from app.services.webhooks import (
     SIGNATURE_HEADER,
@@ -273,14 +283,16 @@ async def inbound_payment_webhook(
 # ============================================================
 
 
-async def _read_cdek_body(request: Request) -> tuple[bytes, dict[str, Any]]:
+async def _read_json_body(request: Request) -> tuple[bytes, dict[str, Any]]:
     raw = await request.body()
     try:
         body = json.loads(raw or b"{}")
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        # UnicodeDecodeError — не подкласс JSONDecodeError: без него невалидный
+        # UTF-8 в теле давал бы 500 вместо честного 422.
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": "bad_json", "message": f"Invalid JSON: {e}"},
+            detail={"code": "bad_json", "message": "Тело запроса — не JSON в UTF-8"},
         ) from e
     if not isinstance(body, dict):
         raise HTTPException(
@@ -316,7 +328,7 @@ async def _store_idempotent(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        log.info("Replayed CDEK webhook %s/%s — already stored", provider, external_id)
+        log.info("Replayed webhook %s/%s — already stored", provider, external_id)
         return False
     return True
 
@@ -334,7 +346,7 @@ async def cdek_pay_payment_callback(
     except CdekPayNotConfigured as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
 
-    _raw, body = await _read_cdek_body(request)
+    _raw, body = await _read_json_body(request)
     payment_section = body.get("payment") or {}
     signature = body.get("signature") or ""
     if not isinstance(payment_section, dict) or not signature:
@@ -376,7 +388,7 @@ async def cdek_pay_refund_callback(
     except CdekPayNotConfigured as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
 
-    _raw, body = await _read_cdek_body(request)
+    _raw, body = await _read_json_body(request)
     payment_section = body.get("payment") or {}
     signature = body.get("signature") or ""
     if not isinstance(payment_section, dict) or not signature:
@@ -403,3 +415,149 @@ async def cdek_pay_refund_callback(
 
     await handle_cdek_pay_refund_callback(db=db, body=body)
     return {"received": True, "replayed": False}
+
+
+# ============================================================
+# Т-Банк: HTTP-уведомления о статусе платежа
+# ============================================================
+
+# Уведомления, которые не про статус нашего платежа: фискализация (Status
+# всегда RECEIPT), привязка счёта по СБП и карты. Храним для аудита, платёж
+# не трогаем.
+_TBANK_SERVICE_NOTIFICATIONS = frozenset({"RECEIPT"})
+_TBANK_SERVICE_TYPES = frozenset({"LINKACCOUNT", "LINKCARD"})
+_DIGITS_RE = re.compile(r"^[0-9]{1,30}$")
+
+
+def _ok() -> PlainTextResponse:
+    # Ровно «OK» латиницей, без тегов и JSON — иначе банк повторяет уведомление
+    # раз в час сутки и раз в день месяц. (На странице тест-кейсов «ОК» набрано
+    # кириллицей — оттуда не копировать.)
+    return PlainTextResponse("OK")
+
+
+async def _already_stored(db: AsyncSession, *, provider: str, external_id: str) -> bool:
+    stmt = select(IncomingWebhook.id).where(
+        IncomingWebhook.provider == provider, IncomingWebhook.external_id == external_id
+    )
+    return (await db.execute(stmt)).scalar_one_or_none() is not None
+
+
+@router.post(
+    "/tbank/notification",
+    summary="Т-Банк — уведомление о статусе платежа",
+    response_class=PlainTextResponse,
+)
+async def tbank_notification(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> PlainTextResponse:
+    """Приёмник уведомлений интернет-эквайринга Т-Банка.
+
+    Уведомление — только СИГНАЛ. Его тело для решений не используется: подпись
+    Т-Банка склеивает значения без разделителей и не фиксирует набор полей,
+    поэтому тело можно подделать при верной подписи (сдвиг границ, лишнее или
+    переименованное поле — найдено ревизией). Решение принимается по GetState:
+    его ответ приходит по TLS напрямую от банка.
+
+    Подпись и TerminalKey всё равно проверяем — это дешёвый фильтр мусора до
+    похода в банк. Порядок: найти платёж → взять блокировку строки → GetState →
+    применить → записать уведомление в журнал → commit. Если банк не ответил —
+    503: банк повторит уведомление, а журнал не запишется (откат), и повтор
+    обработается заново.
+    """
+    try:
+        service = get_tbank_service()
+    except TBankNotConfigured as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+
+    _raw, body = await _read_json_body(request)
+    if body.get("TerminalKey") != service.terminal_key:
+        log.warning("T-Bank notification for foreign terminal %r", body.get("TerminalKey"))
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Чужой терминал")
+    if not service.verify_notification(body):
+        log.warning(
+            "T-Bank notification with bad Token: PaymentId=%r Status=%r",
+            body.get("PaymentId"), body.get("Status"),
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Подпись не совпала")
+
+    status_value = str(body.get("Status") or "")[:40]
+    stored_body = sanitize_for_storage(body)
+    event_id = notification_event_id(body)
+
+    async def journal(event_type: str) -> None:
+        if await _store_idempotent(
+            db, provider="tbank", external_id=event_id, event_type=event_type, body=stored_body
+        ):
+            await db.commit()
+
+    if (
+        status_value in _TBANK_SERVICE_NOTIFICATIONS
+        or str(body.get("NotificationType") or "") in _TBANK_SERVICE_TYPES
+    ):
+        await journal(status_value or str(body.get("NotificationType"))[:40])
+        return _ok()
+
+    raw_pid = body.get("PaymentId")
+    provider_payment_id = (
+        str(raw_pid) if not isinstance(raw_pid, bool) and _DIGITS_RE.match(str(raw_pid)) else None
+    )
+    order_id = body.get("OrderId")
+    payment = await find_payment_for_notification(
+        db,
+        provider_payment_id=provider_payment_id,
+        order_id=None if order_id is None else str(order_id),
+    )
+    if payment is None:
+        # Не наш заказ (например, тест с другого стенда на том же терминале).
+        # OK, чтобы банк не повторял месяц; тело — в журнале.
+        log.warning("T-Bank notification for unknown payment: PaymentId=%r", raw_pid)
+        await journal(f"unknown:{status_value}")
+        return _ok()
+
+    if await _already_stored(db, provider="tbank", external_id=event_id):
+        return _ok()  # повтор уже обработанного уведомления — лишний раз банк не спрашиваем
+
+    bank_id = payment.provider_payment_id or provider_payment_id
+    if not bank_id:
+        await journal(f"no_payment_id:{status_value}")
+        return _ok()
+
+    locked = await lock_payment(db, payment.id)
+    if locked is None:
+        return _ok()
+    try:
+        state = await service.get_state(payment_id=bank_id)
+    except TBankError as e:
+        # Состояние не узнали — не делаем вид, что обработали: банк повторит.
+        log.warning("T-Bank GetState failed on notification for %s: %s", payment.id, e)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Т-Банк не ответил, повторите позже"
+        ) from e
+
+    if locked.provider_payment_id is None:
+        # PaymentId взят из тела уведомления (Init не успел сохранить свой) —
+        # убеждаемся у банка, что это платёж именно этого заказа. Иначе сдвигом
+        # границ в теле (цифры из Pan в PaymentId) можно было бы подставить
+        # состояние другого нашего платежа.
+        if state.order_id != str(locked.id):
+            log.warning(
+                "T-Bank GetState order mismatch: payment=%s bank_id=%s order=%r",
+                locked.id, bank_id, state.order_id,
+            )
+            await db.rollback()
+            await journal(f"order_mismatch:{status_value}")
+            return _ok()
+        locked.provider_payment_id = str(state.payment_id)
+    await apply_bank_state(
+        db, payment=locked, status=state.status, amount_kopeks=state.amount_kopeks
+    )
+    locked.provider_checked_at = utcnow()
+    locked.last_callback_payload = stored_body
+    if not await _store_idempotent(
+        db, provider="tbank", external_id=event_id, event_type=status_value, body=stored_body
+    ):
+        return _ok()  # параллельный повтор успел раньше — его изменения и остаются
+    await db.commit()
+    return _ok()

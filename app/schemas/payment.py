@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-"""Платёжные схемы (CDEK Pay SBP-flow для физлиц)."""
+"""Платёжные схемы: эквайринг Т-Банка / CDEK Pay (физлица), счёт (юрлица)."""
 from datetime import datetime
 from typing import Any, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.contacts import OptionalEmail, OptionalPhone
 from app.enums import PaymentAttachmentKind, PaymentPayerType, PaymentStatus
@@ -35,11 +35,24 @@ class PaymentRead(BaseModel):
     cdek_access_key: Optional[str] = None
     cdek_order_id: Optional[int] = None
     cdek_payment_id: Optional[int] = None
+    # Т-Банк: ссылка на платёжную форму (карта, СБП, T-Pay) — фронт и приложение
+    # открывают её, QR-код рисует сам банк.
+    payment_url: Optional[str] = None
+    provider_payment_id: Optional[str] = None
+    provider_status: Optional[str] = None
+    refunded_kopeks: int = 0
     expires_at: Optional[datetime] = None
     paid_at: Optional[datetime] = None
     refunded_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("refunded_kopeks", mode="before")
+    @classmethod
+    def _refunded_default(cls, value: Optional[int]) -> int:
+        # Умолчание колонки ставит база при вставке; у ещё не сохранённого
+        # объекта атрибут None, а в API должно быть число.
+        return 0 if value is None else value
 
 
 class PaymentRefundRequest(BaseModel):
