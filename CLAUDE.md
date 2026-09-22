@@ -112,14 +112,24 @@
 
 ## Локальная разработка (macOS)
 
-- С 2026-09-21 работа переезжает на MacBook. Инструменты — через Homebrew:
-  `brew install python@3.12 postgresql@16 node`, `brew services start postgresql@16`.
-- База под дефолтный `DATABASE_URL` (`postgres:postgres@localhost:5432/legal_address`):
-  `createuser -s postgres && createdb -O postgres legal_address`, затем
-  `python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt` и
-  `.venv/bin/alembic upgrade head`. Тесты: `.venv/bin/pytest -q`.
-- Для смоуков — отдельные базы (`createdb -O postgres tbank_smoke`), команды те же,
-  что в разделе «Как проверять».
+- С 2026-09-21 работа идёт на MacBook. **Homebrew и прав администратора нет** — всё в
+  пользовательском пространстве: `uv` в `~/.local/bin` (`export PATH="$HOME/.local/bin:$PATH"`),
+  Node 22 в `~/development/node22/bin`, Docker = Colima (`colima start --vm-type vz`).
+- Системный `git`/`python3` (шимы xcrun) падают на «not agreed to the Xcode license» —
+  использовать `/Applications/Xcode.app/Contents/Developer/usr/bin/git` либо один раз
+  выполнить в Терминале `sudo xcodebuild -license accept`.
+- Python: `uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt`.
+- Postgres — контейнер `uradres-pg` (образ `postgres:16`, порт **5433**, чтобы не мешать
+  `nearby-db` на 5432): `docker run -d --name uradres-pg -e POSTGRES_PASSWORD=postgres
+  -e POSTGRES_DB=legal_address -p 5433:5432 postgres:16`; повторно — `docker start uradres-pg`.
+  В `.env` прописан `DATABASE_URL=...@localhost:5433/legal_address`. Смоук-базы:
+  `docker exec uradres-pg createdb -U postgres tbank_smoke` (в `DATABASE_URL` менять имя базы).
+- Миграции `.venv/bin/alembic upgrade head`. Тесты — **только** `.venv/bin/python -m pytest -q`
+  (голый `pytest` не видит пакет `app`).
+- **Т-Банк с этого Mac недоступен**: выход в интернет через Германию (VPN), банк режет
+  не-российские IP (таймаут даже на `www.tbank.ru`). Для живых смоуков — либо выключить VPN,
+  либо SOCKS через прод: `ssh -N -D 1080 uradres-prod` и `HTTPS_PROXY=socks5://127.0.0.1:1080`
+  (нужен пакет `socksio`; трогает только сеть сервера).
 - GitHub: пуш по SSH-алиасу `github-uradres` (ключ `~/.ssh/uradres-github`), если его
   публичная часть добавлена в GitHub; иначе — HTTPS со входом в GitHub.
 
