@@ -93,6 +93,8 @@
 ## Документы в `docs/`
 
 - `tbank-acquiring.md` — эквайринг, чеки, решения владельца (§9–§10).
+- `accountant-question-settlements.md` — вопрос бухгалтеру: агент или своя услуга, чеки,
+  НДС, документы на выплаты собственникам (ответа пока нет).
 - `roadmap-2026-07-feedback.md` — 18 правок заказчика и этапы.
 - `runbook.md`, `deploy-selectel.md`, `security-checklist.md`, `mobile-api.md`, `design.md`.
 
