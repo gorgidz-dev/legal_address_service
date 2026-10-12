@@ -128,3 +128,6 @@ class Application(UUIDPKMixin, TimestampMixin, Base):
     # регистрации — от неё строится прогноз и напоминание «пора сверить».
     registration_expected_on: Mapped[Optional[date]] = mapped_column(Date)
     ifns_receipt_uploaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Что разобрано из PDF расписки (app/services/ifns_receipt.py): название,
+    # ИНН/ОГРН, номер, даты. Название — для сверки первичной регистрации.
+    ifns_receipt_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB(none_as_null=True))

@@ -13,15 +13,20 @@ from app.validators import BIK, CorrAccount, INNLegal, SettlementAccount
 PayoutStatus = Literal["awaiting_registration", "due", "paid", "cancelled"]
 
 
-class RegistrationInnRequest(BaseModel):
-    """ИНН компании, зарегистрированной по адресу заявки."""
-    inn: INNLegal
+class RegistrationLookupRequest(BaseModel):
+    """Сверка регистрации. Смена адреса — ИНН берётся из заявки (поля не нужны);
+    первичная — поиск по `name` (по умолчанию название из заявки) или проверка
+    выбранного кандидата по `inn`."""
+    inn: Optional[INNLegal] = None
+    name: Optional[str] = Field(default=None, max_length=300)
 
 
 class RegistrationConfirmRequest(BaseModel):
-    inn: INNLegal
-    # Подсказка «адрес не совпал» — эвристика; если админ сверил адрес вручную и
-    # это тот же адрес, он подтверждает с этой отметкой (она пишется в снимок).
+    # Смена адреса — можно не передавать (ИНН из заявки, другой не примем);
+    # первичная — ИНН выбранного кандидата.
+    inn: Optional[INNLegal] = None
+    # Подсказки «название/адрес не совпали» — эвристика; если админ сверил
+    # вручную, он подтверждает с этой отметкой (она пишется в снимок).
     accept_address_mismatch: bool = False
 
 
@@ -35,14 +40,18 @@ class RegistrationCheckRead(BaseModel):
     legal_address: Optional[str] = None
     our_address: Optional[str] = None
     address_matches: Optional[bool] = None
+    expected_name: Optional[str] = None
+    name_matches: Optional[bool] = None
     warnings: list[str] = []
 
 
-class ApplicationRegistrationRead(BaseModel):
-    application_id: UUID
-    registration_inn: Optional[str] = None
-    registration_inn_submitted_at: Optional[datetime] = None
-    registration_confirmed_at: Optional[datetime] = None
+class RegistrationLookupRead(BaseModel):
+    mode: Literal["inn", "name"]
+    query: Optional[str] = None
+    candidates: list[RegistrationCheckRead] = []
+    # Смена адреса — ИНН компании из заявки; первичная — название из заявки.
+    expected_inn: Optional[str] = None
+    expected_name: Optional[str] = None
 
 
 class PayoutMarkPaidRequest(BaseModel):

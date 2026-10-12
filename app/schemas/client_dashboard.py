@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -66,6 +66,7 @@ class ClientApplicationRead(BaseModel):
     # Статус-трекер: дата регистрации из расписки ИФНС и когда расписка загружена.
     registration_expected_on: Optional[date] = None
     ifns_receipt_uploaded_at: Optional[datetime] = None
+    ifns_receipt: Optional[dict[str, Any]] = None
 
     created_at: datetime
     updated_at: datetime

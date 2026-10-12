@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -74,6 +74,8 @@ class OwnerApplicationRead(BaseModel):
     # от этого зависит выплата собственнику. Сам файл расписки ему не отдаётся.
     registration_expected_on: Optional[date] = None
     ifns_receipt_uploaded_at: Optional[datetime] = None
+    # Что разобрано из расписки: название, ОГРН, номер, инспекция, даты.
+    ifns_receipt: Optional[dict[str, Any]] = None
     registration_confirmed_at: Optional[datetime] = None
 
     created_at: datetime

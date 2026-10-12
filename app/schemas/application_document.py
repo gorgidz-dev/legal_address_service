@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -28,11 +29,26 @@ class ApplicationDocumentUploadResult(BaseModel):
     document: ApplicationDocumentRead
 
 
+class IfnsReceiptDataRead(BaseModel):
+    """Что найдено в PDF расписки ИФНС (app/services/ifns_receipt.py)."""
+    has_text: bool = True
+    looks_like_receipt: bool = False
+    expected_on: Optional[date] = None
+    submitted_on: Optional[date] = None
+    company_name: Optional[str] = None
+    inn: Optional[str] = None
+    ogrn: Optional[str] = None
+    number: Optional[str] = None
+    form: Optional[str] = None
+    ifns: Optional[str] = None
+
+
 class IfnsReceiptUploadResult(BaseModel):
     """Ответ на загрузку расписки ИФНС: что теперь показывает трекер."""
     application_id: UUID
     registration_expected_on: date
     ifns_receipt_uploaded_at: datetime
+    receipt: IfnsReceiptDataRead
     document: ApplicationDocumentRead
 
 

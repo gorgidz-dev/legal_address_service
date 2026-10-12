@@ -8,7 +8,7 @@ discriminated union по полю `type`. Это даёт чистую OpenAPI-�
 понятную автогенератору TypeScript-клиента.
 """
 from datetime import date, datetime
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -83,6 +83,7 @@ class ApplicationRead(BaseModel):
     # Статус-трекер: дата регистрации из расписки ИФНС.
     registration_expected_on: Optional[date] = None
     ifns_receipt_uploaded_at: Optional[datetime] = None
+    ifns_receipt: Optional[dict[str, Any]] = Field(default=None, validation_alias="ifns_receipt_data")
     id: UUID
     type: ApplicationType
     status: ApplicationStatus

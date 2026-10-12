@@ -11,11 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.enums import (
     ApplicationEventKind,
     ApplicationStatus,
+    ApplicationType,
     DocumentFileKind,
     NotificationAudience,
     UserRole,
 )
 from app.models.application import Application
+from app.models.client import Client
 from app.models.stored_file import StoredFile
 from app.models.user import User
 from app.schemas.application_document import (
@@ -27,6 +29,7 @@ from app.services.application_workflow import next_actions_for_status, workflow_
 from app.services.application_sla import apply_sla
 from app.services.notification_events import create_application_event
 from app.services.chat_attachments import content_type_for, ensure_within_limits
+from app.services.ifns_receipt import ReceiptData, parse_receipt_pdf
 from app.services.storage import create_stored_file_record
 
 
@@ -57,15 +60,15 @@ IFNS_RECEIPT_STATUSES = {
     ApplicationStatus.READY_FOR_CLIENT.value,
     ApplicationStatus.COMPLETED.value,
 }
-#: Расписка — скан или фото: только такие форматы.
-IFNS_RECEIPT_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff"}
+#: Расписка — PDF, который ИФНС присылает клиенту на почту (так в 99% случаев,
+#: решение владельца 13.10.2026): из него читается текст, и собственник получает
+#: точный документ, а не фото. Скан/фото не принимаем.
+IFNS_RECEIPT_EXTENSIONS = {".pdf"}
 #: Дата регистрации из расписки: ИФНС регистрирует за несколько рабочих дней.
 #: Дальше месяца вперёд — почти наверняка опечатка; раньше трёх месяцев назад —
 #: тоже (такую расписку загружать уже незачем).
 IFNS_DATE_MAX_AHEAD_DAYS = 30
 IFNS_DATE_MAX_BEHIND_DAYS = 90
-#: Расписка с персональными данными клиента собственнику не нужна.
-OWNER_HIDDEN_KINDS = {DocumentFileKind.IFNS_RECEIPT.value}
 #: «Сегодня» для дат из расписки — по Москве (сервер живёт в UTC).
 _MOSCOW = timezone(timedelta(hours=3))
 
@@ -230,8 +233,6 @@ async def list_application_documents(
     application = await load_application_for_documents(db, application_id)
     ensure_application_document_access(application=application, user=user, for_download=True)
     kinds = [kind.value for kind in DocumentFileKind]
-    if _role_for_user(user) == UserRole.OWNER:
-        kinds = [kind for kind in kinds if kind not in OWNER_HIDDEN_KINDS]
     result = await db.execute(
         select(StoredFile)
         .where(
@@ -289,9 +290,73 @@ async def get_application_document(
         DocumentFileKind(file_record.kind)
     except ValueError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ заявки не найден") from e
-    if file_record.kind in OWNER_HIDDEN_KINDS and _role_for_user(user) == UserRole.OWNER:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ заявки не найден")
     return file_record
+
+
+def read_ifns_receipt(file_content: bytes, original_filename: str) -> ReceiptData:
+    """Проверить, что это PDF расписки из письма ИФНС, и разобрать его.
+
+    PDF без текста — скан или фото: такой не принимаем, просим файл из письма
+    (решение владельца 13.10.2026) — из него и собственник получает точный
+    документ, и данные читаются без ручного ввода.
+    """
+    if Path(original_filename or "").suffix.lower() not in IFNS_RECEIPT_EXTENSIONS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Загрузите PDF-файл расписки из письма ИФНС — именно его, без сканов и фото.",
+        )
+    ensure_within_limits(content=file_content, original_filename=original_filename)
+    receipt = parse_receipt_pdf(file_content)
+    if not receipt.has_text:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "В файле нет текста — похоже, это скан или фото. Загрузите PDF расписки из письма ИФНС.",
+        )
+    return receipt
+
+
+def ensure_client_can_add_receipt(application: Application, user: User | object) -> None:
+    if _role_for_user(user) != UserRole.CLIENT or application.created_by != getattr(user, "id", None):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Application {application.id} не найдена")
+    if application.status not in IFNS_RECEIPT_STATUSES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Расписку загружают после получения документов и подачи их в ИФНС.",
+        )
+    if application.registration_confirmed_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Регистрация уже подтверждена — расписка не нужна.")
+
+
+async def ensure_receipt_is_for_this_company(
+    db: AsyncSession, application: Application, receipt: ReceiptData
+) -> None:
+    """Смена адреса: компания известна — расписка с чужим ОГРН/ИНН почти наверняка
+    не тот файл. Первичная регистрация сверяется по названию позже, при проверке
+    регистрации (название в расписке и в заявке могут законно отличаться)."""
+    if application.type != ApplicationType.ADDRESS_CHANGE.value or not application.client_id:
+        return
+    client = await db.get(Client, application.client_id)
+    if client is None:
+        return
+    if (receipt.ogrn and client.ogrn and receipt.ogrn != client.ogrn) or (
+        receipt.inn and client.inn and receipt.inn != client.inn
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"В расписке другая компания (ОГРН {receipt.ogrn or '—'}, ИНН {receipt.inn or '—'}), "
+            f"а по заявке меняет адрес {client.short_name} (ОГРН {client.ogrn or '—'}). Проверьте файл.",
+        )
+
+
+async def preview_ifns_receipt(
+    *, db: AsyncSession, application_id: UUID, file_content: bytes, original_filename: str, user: User | object
+) -> ReceiptData:
+    """Что нашлось в расписке — до сохранения: клиент проверит дату и название."""
+    application = await load_application_for_documents(db, application_id)
+    ensure_client_can_add_receipt(application, user)
+    receipt = read_ifns_receipt(file_content, original_filename)
+    await ensure_receipt_is_for_this_company(db, application, receipt)
+    return receipt
 
 
 async def upload_ifns_receipt(
@@ -310,22 +375,9 @@ async def upload_ifns_receipt(
     трекер берёт последнюю. После подтверждения регистрации — уже незачем.
     """
     application = await load_application_for_documents(db, application_id)
-    if _role_for_user(user) != UserRole.CLIENT or application.created_by != getattr(user, "id", None):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Application {application_id} не найдена")
-    if application.status not in IFNS_RECEIPT_STATUSES:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Расписку загружают после получения документов и подачи их в ИФНС.",
-        )
-    if application.registration_confirmed_at is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Регистрация уже подтверждена — расписка не нужна.")
-    suffix = Path(original_filename or "").suffix.lower()
-    if suffix not in IFNS_RECEIPT_EXTENSIONS:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Расписку загрузите сканом или фото: PDF, JPG, PNG, WEBP, HEIC или TIFF.",
-        )
-    ensure_within_limits(content=file_content, original_filename=original_filename)
+    ensure_client_can_add_receipt(application, user)
+    receipt = read_ifns_receipt(file_content, original_filename)
+    await ensure_receipt_is_for_this_company(db, application, receipt)
     today = now.astimezone(_MOSCOW).date()
     if expected_registration_on > today + timedelta(days=IFNS_DATE_MAX_AHEAD_DAYS):
         raise HTTPException(
@@ -349,6 +401,7 @@ async def upload_ifns_receipt(
     )
     application.registration_expected_on = expected_registration_on
     application.ifns_receipt_uploaded_at = now
+    application.ifns_receipt_data = receipt.as_json()
     document = application_document_read(file_record)
 
     when = expected_registration_on.strftime("%d.%m.%Y")
@@ -374,16 +427,20 @@ async def upload_ifns_receipt(
         payload=payload,
         created_by=created_by,
     )
-    # Собственнику — без файла (в расписке персональные данные клиента), но с
-    # датой: от регистрации зависит его выплата.
+    # Собственнику — с файлом: по расписке он отслеживает регистрацию и
+    # подтверждает компанию для ФНС (решение владельца 13.10.2026).
     await create_application_event(
         db=db,
         application_id=application.id,
-        kind=ApplicationEventKind.STATUS_CHANGED,
+        kind=ApplicationEventKind.DOCUMENT_UPLOADED,
         audience=NotificationAudience.OWNER,
         title="Клиент подал документы в ИФНС",
-        message=f"Регистрация по вашему адресу ожидается {when}.",
-        payload={"registration_expected_on": expected_registration_on.isoformat()},
+        message=(
+            (f"{receipt.company_name}: " if receipt.company_name else "")
+            + f"регистрация по вашему адресу ожидается {when}. Расписка ИФНС — во вкладке "
+            "«Документы» заявки."
+        ),
+        payload=payload,
         created_by=created_by,
     )
     await db.flush()

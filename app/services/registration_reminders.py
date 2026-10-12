@@ -1,12 +1,13 @@
 """Напоминание «пора сверить регистрацию» по дате из расписки ИФНС.
 
 Статус-трекер (этап 6): клиент загружает расписку с датой предстоящей
-регистрации. Когда дата наступила, а регистрация не подтверждена:
-- админу — «сверьте с ЕГРЮЛ» (от подтверждения зависит выплата собственнику);
-- клиенту первичной регистрации, если он ещё не сообщил ИНН, — «сообщите ИНН».
+регистрации. Когда дата наступила, а регистрация не подтверждена, админу —
+«сверьте с ЕГРЮЛ» (от подтверждения зависит выплата собственнику). От клиента
+больше ничего не нужно: первичная регистрация сверяется по названию и адресу,
+смена адреса — по ИНН из заявки (решение владельца 13.10.2026).
 
-Идемпотентность: на одну дату — одно напоминание каждому. Клиент загрузил
-новую расписку с другой датой — по новой дате напоминания идут заново.
+Идемпотентность: на одну дату — одно напоминание. Клиент загрузил новую
+расписку с другой датой — по новой дате напоминание идёт заново.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enums import ApplicationEventKind, ApplicationType, NotificationAudience
+from app.enums import ApplicationEventKind, NotificationAudience
 from app.models.application import Application
 from app.models.application_event import ApplicationEvent
 from app.services.notification_events import create_application_event
@@ -28,12 +29,10 @@ REMINDER_KEY = "registration_check_due"
 
 
 async def _reminded(db: AsyncSession, application_id: Any) -> set[tuple[str, str]]:
-    """(аудитория, дата), по которым напоминание уже создавалось."""
+    """(аудитория, дата), по которым напоминание уже создавалось (метка в payload)."""
     rows = await db.execute(
         select(ApplicationEvent.audience, ApplicationEvent.payload).where(
             ApplicationEvent.application_id == application_id,
-            # Метка в payload, а не вид события: клиенту напоминание уходит
-            # обычным событием (STAGE_DEADLINE — внутреннее).
             ApplicationEvent.payload.has_key(REMINDER_KEY),
         )
     )
@@ -76,22 +75,6 @@ async def send_registration_check_reminders(*, db: AsyncSession, now: datetime) 
                         f"По расписке ИФНС регистрация ожидалась {when}. Сверьте её с ЕГРЮЛ — "
                         "от подтверждения зависит выплата собственнику."
                     ),
-                    payload=payload,
-                )
-            )
-        needs_inn = (
-            application.type == ApplicationType.INITIAL_REGISTRATION.value
-            and not application.registration_inn
-        )
-        if needs_inn and (NotificationAudience.CLIENT.value, due) not in seen:
-            sent.append(
-                await create_application_event(
-                    db=db,
-                    application_id=application.id,
-                    kind=ApplicationEventKind.STATUS_CHANGED,
-                    audience=NotificationAudience.CLIENT,
-                    title="Компания зарегистрирована?",
-                    message="Сообщите ИНН новой компании в карточке заявки — площадка сверит регистрацию с ЕГРЮЛ.",
                     payload=payload,
                 )
             )

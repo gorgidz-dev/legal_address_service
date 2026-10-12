@@ -115,6 +115,7 @@ async def test_owner_dashboard_includes_only_bound_provider_data_and_owner_event
         registration_confirmed_at=None,
         registration_expected_on=None,
         ifns_receipt_uploaded_at=None,
+        ifns_receipt_data=None,
         sla_due_at=None,
         created_by=uuid4(),
         created_at=now,

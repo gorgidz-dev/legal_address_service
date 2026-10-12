@@ -57,6 +57,7 @@ async def test_client_applications_include_only_owned_applications_with_public_t
         parent_application_id=None,
         registration_expected_on=None,
         ifns_receipt_uploaded_at=None,
+        ifns_receipt_data=None,
         registration_inn=None,
         registration_inn_submitted_at=None,
         registration_confirmed_at=None,

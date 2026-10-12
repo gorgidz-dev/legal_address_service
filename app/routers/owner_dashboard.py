@@ -135,6 +135,7 @@ async def get_owner_dashboard(
                 sla_due_at=application.sla_due_at,
                 registration_expected_on=application.registration_expected_on,
                 ifns_receipt_uploaded_at=application.ifns_receipt_uploaded_at,
+                ifns_receipt=application.ifns_receipt_data,
                 registration_confirmed_at=application.registration_confirmed_at,
                 created_at=application.created_at,
                 updated_at=application.updated_at,

@@ -276,6 +276,31 @@ def addresses_match(ours: str, egrul: Optional[str], room_number: Optional[str] 
     return our.loose <= their_all
 
 
+#: Организационно-правовые формы и служебные слова — в сравнении названий не
+#: участвуют: в заявке «ООО «Ромашка»», в ЕГРЮЛ «ОБЩЕСТВО С ОГРАНИЧЕННОЙ
+#: ОТВЕТСТВЕННОСТЬЮ "РОМАШКА"».
+_OPF_WORDS = frozenset({
+    "ооо", "ао", "пао", "зао", "оао", "нао", "ано", "ип", "общество", "с", "ограниченной",
+    "ответственностью", "акционерное", "публичное", "непубличное", "закрытое", "открытое",
+    "автономная", "некоммерческая", "организация",
+})
+_NAME_TOKEN = re.compile(r"[0-9a-zа-я]+")
+
+
+def company_name_core(value: Optional[str]) -> str:
+    """Название без формы и кавычек: «ООО "Ромашка-Плюс"» → «ромашка плюс»."""
+    tokens = _NAME_TOKEN.findall((value or "").lower().replace("ё", "е"))
+    return " ".join(token for token in tokens if token not in _OPF_WORDS)
+
+
+def names_match(expected: Optional[str], egrul: Optional[str]) -> Optional[bool]:
+    """Совпадает ли название из заявки с ЕГРЮЛ. None — сравнивать не с чем."""
+    ours, theirs = company_name_core(expected), company_name_core(egrul)
+    if not ours or not theirs:
+        return None
+    return ours == theirs
+
+
 @dataclass
 class RegistrationCheck:
     inn: str
@@ -287,6 +312,10 @@ class RegistrationCheck:
     legal_address: Optional[str] = None
     our_address: Optional[str] = None
     address_matches: Optional[bool] = None
+    # Первичная регистрация сверяется по названию и адресу (ИНН новой компании
+    # заранее неизвестен); смена адреса — по ИНН и адресу (решение владельца).
+    expected_name: Optional[str] = None
+    name_matches: Optional[bool] = None
     warnings: tuple[str, ...] = ()
 
     def snapshot(self, checked_at: datetime) -> dict[str, Any]:
@@ -300,15 +329,68 @@ class RegistrationCheck:
             "legal_address": self.legal_address,
             "our_address": self.our_address,
             "address_matches": self.address_matches,
+            "expected_name": self.expected_name,
+            "name_matches": self.name_matches,
             "warnings": list(self.warnings),
             "checked_at": checked_at.isoformat(),
         }
 
 
+def expected_company_name(application: Application) -> Optional[str]:
+    """Название, под которым компанию подали в ИФНС (первичная регистрация):
+    из расписки, если она разобрана, иначе — из заявки."""
+    receipt = application.ifns_receipt_data or {}
+    return receipt.get("company_name") or application.planned_client_name or application.company_name
+
+
+def _check_from_party(
+    application: Application, our_address: str, found: Any, room_number: Optional[str]
+) -> RegistrationCheck:
+    match = addresses_match(our_address, found.legal_address, room_number)
+    initial = application.type == "initial_registration"
+    expected = expected_company_name(application) if initial else None
+    name_match = names_match(expected, found.full_name) if initial else None
+    warnings: list[str] = []
+    if match is False:
+        warnings.append("Юрадрес в ЕГРЮЛ не похож на адрес заявки — сравните вручную.")
+    elif match is None:
+        warnings.append("В ЕГРЮЛ нет юрадреса — сравнить не с чем.")
+    if initial and name_match is not True:
+        warnings.append(f"Название в ЕГРЮЛ не совпадает с заявкой («{expected or '—'}») — сравните вручную.")
+    status = getattr(found.egrul_status, "value", found.egrul_status)
+    if status != "ACTIVE":
+        warnings.append(f"Статус компании в ЕГРЮЛ — {status}.")
+    registered = getattr(found, "registration_date", None)
+    if (
+        registered is not None
+        and initial
+        and application.created_at is not None
+        and registered < application.created_at.date()
+    ):
+        warnings.append(
+            "Компания зарегистрирована раньше, чем создана заявка, — для первичной "
+            "регистрации это подозрительно: та ли это компания?"
+        )
+    return RegistrationCheck(
+        inn=found.inn,
+        found=True,
+        full_name=found.full_name,
+        ogrn=found.ogrn,
+        registration_date=registered,
+        egrul_status=status,
+        legal_address=found.legal_address,
+        our_address=our_address,
+        address_matches=match,
+        expected_name=expected,
+        name_matches=name_match,
+        warnings=tuple(warnings),
+    )
+
+
 async def check_registration(
     application: Application, our_address: str, inn: str, dadata: Any, room_number: Optional[str] = None
 ) -> RegistrationCheck:
-    """Запрос в ЕГРЮЛ (DaData) по ИНН и сравнение юрадреса с адресом заявки.
+    """Запрос в ЕГРЮЛ (DaData) по ИНН: адрес, а для первичной регистрации и название.
 
     Кэш DaData сбрасывается: адрес компании меняется как раз в тот момент,
     который мы проверяем, — вчерашний ответ из кэша здесь вреден.
@@ -318,39 +400,25 @@ async def check_registration(
     if found is None:
         return RegistrationCheck(
             inn=inn, found=False, our_address=our_address,
+            expected_name=expected_company_name(application) if application.type == "initial_registration" else None,
             warnings=("Компания с таким ИНН в ЕГРЮЛ не найдена — возможно, запись ещё не появилась.",),
         )
-    match = addresses_match(our_address, found.legal_address, room_number)
-    warnings: list[str] = []
-    if match is False:
-        warnings.append("Юрадрес в ЕГРЮЛ не похож на адрес заявки — сравните вручную.")
-    elif match is None:
-        warnings.append("В ЕГРЮЛ нет юрадреса — сравнить не с чем.")
-    status = getattr(found.egrul_status, "value", found.egrul_status)
-    if status != "ACTIVE":
-        warnings.append(f"Статус компании в ЕГРЮЛ — {status}.")
-    registered = getattr(found, "registration_date", None)
-    if (
-        registered is not None
-        and application.type == "initial_registration"
-        and application.created_at is not None
-        and registered < application.created_at.date()
-    ):
-        warnings.append(
-            "Компания зарегистрирована раньше, чем создана заявка, — для первичной "
-            "регистрации это подозрительно: тот ли ИНН?"
-        )
-    return RegistrationCheck(
-        inn=inn,
-        found=True,
-        full_name=found.full_name,
-        ogrn=found.ogrn,
-        registration_date=registered,
-        egrul_status=status,
-        legal_address=found.legal_address,
-        our_address=our_address,
-        address_matches=match,
-        warnings=tuple(warnings),
+    return _check_from_party(application, our_address, found, room_number)
+
+
+async def search_registration_by_name(
+    application: Application, our_address: str, name: str, dadata: Any, room_number: Optional[str] = None
+) -> list[RegistrationCheck]:
+    """Первичная регистрация: ищем компанию в ЕГРЮЛ по названию и сверяем адрес.
+
+    Кандидаты с совпавшими названием и адресом — первыми; админ выбирает
+    нужного, подтверждение дальше идёт по его ИНН (`check_registration`).
+    """
+    found = await dadata.search_by_name(name)
+    checks = [_check_from_party(application, our_address, party, room_number) for party in found]
+    return sorted(
+        checks,
+        key=lambda c: (c.name_matches is not True, c.address_matches is not True, c.full_name or ""),
     )
 
 
@@ -385,6 +453,7 @@ async def confirm_registration(
     accept_address_mismatch: bool,
     admin_id: Any,
     now: datetime,
+    required_inn: Optional[str] = None,
 ) -> Optional[OwnerPayout]:
     """Регистрация компании клиента подтверждена по ЕГРЮЛ.
 
@@ -407,10 +476,16 @@ async def confirm_registration(
             raise PayoutError("Нельзя: " + "; ".join(blockers) + ".")
     if not check.found:
         raise PayoutError("Компания с этим ИНН в ЕГРЮЛ не найдена.")
-    if check.address_matches is not True and not accept_address_mismatch:
+    if required_inn is not None and check.inn != required_inn:
+        # Смена адреса: компания известна заранее — подтверждаем только её.
+        raise PayoutError(f"По заявке меняет адрес компания с ИНН {required_inn}, а не {check.inn}.")
+    initial = application.type == "initial_registration"
+    mismatched = check.address_matches is not True or (initial and check.name_matches is not True)
+    if mismatched and not accept_address_mismatch:
         raise PayoutError(
-            "Юрадрес в ЕГРЮЛ не совпал с адресом заявки. Если вы сверили вручную и это тот же "
-            "адрес — подтвердите с отметкой «адрес сверен вручную»."
+            ("Название или юрадрес" if initial else "Юрадрес")
+            + " в ЕГРЮЛ не совпал с заявкой. Если вы сверили вручную и это та же компания и тот же "
+            "адрес — подтвердите с отметкой «сверено вручную»."
         )
 
     # Тестовый терминал или заявка без собственника выплаты не порождают —
@@ -435,7 +510,7 @@ async def confirm_registration(
             _apply_percent(payout, percent)
 
     snapshot = check.snapshot(now)
-    snapshot["accepted_address_mismatch"] = bool(accept_address_mismatch and check.address_matches is not True)
+    snapshot["accepted_address_mismatch"] = bool(accept_address_mismatch and mismatched)
     application.registration_inn = check.inn
     application.registration_check = snapshot
     application.registration_confirmed_at = now

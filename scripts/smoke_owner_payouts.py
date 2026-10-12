@@ -73,6 +73,10 @@ class FakeDaData:
     def invalidate(self, inn: str) -> None:
         self.invalidated.append(inn)
 
+    async def search_by_name(self, name: str):
+        """Как подсказки DaData: все известные компании, порядок — забота сервиса."""
+        return [await self.lookup(INN_ELSEWHERE), await self.lookup(INN_OK)]
+
     async def lookup(self, inn: str):
         addresses = {INN_OK: EGRUL_SAME, INN_ELSEWHERE: EGRUL_OTHER}
         if inn not in addresses:
@@ -122,8 +126,10 @@ async def seed() -> dict:
         for n in range(3):
             application = Application(
                 type="initial_registration", status=ApplicationStatus.AWAITING_PAYMENT.value,
-                provider_id=provider.id, address_id=address.id, company_name=f"Смоук-выплата-{n}",
-                planned_client_name=f"Смоук-выплата-{n}", contact_name="Клиент", contact_phone="+79001234567",
+                # Первичная регистрация сверяется по названию: в подставном ЕГРЮЛ
+                # компания с INN_OK называется «Новая компания».
+                provider_id=provider.id, address_id=address.id, company_name=f'ООО "Новая компания" ({n})',
+                planned_client_name='ООО "Новая компания"', contact_name="Клиент", contact_phone="+79001234567",
                 contact_email=users["client"].email, term_months=11, has_correspondence_service=False,
                 created_by=users["client"].id,
             )
@@ -235,18 +241,7 @@ async def run_checks() -> None:
         r = await http.patch(f"/api/v1/providers/{ids['provider']}/payout-settings", json={"commission_percent": "1"})
         check(r.status_code == 403, f"собственник не меняет себе процент ({r.status_code})")
 
-        print("\n== клиент сообщает ИНН ==")
-        login_as("client")
-        r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/inn", json={"inn": INN_OK})
-        check(r.status_code == 409, f"до выдачи документов — рано ({r.status_code})")
         await set_app_status(apps[0], ApplicationStatus.READY_FOR_CLIENT)
-        r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/inn", json={"inn": "123"})
-        check(r.status_code == 422, f"кривой ИНН — 422 ({r.status_code})")
-        r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/inn", json={"inn": INN_OK})
-        check(r.status_code == 200 and r.json()["registration_inn"] == INN_OK, f"ИНН принят ({r.status_code})")
-        login_as("stranger")
-        r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/inn", json={"inn": INN_OK})
-        check(r.status_code == 404, f"чужой клиент — 404 ({r.status_code})")
         login_as("owner")
         r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/confirm", json={"inn": INN_OK})
         check(r.status_code == 403, f"собственник сам себе регистрацию не подтверждает ({r.status_code})")
@@ -255,11 +250,10 @@ async def run_checks() -> None:
         login_as("admin")
         r = await http.get("/api/v1/payouts", params={"status": "awaiting_registration"})
         row = next((x for x in r.json() if x["application_id"] == apps[0]), None)
-        check(row is not None and row["suggested_inn"] == INN_OK, "в реестре ИНН от клиента подставлен")
         check(row is not None and row["payee"]["settlement_account"] == "40702810000000000001", "реквизиты собственника в реестре")
         r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/check", json={"inn": INN_ELSEWHERE})
-        body = r.json()
-        check(r.status_code == 200 and body["address_matches"] is False and body["warnings"], "чужой адрес — подсказка «не совпал»")
+        body = (r.json().get("candidates") or [{}])[0]
+        check(r.status_code == 200 and body.get("address_matches") is False and body.get("warnings"), "чужой адрес — подсказка «не совпал»")
         check(INN_ELSEWHERE in fake.invalidated, "кэш DaData сброшен перед сверкой")
         r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/confirm", json={"inn": INN_ELSEWHERE})
         check(r.status_code == 409, f"несовпавший адрес без ручной отметки — 409 ({r.status_code})")
@@ -307,7 +301,7 @@ async def run_checks() -> None:
         check(r.status_code == 200 and r.json()["status"] == "cancelled", f"отменена ({r.status_code})")
         await set_app_status(apps[1], ApplicationStatus.COMPLETED)
         r = await http.post(f"/api/v1/payouts/applications/{apps[1]}/registration/check", json={"inn": INN_OK})
-        check(any("уже подтверждён" in w for w in r.json().get("warnings", [])), "предупреждение: ИНН уже подтверждён по другой заявке")
+        check(any("уже подтверждён" in w for w in (r.json().get("candidates") or [{}])[0].get("warnings", [])), "предупреждение: ИНН уже подтверждён по другой заявке")
         r = await http.post(f"/api/v1/payouts/applications/{apps[1]}/registration/confirm", json={"inn": INN_OK})
         check(r.status_code == 409 and "отменили" in r.text, f"отменённую выплату подтверждение не переоткрывает — 409, а не 500 ({r.status_code})")
 

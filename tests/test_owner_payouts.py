@@ -19,6 +19,8 @@ from app.models.provider import Provider
 from app.services import owner_payouts
 from app.services.owner_payouts import (
     AWAITING_REGISTRATION,
+    company_name_core,
+    names_match,
     CANCELLED,
     DUE,
     PAID,
@@ -188,7 +190,7 @@ def _check(**kw):
         inn="7701234567", found=True, full_name='ООО "Клиент"', ogrn="1267700000000",
         registration_date=date(2026, 10, 1), egrul_status="ACTIVE",
         legal_address="г Москва, ул Тверская, д 7, стр 1, помещ. 3", our_address=OUR_ADDRESS,
-        address_matches=True,
+        address_matches=True, expected_name="ООО «Клиент»", name_matches=True,
     )
     values.update(kw)
     return RegistrationCheck(**values)
@@ -511,4 +513,40 @@ async def test_payment_order_date_is_compared_in_moscow_time() -> None:
         admin_id=uuid4(), now=night,
     )
     assert payout.status == PAID
+
+
+def test_company_names_compare_without_legal_form_and_quotes() -> None:
+    assert company_name_core('ООО «Ромашка-Плюс»') == "ромашка плюс"
+    assert names_match("ООО «Ромашка»", 'ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "РОМАШКА"') is True
+    assert names_match("ООО «Ромашка»", 'ООО "РОМАШКА ПЛЮС"') is False
+    assert names_match(None, 'ООО "РОМАШКА"') is None
+
+
+@pytest.mark.asyncio
+async def test_initial_registration_needs_name_match_or_manual_check() -> None:
+    provider = _provider()
+    application = _application(provider=provider)
+    with pytest.raises(PayoutError, match="Название или юрадрес"):
+        await _confirm(_DB(provider=provider), application, _payment(), _check(name_matches=False))
+    payout = await _confirm(_DB(provider=provider), application, _payment(), _check(name_matches=False), accept=True)
+    assert payout.status == DUE and application.registration_check["accepted_address_mismatch"] is True
+
+
+@pytest.mark.asyncio
+async def test_address_change_confirms_only_the_company_from_application() -> None:
+    provider = _provider()
+    application = _application(provider=provider, type="address_change")
+    with pytest.raises(PayoutError, match="меняет адрес компания"):
+        await owner_payouts.confirm_registration(
+            _DB(provider=provider), application=application, payment=_payment("manual_invoice"),
+            check=_check(inn="7736207543", name_matches=None), accept_address_mismatch=False,
+            admin_id=uuid4(), now=NOW, required_inn="7707083893",
+        )
+    # Название для смены адреса не сверяется — только ИНН и адрес.
+    assert await owner_payouts.confirm_registration(
+        _DB(provider=provider), application=application, payment=_payment("manual_invoice"),
+        check=_check(inn="7707083893", name_matches=None), accept_address_mismatch=False,
+        admin_id=uuid4(), now=NOW, required_inn="7707083893",
+    ) is None
+    assert application.registration_confirmed_at == NOW
 

@@ -15,14 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin, require_client, require_owner, utcnow
+from app.auth import require_admin, require_owner, utcnow
 from app.database import get_db
-from app.enums import (
-    ApplicationEventKind,
-    ApplicationType,
-    NotificationAudience,
-    PaymentStatus,
-)
+from app.enums import ApplicationType, PaymentStatus
 from app.models.address import Address
 from app.models.application import Application
 from app.models.client import Client
@@ -32,21 +27,20 @@ from app.models.provider import Provider
 from app.models.user import User
 from app.schemas.owner_payout import (
     AdminPayoutRead,
-    ApplicationRegistrationRead,
     OwnerPayoutRead,
     PayoutCancelRequest,
     PayoutMarkPaidRequest,
     PayoutPayee,
     PayoutStatus,
     RegistrationCheckRead,
-    RegistrationConfirmResult,
     RegistrationConfirmRequest,
-    RegistrationInnRequest,
+    RegistrationConfirmResult,
+    RegistrationLookupRead,
+    RegistrationLookupRequest,
 )
 from app.routers.owner_dashboard import OWNER_VISIBLE_STATUSES
 from app.services import owner_payouts
 from app.services.dadata import DaDataError, DaDataNotConfigured, get_dadata_service
-from app.services.notification_events import create_application_event
 from app.services.owner_payouts import PayoutError
 from app.services.tbank_payments import lock_payment
 
@@ -249,63 +243,116 @@ async def my_payouts(
 # ============================================================
 
 
-async def _run_check(
-    db: AsyncSession, application_id: UUID, inn: str
-) -> tuple[Application, owner_payouts.RegistrationCheck]:
+async def _load_target(db: AsyncSession, application_id: UUID) -> tuple[Application, Address, Optional[str]]:
+    """Заявка, её адрес и ИНН компании, если он известен заранее (смена адреса)."""
     application = await db.get(Application, application_id)
     if application is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка не найдена")
     address = await db.get(Address, application.address_id)
     if address is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес заявки не найден")
+    known_inn = None
+    if application.type == ApplicationType.ADDRESS_CHANGE.value and application.client_id:
+        client = await db.get(Client, application.client_id)
+        known_inn = client.inn if client is not None else None
+    return application, address, known_inn
+
+
+def _dadata():
     try:
-        service = get_dadata_service()
+        return get_dadata_service()
     except DaDataNotConfigured as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
-    try:
-        check = await owner_payouts.check_registration(
-            application, address.full_address, inn, service, room_number=address.room_number
-        )
-    except DaDataError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
 
-    # Признаки «не тот ИНН»: подсказки админу, решает он (одна компания законно
-    # бывает в нескольких заявках — например, при продлении).
-    warnings = list(check.warnings)
+
+async def _with_taken_warning(
+    db: AsyncSession, application: Application, check: owner_payouts.RegistrationCheck
+) -> owner_payouts.RegistrationCheck:
+    """Подсказка «этот ИНН уже подтверждён по другой заявке» — решает админ (одна
+    компания законно бывает в нескольких заявках, например при продлении)."""
+    if not check.found:
+        return check
     taken = (
         await db.execute(
             select(Application.company_name, Application.planned_client_name).where(
-                Application.registration_inn == inn,
+                Application.registration_inn == check.inn,
                 Application.registration_confirmed_at.is_not(None),
                 Application.id != application.id,
             )
         )
     ).first()
     if taken is not None:
-        warnings.append(
+        check.warnings = (
+            *check.warnings,
             f"Этот ИНН уже подтверждён по другой заявке ({taken[0] or taken[1] or 'без названия'}) — "
-            "проверьте, что это не ошибка."
+            "проверьте, что это не ошибка.",
         )
-    if application.type == ApplicationType.ADDRESS_CHANGE.value and application.client_id:
-        client = await db.get(Client, application.client_id)
-        if client is not None and client.inn != inn:
-            warnings.append(f"ИНН не совпадает с компанией из заявки ({client.inn}).")
-    check.warnings = tuple(warnings)
-    return application, check
+    return check
+
+
+async def _run_check(
+    db: AsyncSession, application_id: UUID, inn: Optional[str]
+) -> tuple[Application, owner_payouts.RegistrationCheck, Optional[str]]:
+    """Сверка одной компании по ИНН. Для смены адреса ИНН — из заявки."""
+    application, address, known_inn = await _load_target(db, application_id)
+    inn = inn or known_inn
+    if not inn:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Для первичной регистрации найдите компанию по названию и выберите её.",
+        )
+    try:
+        check = await owner_payouts.check_registration(
+            application, address.full_address, inn, _dadata(), room_number=address.room_number
+        )
+    except DaDataError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+    if known_inn and check.inn != known_inn:
+        check.warnings = (*check.warnings, f"ИНН не совпадает с компанией из заявки ({known_inn}).")
+    return application, await _with_taken_warning(db, application, check), known_inn
+
+
+def _check_read(check: owner_payouts.RegistrationCheck) -> RegistrationCheckRead:
+    return RegistrationCheckRead(**{**check.__dict__, "warnings": list(check.warnings)})
 
 
 @router.post(
-    "/applications/{application_id}/registration/check", response_model=RegistrationCheckRead
+    "/applications/{application_id}/registration/check", response_model=RegistrationLookupRead
 )
 async def check_registration(
     application_id: UUID,
-    payload: RegistrationInnRequest,
+    payload: RegistrationLookupRequest,
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
-) -> RegistrationCheckRead:
-    """Сверка с ЕГРЮЛ без изменений: что DaData знает о компании и совпадает ли адрес."""
-    _, check = await _run_check(db, application_id, payload.inn)
-    return RegistrationCheckRead(**{**check.__dict__, "warnings": list(check.warnings)})
+) -> RegistrationLookupRead:
+    """Сверка с ЕГРЮЛ без изменений (решение владельца 13.10.2026):
+
+    - смена адреса — по ИНН компании из заявки и адресу;
+    - первичная регистрация — поиск по названию (из заявки или введённому) и
+      адресу: ИНН новой компании заранее неизвестен. С `inn` — проверка
+      конкретного кандидата перед подтверждением.
+    """
+    application, address, known_inn = await _load_target(db, application_id)
+    if known_inn or payload.inn:
+        _, check, _ = await _run_check(db, application_id, payload.inn)
+        return RegistrationLookupRead(mode="inn", candidates=[_check_read(check)], expected_inn=known_inn)
+
+    name = (payload.name or "").strip() or owner_payouts.expected_company_name(application)
+    if not name:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Укажите название компании для поиска.")
+    try:
+        found = await owner_payouts.search_registration_by_name(
+            application, address.full_address, name, _dadata(), room_number=address.room_number
+        )
+    except DaDataError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+    found = [await _with_taken_warning(db, application, check) for check in found]
+    return RegistrationLookupRead(
+        mode="name",
+        query=name,
+        candidates=[_check_read(check) for check in found],
+        expected_name=owner_payouts.expected_company_name(application),
+    )
 
 
 @router.post(
@@ -322,7 +369,7 @@ async def confirm_registration(
     Если деньги принимала площадка — выплата собственнику «к перечислению».
     """
     # Запрос в ЕГРЮЛ — до блокировок: сеть не должна держать строки.
-    _, check = await _run_check(db, application_id, payload.inn)
+    _, check, known_inn = await _run_check(db, application_id, payload.inn)
 
     payment_id = await _platform_payment_id(db, application_id)
     payment = await lock_payment(db, payment_id) if payment_id is not None else None
@@ -338,6 +385,7 @@ async def confirm_registration(
             accept_address_mismatch=payload.accept_address_mismatch,
             admin_id=admin.id,
             now=utcnow(),
+            required_inn=known_inn,
         )
         await db.commit()
     except PayoutError as e:
@@ -353,51 +401,6 @@ async def confirm_registration(
         application_id=application.id,
         registration_confirmed_at=application.registration_confirmed_at,
         payout=await _admin_view(db, payout) if payout is not None else None,
-    )
-
-
-@router.post(
-    "/applications/{application_id}/registration/inn", response_model=ApplicationRegistrationRead
-)
-async def submit_registration_inn(
-    application_id: UUID,
-    payload: RegistrationInnRequest,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_client),
-) -> ApplicationRegistrationRead:
-    """Клиент сообщает ИНН зарегистрированной компании. Подтверждает админ."""
-    application = await _lock_application(db, application_id)
-    if application is None or application.created_by != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка не найдена")
-    if application.status not in owner_payouts.REGISTRATION_ALLOWED:
-        await db.rollback()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "Сообщить ИНН можно после получения документов."
-        )
-    if application.registration_confirmed_at is not None:
-        await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Регистрация уже подтверждена.")
-    application.registration_inn = payload.inn
-    application.registration_inn_submitted_at = utcnow()
-    await create_application_event(
-        db=db,
-        application_id=application.id,
-        kind=ApplicationEventKind.STATUS_CHANGED,
-        audience=NotificationAudience.ADMIN,
-        title="Клиент сообщил ИНН компании",
-        message=(
-            f"ИНН {payload.inn}. Сверьте регистрацию с ЕГРЮЛ в разделе «Выплаты» — "
-            "после подтверждения выплата собственнику встанет в очередь."
-        ),
-        payload={"registration_inn": payload.inn},
-        created_by=user.id,
-    )
-    await db.commit()
-    return ApplicationRegistrationRead(
-        application_id=application.id,
-        registration_inn=application.registration_inn,
-        registration_inn_submitted_at=application.registration_inn_submitted_at,
-        registration_confirmed_at=application.registration_confirmed_at,
     )
 
 

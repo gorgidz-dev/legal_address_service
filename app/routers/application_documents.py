@@ -15,6 +15,7 @@ from app.schemas.application_document import (
     ApplicationDocumentModerationRead,
     ApplicationDocumentRead,
     ApplicationDocumentUploadResult,
+    IfnsReceiptDataRead,
     IfnsReceiptUploadResult,
 )
 from app.services.application_documents import (
@@ -22,6 +23,7 @@ from app.services.application_documents import (
     get_application_document_moderation,
     list_application_documents,
     upload_application_document,
+    preview_ifns_receipt,
     upload_ifns_receipt,
 )
 from app.services.storage import attachment_disposition, local_stored_file_path, read_stored_file_async
@@ -72,6 +74,24 @@ async def upload_document(
     return result
 
 
+@router.post("/{application_id}/ifns-receipt/preview", response_model=IfnsReceiptDataRead)
+async def preview_receipt(
+    application_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> IfnsReceiptDataRead:
+    """Клиент: что найдено в PDF расписки — до сохранения (проверить дату и название)."""
+    receipt = await preview_ifns_receipt(
+        db=db,
+        application_id=application_id,
+        file_content=await file.read(),
+        original_filename=file.filename or "receipt",
+        user=user,
+    )
+    return IfnsReceiptDataRead(**receipt.as_json())
+
+
 @router.post(
     "/{application_id}/ifns-receipt",
     response_model=IfnsReceiptUploadResult,
@@ -99,6 +119,7 @@ async def upload_receipt(
         application_id=application.id,
         registration_expected_on=application.registration_expected_on,
         ifns_receipt_uploaded_at=application.ifns_receipt_uploaded_at,
+        receipt=IfnsReceiptDataRead(**(application.ifns_receipt_data or {})),
         document=document,
     )
 

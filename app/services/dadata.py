@@ -24,6 +24,9 @@ from app.schemas.client import DaDataLookupResponse
 log = logging.getLogger(__name__)
 
 DADATA_PARTY_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party"
+#: Поиск организации по названию — сверка первичной регистрации (owner_payouts):
+#: ИНН новой компании заранее неизвестен, известно название из заявки/расписки.
+DADATA_PARTY_SUGGEST_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/party"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_CACHE_TTL_SECONDS = 24 * 3600
 
@@ -139,6 +142,28 @@ class DaDataClient:
         suggestions = payload.get("suggestions") or []
         return suggestions[0] if suggestions else None
 
+    async def suggest_by_name(self, name: str, *, count: int = 10) -> list[dict[str, Any]]:
+        """Юрлица (не ИП, головные) по названию — подсказки DaData, до `count` штук."""
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.post(
+                    DADATA_PARTY_SUGGEST_URL,
+                    json={"query": name, "count": count, "type": "LEGAL", "branch_type": ["MAIN"]},
+                    headers={
+                        "Authorization": f"Token {self._token}",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                )
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            raise DaDataError(f"DaData недоступна: {e}") from e
+        try:
+            payload = resp.json()
+        except ValueError as e:
+            raise DaDataError(f"Невалидный JSON от DaData: {e}") from e
+        return list(payload.get("suggestions") or [])
+
 
 # ============================================================
 # Кэш + сервис
@@ -248,6 +273,27 @@ class DaDataService:
         result = map_party_to_lookup(party)
         self._cache.set(inn, result)
         return result
+
+    async def search_by_name(self, name: str) -> list[DaDataLookupResponse]:
+        """Поиск юрлиц по названию — без кэша: ищем как раз только что
+        зарегистрированную компанию, вчерашний ответ здесь бесполезен."""
+        if not self._breaker.allow_request():
+            raise DaDataError(
+                "DaData временно недоступна (circuit breaker открыт после серии ошибок). Повторите позже."
+            )
+        try:
+            parties = await self._client.suggest_by_name(name)
+        except DaDataError:
+            self._breaker.record_failure()
+            raise
+        self._breaker.record_success()
+        found: list[DaDataLookupResponse] = []
+        for party in parties:
+            try:
+                found.append(map_party_to_lookup(party))
+            except Exception:  # noqa: BLE001 — одна кривая подсказка не должна ронять поиск
+                log.warning("Подсказка DaData не разобрана: %r", (party.get("data") or {}).get("inn"))
+        return found
 
     def invalidate(self, inn: str) -> None:
         self._cache.invalidate(inn)
