@@ -158,8 +158,11 @@ class Settings(BaseSettings):
 
     # --- Выплаты собственникам (app/services/owner_payouts.py) ---
     # Комиссия площадки, % — для собственников, у которых свой процент не задан.
-    # Пусто — процент обязан быть у собственника, иначе выплату не посчитать.
-    owner_commission_default_percent: Optional[Decimal] = Field(default=None, ge=0, lt=100, decimal_places=2)
+    # 19% — решение владельца 12.10.2026; у отдельного собственника можно задать
+    # свой (PATCH /providers/{id}/payout-settings).
+    owner_commission_default_percent: Optional[Decimal] = Field(
+        default=Decimal("19"), ge=0, lt=100, decimal_places=2
+    )
 
     # Web Push (VAPID). Если ключи пустые — push выключен (subscribe возвращает
     # 503, существующие подписки игнорируются при попытке отправки).

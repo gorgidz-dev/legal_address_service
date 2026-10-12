@@ -68,12 +68,14 @@ const OWNER_GROUPS: NavGroup[] = [
   {
     title: "Кабинет",
     items: [
+      // Порядок = приоритет: первые четыре попадают в нижнюю панель телефона,
+      // остальные — под «Ещё». Чаты собственнику нужнее всего после заявок.
       { id: OWNER_SECTION_IDS[0], label: "Заявки", icon: FolderOpen },
       { id: OWNER_SECTION_IDS[1], label: "Адреса", icon: Home },
+      { id: OWNER_SECTION_IDS[4], label: "Чаты", icon: MessageSquare },
       { id: OWNER_SECTION_IDS[5], label: "Выплаты", icon: Wallet },
       { id: OWNER_SECTION_IDS[2], label: "Задачи", icon: ListChecks },
-      { id: OWNER_SECTION_IDS[3], label: "Календарь", icon: CalendarClock },
-      { id: OWNER_SECTION_IDS[4], label: "Чаты", icon: MessageSquare }
+      { id: OWNER_SECTION_IDS[3], label: "Календарь", icon: CalendarClock }
     ]
   }
 ];
