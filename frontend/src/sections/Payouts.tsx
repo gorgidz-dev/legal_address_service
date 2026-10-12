@@ -17,11 +17,12 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type {
   AdminPayout,
-  ClientApplication,
+  ApplicationType,
   OwnerPayout,
   PayoutStatus,
   Provider,
-  RegistrationCheck
+  RegistrationConfirmResult,
+  RegistrationLookup
 } from "../types";
 import { Badge } from "../ui/Badge";
 import { ListEmpty, ListError, ListLoading } from "../ui/ListState";
@@ -225,11 +226,16 @@ export function AdminPayoutsView() {
       {registering ? (
         <RegistrationModal
           onClose={() => setRegistering(null)}
-          onDone={(updated) => {
-            replace(updated);
+          onDone={(result) => {
+            if (result.payout) replace(result.payout);
             setRegistering(null);
           }}
-          payout={registering}
+          target={{
+            applicationId: registering.application_id,
+            label: registering.application_label,
+            address: registering.address,
+            type: registering.application_type
+          }}
         />
       ) : null}
       {paying ? (
@@ -297,15 +303,13 @@ function AdminPayoutCard({
             <ShieldCheck size={14} /> Регистрация подтверждена {day(payout.registration_confirmed_at)}:{" "}
             {check.full_name || "компания"}, ИНН {check.inn}
             {check.ogrn ? `, ОГРН ${check.ogrn}` : ""}
-            {check.accepted_address_mismatch ? " · адрес сверен вручную" : ""}
+            {check.accepted_address_mismatch ? " · сверено вручную" : ""}
           </span>
-        ) : payout.registration_inn_submitted_at ? (
-          <span>Клиент сообщил ИНН {payout.registration_inn} ({day(payout.registration_inn_submitted_at)})</span>
         ) : payout.status === "awaiting_registration" ? (
           <span className="payout-card__muted">
-            {payout.suggested_inn
-              ? `ИНН компании из заявки: ${payout.suggested_inn}`
-              : "Клиент ещё не сообщил ИНН зарегистрированной компании"}
+            {payout.registration_expected_on
+              ? `По расписке ИФНС регистрация ожидается ${day(payout.registration_expected_on)}`
+              : "Клиент ещё не загрузил расписку ИФНС"}
           </span>
         ) : null}
 
@@ -380,46 +384,79 @@ function AdminPayoutCard({
   );
 }
 
-function RegistrationModal({
-  payout,
+/** Что нужно окну сверки о заявке — из реестра выплат или из списка заявок. */
+export type RegistrationTarget = {
+  applicationId: string;
+  label: string;
+  address: string | null;
+  type: ApplicationType;
+  /** Название из расписки ИФНС — под ним компанию подавали (первичная регистрация). */
+  receiptName?: string | null;
+};
+
+/**
+ * Сверка регистрации с ЕГРЮЛ (решение владельца 13.10.2026):
+ * - первичная регистрация — по названию и адресу: ищем компанию по названию из
+ *   расписки (или заявки), админ выбирает кандидата с совпавшим адресом;
+ * - смена адреса — по ИНН компании из заявки и адресу, вводить ничего не нужно.
+ */
+export function RegistrationModal({
+  target,
   onClose,
   onDone
 }: {
-  payout: AdminPayout;
+  target: RegistrationTarget;
   onClose: () => void;
-  onDone: (updated: AdminPayout) => void;
+  onDone: (result: RegistrationConfirmResult) => void;
 }) {
-  const [inn, setInn] = useState(payout.suggested_inn || "");
-  const [check, setCheck] = useState<RegistrationCheck | null>(null);
+  const initial = target.type === "initial_registration";
+  // Название для поиска сервер берёт сам (из расписки, иначе из заявки) и
+  // возвращает в `query` — показываем его в поле, админ может поправить.
+  const [name, setName] = useState(target.receiptName || "");
+  const [lookup, setLookup] = useState<RegistrationLookup | null>(null);
+  const [selectedInn, setSelectedInn] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState<"check" | "confirm" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const cleanInn = inn.replace(/\D/g, "");
-  const checkIsCurrent = check !== null && check.inn === cleanInn;
-  const canConfirm =
-    checkIsCurrent && check.found && (check.address_matches === true || manual) && busy === null;
-
-  async function runCheck(event: FormEvent) {
-    event.preventDefault();
+  async function search(query: { inn?: string; name?: string }) {
     setBusy("check");
     setError(null);
     setManual(false);
     try {
-      setCheck(await api.checkRegistration(payout.application_id, cleanInn));
+      const result = await api.checkRegistration(target.applicationId, query);
+      setLookup(result);
+      if (result.mode === "name" && result.query) setName(result.query);
+      // Смена адреса — кандидат один; при поиске выбираем лучшего, если он совпал целиком.
+      const best = result.candidates[0];
+      const exact = best && best.address_matches === true && (!initial || best.name_matches === true);
+      setSelectedInn(result.mode === "inn" || exact ? best?.inn ?? null : null);
     } catch (err) {
-      setCheck(null);
+      setLookup(null);
       setError((err as Error).message);
     } finally {
       setBusy(null);
     }
   }
 
+  // Сверяем сразу при открытии: смена адреса — по ИНН из заявки, первичная —
+  // по названию из расписки (или заявки).
+  useEffect(() => {
+    void search({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const selected = lookup?.candidates.find((candidate) => candidate.inn === selectedInn) || null;
+  const mismatched =
+    selected !== null && (selected.address_matches !== true || (initial && selected.name_matches !== true));
+  const canConfirm = selected !== null && selected.found && (!mismatched || manual) && busy === null;
+
   async function confirm() {
+    if (!selected) return;
     setBusy("confirm");
     setError(null);
     try {
-      onDone(await api.confirmRegistration(payout.application_id, cleanInn, manual));
+      onDone(await api.confirmRegistration(target.applicationId, selected.inn, manual));
     } catch (err) {
       setError((err as Error).message);
       setBusy(null);
@@ -427,58 +464,104 @@ function RegistrationModal({
   }
 
   return (
-    <ModalShell eyebrow="Регистрация компании" onClose={onClose} title={payout.application_label}>
+    <ModalShell eyebrow="Регистрация компании" onClose={onClose} title={target.label}>
       <p className="payout-modal__text">
-        Введите ИНН компании, зарегистрированной по адресу заявки, и сверьте данные из ЕГРЮЛ.
-        После подтверждения собственнику уйдёт уведомление, а выплата встанет «к перечислению».
+        {initial
+          ? "Первичная регистрация: найдите компанию в ЕГРЮЛ по названию и выберите ту, у которой адрес совпадает с заявкой."
+          : "Смена адреса: сверяем компанию из заявки по ИНН — её юрадрес в ЕГРЮЛ должен смениться на адрес заявки."}{" "}
+        После подтверждения собственнику и клиенту уйдут уведомления
+        {initial ? ", а выплата собственнику встанет «к перечислению»." : "."}
       </p>
-      <form className="payout-modal__row" onSubmit={runCheck}>
-        <label className="field">
-          <span>ИНН компании</span>
-          <input
-            autoFocus
-            inputMode="numeric"
-            maxLength={12}
-            onChange={(event) => setInn(event.target.value)}
-            placeholder="10 цифр"
-            value={inn}
-          />
-        </label>
-        <button className="cab-btn cab-btn--sm" disabled={cleanInn.length !== 10 || busy !== null} type="submit">
-          {busy === "check" ? <Loader2 className="spin" size={15} /> : <ShieldCheck size={15} />} Проверить в ЕГРЮЛ
-        </button>
-      </form>
 
-      {checkIsCurrent ? (
+      {initial ? (
+        <form
+          className="payout-modal__row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void search({ name: name.trim() });
+          }}
+        >
+          <label className="field">
+            <span>Название компании (из расписки ИФНС, если она загружена)</span>
+            <input maxLength={300} onChange={(event) => setName(event.target.value)} value={name} />
+          </label>
+          <button className="cab-btn cab-btn--sm" disabled={name.trim().length < 2 || busy !== null} type="submit">
+            {busy === "check" ? <Loader2 className="spin" size={15} /> : <ShieldCheck size={15} />} Найти в ЕГРЮЛ
+          </button>
+        </form>
+      ) : busy === "check" ? (
+        <p className="payout-modal__text">
+          <Loader2 className="spin" size={15} /> Сверяем с ЕГРЮЛ…
+        </p>
+      ) : null}
+
+      {lookup && initial ? (
+        lookup.candidates.length ? (
+          <ul className="registration-candidates" role="listbox">
+            {lookup.candidates.map((candidate) => (
+              <li key={candidate.inn}>
+                <button
+                  aria-selected={candidate.inn === selectedInn}
+                  className={candidate.inn === selectedInn ? "registration-candidate is-selected" : "registration-candidate"}
+                  onClick={() => {
+                    setSelectedInn(candidate.inn);
+                    setManual(false);
+                  }}
+                  type="button"
+                >
+                  <strong>{candidate.full_name}</strong>
+                  <span>
+                    ИНН {candidate.inn}
+                    {candidate.registration_date ? ` · зарегистрирована ${day(candidate.registration_date)}` : ""}
+                  </span>
+                  <span className="registration-candidate__flags">
+                    <MatchFlag ok={candidate.name_matches} label="название" />
+                    <MatchFlag ok={candidate.address_matches} label="адрес" />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="payout-modal__text">
+            Компаний с таким названием в ЕГРЮЛ нет — возможно, запись ещё не появилась. Проверьте позже.
+          </p>
+        )
+      ) : null}
+
+      {selected ? (
         <div className="payout-check">
-          {check.found ? (
+          {selected.found ? (
             <dl className="payout-check__kv">
-              <div><dt>Компания</dt><dd>{check.full_name}</dd></div>
-              <div><dt>ОГРН</dt><dd>{check.ogrn || "—"}</dd></div>
-              <div><dt>Зарегистрирована</dt><dd>{day(check.registration_date)}</dd></div>
-              <div><dt>Статус</dt><dd>{check.egrul_status || "—"}</dd></div>
-              <div><dt>Юрадрес в ЕГРЮЛ</dt><dd>{check.legal_address || "—"}</dd></div>
-              <div><dt>Адрес заявки</dt><dd>{check.our_address || payout.address || "—"}</dd></div>
+              <div><dt>Компания</dt><dd>{selected.full_name}</dd></div>
+              {initial ? <div><dt>Название по заявке</dt><dd>{selected.expected_name || "—"}</dd></div> : null}
+              <div><dt>ИНН / ОГРН</dt><dd>{selected.inn} / {selected.ogrn || "—"}</dd></div>
+              <div><dt>Зарегистрирована</dt><dd>{day(selected.registration_date)}</dd></div>
+              <div><dt>Статус</dt><dd>{selected.egrul_status || "—"}</dd></div>
+              <div><dt>Юрадрес в ЕГРЮЛ</dt><dd>{selected.legal_address || "—"}</dd></div>
+              <div><dt>Адрес заявки</dt><dd>{selected.our_address || target.address || "—"}</dd></div>
             </dl>
           ) : null}
-          <div className={`payout-check__verdict payout-check__verdict--${check.address_matches ? "ok" : "warn"}`}>
-            {check.address_matches ? (
-              <><CheckCircle2 size={15} /> Адрес совпадает</>
+          <div className={`payout-check__verdict payout-check__verdict--${mismatched || !selected.found ? "warn" : "ok"}`}>
+            {!selected.found ? (
+              <><AlertTriangle size={15} /> Компания не найдена в ЕГРЮЛ</>
+            ) : mismatched ? (
+              <><AlertTriangle size={15} /> {initial ? "Название или адрес не совпали" : "Адрес не совпал"} — сравните вручную</>
             ) : (
-              <><AlertTriangle size={15} /> {check.found ? "Адрес не совпал — сравните вручную" : "Компания не найдена"}</>
+              <><CheckCircle2 size={15} /> {initial ? "Название и адрес совпадают" : "Адрес совпадает"}</>
             )}
           </div>
-          {check.warnings.length ? (
+          {selected.warnings.length ? (
             <ul className="payout-card__blockers">
-              {check.warnings.map((warning) => (
+              {selected.warnings.map((warning) => (
                 <li key={warning}><AlertTriangle size={14} /> {warning}</li>
               ))}
             </ul>
           ) : null}
-          {check.found && check.address_matches !== true ? (
+          {selected.found && mismatched ? (
             <label className="payout-check__manual">
               <input checked={manual} onChange={(event) => setManual(event.target.checked)} type="checkbox" />
-              Я сверил адрес вручную — это тот же адрес
+              Я сверил вручную — это та же компания и тот же адрес
             </label>
           ) : null}
         </div>
@@ -491,6 +574,14 @@ function RegistrationModal({
         </button>
       </div>
     </ModalShell>
+  );
+}
+
+function MatchFlag({ ok, label }: { ok: boolean | null; label: string }) {
+  return (
+    <span className={ok ? "match-flag is-ok" : "match-flag"}>
+      {ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} {label}
+    </span>
   );
 }
 
@@ -789,88 +880,5 @@ export function OwnerPayoutsView() {
         </ul>
       )}
     </div>
-  );
-}
-
-// ============================================================
-// Клиент: ИНН зарегистрированной компании
-// ============================================================
-
-const REGISTRATION_STATUSES = new Set(["ready_for_client", "completed"]);
-
-/** Показывать ли клиенту поле ИНН: документы выданы, компания новая. */
-export function needsRegistrationInn(application: ClientApplication): boolean {
-  return application.type === "initial_registration" && REGISTRATION_STATUSES.has(application.status);
-}
-
-export function RegistrationInnPanel({
-  application,
-  onSaved
-}: {
-  application: ClientApplication;
-  onSaved: () => void;
-}) {
-  const [inn, setInn] = useState(application.registration_inn || "");
-  const [editing, setEditing] = useState(!application.registration_inn);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  if (application.registration_confirmed_at) {
-    return (
-      <div className="registration-inn registration-inn--done">
-        <CheckCircle2 size={16} /> Площадка подтвердила регистрацию компании по адресу (ИНН{" "}
-        {application.registration_inn}).
-      </div>
-    );
-  }
-
-  const clean = inn.replace(/\D/g, "");
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api.submitRegistrationInn(application.id, clean);
-      setEditing(false);
-      onSaved();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!editing) {
-    return (
-      <div className="registration-inn">
-        <span>
-          Вы сообщили ИНН {application.registration_inn} — площадка сверит регистрацию с ЕГРЮЛ.
-        </span>
-        <button className="text-action" onClick={() => setEditing(true)} type="button">
-          Исправить
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <form className="registration-inn" onSubmit={submit}>
-      <span>Компания уже зарегистрирована? Сообщите её ИНН — мы сверим регистрацию по адресу с ЕГРЮЛ.</span>
-      <div className="registration-inn__row">
-        <input
-          aria-label="ИНН компании"
-          inputMode="numeric"
-          maxLength={12}
-          onChange={(event) => setInn(event.target.value)}
-          placeholder="ИНН, 10 цифр"
-          value={inn}
-        />
-        <button className="cab-btn cab-btn--primary cab-btn--sm" disabled={busy || clean.length !== 10} type="submit">
-          {busy ? <Loader2 className="spin" size={15} /> : null} Отправить
-        </button>
-      </div>
-      <ErrorLine message={error} />
-    </form>
   );
 }

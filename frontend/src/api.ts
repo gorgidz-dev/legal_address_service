@@ -46,10 +46,12 @@ import type {
   ProviderConnectionRequestStatusUpdate,
   PublicAddress,
   AdminPayout,
-  ApplicationRegistration,
   OwnerPayout,
   ProviderPayoutSettings,
-  RegistrationCheck,
+  IfnsReceiptData,
+  IfnsReceiptUploadResult,
+  RegistrationConfirmResult,
+  RegistrationLookup,
   PublicReview,
   MyReview,
   ModerationReview,
@@ -422,21 +424,36 @@ export const api = {
   // --- Выплаты собственникам ---
   adminPayouts: () => request<AdminPayout[]>("/payouts"),
   myPayouts: () => request<OwnerPayout[]>("/payouts/mine"),
-  checkRegistration: (applicationId: string, inn: string) =>
-    request<RegistrationCheck>(`/payouts/applications/${applicationId}/registration/check`, {
+  /** Сверка с ЕГРЮЛ: смена адреса — без параметров (ИНН из заявки); первичная —
+   *  по названию (`name`) или проверка выбранного кандидата (`inn`). */
+  checkRegistration: (applicationId: string, query: { inn?: string; name?: string }) =>
+    request<RegistrationLookup>(`/payouts/applications/${applicationId}/registration/check`, {
       method: "POST",
-      body: JSON.stringify({ inn })
+      body: JSON.stringify(query)
     }),
-  confirmRegistration: (applicationId: string, inn: string, acceptAddressMismatch: boolean) =>
-    request<AdminPayout>(`/payouts/applications/${applicationId}/registration/confirm`, {
+  confirmRegistration: (applicationId: string, inn: string | null, acceptMismatch: boolean) =>
+    request<RegistrationConfirmResult>(`/payouts/applications/${applicationId}/registration/confirm`, {
       method: "POST",
-      body: JSON.stringify({ inn, accept_address_mismatch: acceptAddressMismatch })
+      body: JSON.stringify({ inn, accept_address_mismatch: acceptMismatch })
     }),
-  submitRegistrationInn: (applicationId: string, inn: string) =>
-    request<ApplicationRegistration>(`/payouts/applications/${applicationId}/registration/inn`, {
+  /** Клиент: что найдено в PDF расписки — до сохранения. */
+  previewIfnsReceipt: (applicationId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<IfnsReceiptData>(`/workflow/applications/${applicationId}/ifns-receipt/preview`, {
       method: "POST",
-      body: JSON.stringify({ inn })
-    }),
+      body: form
+    });
+  },
+  uploadIfnsReceipt: (applicationId: string, file: File, expectedRegistrationOn: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("expected_registration_on", expectedRegistrationOn);
+    return request<IfnsReceiptUploadResult>(`/workflow/applications/${applicationId}/ifns-receipt`, {
+      method: "POST",
+      body: form
+    });
+  },
   markPayoutPaid: (
     payoutId: string,
     body: { paid_on: string; bank_reference: string; comment?: string | null }

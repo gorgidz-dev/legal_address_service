@@ -44,13 +44,18 @@ import { parsePath, routeToPath, useRouter } from "./router";
 import { LegalPage } from "./sections/LegalPage";
 import { EmailVerificationPage } from "./sections/EmailVerification";
 import { PaymentReturnPage } from "./payment/PaymentReturnPage";
+import { trackerDate } from "./applications/progress";
 import {
   AdminPayoutsView,
   OwnerPayoutsView,
   ProviderPayoutSettingsModal,
-  RegistrationInnPanel,
-  needsRegistrationInn
+  RegistrationModal
 } from "./sections/Payouts";
+import {
+  ClientRegistrationPanel,
+  ReceiptSummary,
+  showsRegistrationPanel
+} from "./sections/RegistrationTracker";
 import { takePaymentReturn } from "./payment/paymentReturn";
 import { SbpPayButton } from "./payment/SbpPayButton";
 import { AddressChatPanel } from "./AddressChatPanel";
@@ -234,7 +239,8 @@ const documentKindLabels: Record<DocumentFileKind, string> = {
   act: "Акт",
   owner_consent: "Согласие собственника",
   postal_service: "Почтовое обслуживание",
-  admin_review_file: "Файл проверки"
+  admin_review_file: "Файл проверки",
+  ifns_receipt: "Расписка ИФНС"
 };
 
 /**
@@ -2198,6 +2204,7 @@ function ClientDashboardView({
                 }
                 address={selectedApplication.full_address}
                 status={selectedApplication.status}
+                tracker={selectedApplication}
                 docsCount={documents.length || null}
                 docsDisabledReason={
                   clientCanSeeDocuments(selectedApplication.status)
@@ -2280,9 +2287,9 @@ function ClientDashboardView({
                       </div>
                     ) : null}
 
-                    {needsRegistrationInn(selectedApplication) ? (
+                    {showsRegistrationPanel(selectedApplication) ? (
                       <div className="cab-actions">
-                        <RegistrationInnPanel
+                        <ClientRegistrationPanel
                           key={selectedApplication.id}
                           application={selectedApplication}
                           onSaved={() => setRefreshKey((value) => value + 1)}
@@ -2843,12 +2850,16 @@ function OwnerDashboardView({
                       }
                       address={selectedApplication.full_address}
                       status={selectedApplication.status}
+                      tracker={selectedApplication}
                       docsCount={documents.length || null}
                       chatDisabledReason={
                         ownerChat ? null : ownerChatError || "Переписка загружается…"
                       }
                       main={
                         <>
+                          {/* Расписка ИФНС: по ней собственник отслеживает регистрацию
+                              и подтверждает компанию для ФНС; файл — во вкладке «Документы». */}
+                          <ReceiptSummary tracker={selectedApplication} />
                           <div className="cab-kv">
                             <DrawerRow label="Тип" value={typeLabels[selectedApplication.type]} />
                             <DrawerRow
@@ -3449,6 +3460,7 @@ function ApplicationsView({
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [moderatingId, setModeratingId] = useState<string | null>(null);
   const [receiptId, setReceiptId] = useState<string | null>(null);
+  const [registrationId, setRegistrationId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -3537,6 +3549,21 @@ function ApplicationsView({
                     <ReceiptText size={15} /> Чек
                   </button>
                 ) : null}
+                {REGISTRATION_STATUSES.has(application.status) && !application.registration_confirmed_at ? (
+                  <button
+                    className="text-action"
+                    onClick={() => setRegistrationId(application.id)}
+                    title={
+                      application.registration_expected_on
+                        ? `По расписке ИФНС регистрация ожидается ${trackerDate(application.registration_expected_on)}`
+                        : "Клиент ещё не загрузил расписку ИФНС"
+                    }
+                    type="button"
+                  >
+                    <ShieldCheck size={15} /> Регистрация
+                    {application.registration_expected_on ? ` · ${trackerDate(application.registration_expected_on).slice(0, 5)}` : ""}
+                  </button>
+                ) : null}
                 {application.type === "initial_registration" ? (
                   <button className="text-action" onClick={() => setPromotingId(application.id)} type="button">
                     <FileCheck2 size={15} /> Договор
@@ -3554,6 +3581,27 @@ function ApplicationsView({
           onDone={onChanged}
         />
       ) : null}
+      {registrationId
+        ? (() => {
+            const target = applications.find((item) => item.id === registrationId);
+            return target ? (
+              <RegistrationModal
+                onClose={() => setRegistrationId(null)}
+                onDone={() => {
+                  setRegistrationId(null);
+                  onChanged();
+                }}
+                target={{
+                  applicationId: target.id,
+                  label: target.company_name || target.planned_client_name || "Заявка",
+                  address: addressById.get(target.address_id)?.full_address || null,
+                  type: target.type,
+                  receiptName: target.ifns_receipt?.company_name
+                }}
+              />
+            ) : null;
+          })()
+        : null}
       {receiptId ? (
         <ClosingReceiptPanel
           application={applications.find((item) => item.id === receiptId) || null}
@@ -3574,6 +3622,9 @@ function ApplicationsView({
 /** Статусы, в которых документы выданы клиенту — закрывающий чек уже должен быть
  * (tbank_receipts.DOCUMENTS_ISSUED на бэкенде). */
 const DOCUMENTS_ISSUED_STATUSES = new Set(["ready_for_client", "completed", "dispute"]);
+
+/** Регистрацию подтверждают после выдачи документов (owner_payouts.REGISTRATION_ALLOWED). */
+const REGISTRATION_STATUSES = new Set(["ready_for_client", "completed"]);
 
 const closingReceiptLabels: Record<string, string> = {
   due: "в очереди",

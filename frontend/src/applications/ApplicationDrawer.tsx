@@ -11,7 +11,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { statusMeta } from "../status";
 import { StatusBadge } from "../ui/Badge";
-import { shortNumber, STEPS, stepStates } from "./progress";
+import { shortNumber, STEPS, stepStates, trackerForecast, type TrackerFacts } from "./progress";
 
 export type DrawerTab = "main" | "docs" | "chat";
 
@@ -26,6 +26,7 @@ export function ApplicationDrawer({
   main,
   docs,
   chat,
+  tracker,
 }: {
   id: string;
   title: string;
@@ -39,6 +40,8 @@ export function ApplicationDrawer({
   main: ReactNode;
   docs: ReactNode;
   chat: ReactNode;
+  /** Факты трекера после выдачи документов: расписка, ожидаемая и подтверждённая регистрация. */
+  tracker?: TrackerFacts;
 }) {
   const [tab, setTab] = useState<DrawerTab>("main");
 
@@ -49,7 +52,8 @@ export function ApplicationDrawer({
     setTab("main");
   }, [id]);
 
-  const states = stepStates(status);
+  const states = stepStates(status, tracker);
+  const forecast = trackerForecast(status, tracker);
 
   return (
     <aside className="cab-drawer">
@@ -88,6 +92,7 @@ export function ApplicationDrawer({
           // показывала бы движение вперёд там, где его нет.
           <span className="cab-drawer__address">{statusMeta(status).label}</span>
         )}
+        {states && forecast ? <span className="cab-drawer__forecast">{forecast}</span> : null}
       </div>
 
       <div className="cab-tabs" role="tablist">

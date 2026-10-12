@@ -35,7 +35,8 @@ export type DocumentFileKind =
   | "act"
   | "owner_consent"
   | "postal_service"
-  | "admin_review_file";
+  | "admin_review_file"
+  | "ifns_receipt";
 
 export interface CurrentUser {
   id: string;
@@ -230,7 +231,7 @@ export interface Address {
   updated_at: string;
 }
 
-export interface Application {
+export interface Application extends RegistrationTrackerFields {
   id: string;
   type: ApplicationType;
   status: ApplicationStatus;
@@ -768,7 +769,7 @@ export interface PriceLine {
   amount: string;
 }
 
-export interface ClientApplication {
+export interface ClientApplication extends RegistrationTrackerFields {
   id: string;
   type: ApplicationType;
   status: ApplicationStatus;
@@ -797,10 +798,6 @@ export interface ClientApplication {
   price_lines: PriceLine[];
   price_total: string;
   events: ClientApplicationEvent[];
-  /** ИНН зарегистрированной компании — условие выплаты собственнику. */
-  registration_inn: string | null;
-  registration_inn_submitted_at: string | null;
-  registration_confirmed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -824,7 +821,7 @@ export interface OwnerAddress {
   updated_at: string;
 }
 
-export interface OwnerApplication {
+export interface OwnerApplication extends RegistrationTrackerFields {
   id: string;
   type: ApplicationType;
   status: ApplicationStatus;
@@ -904,6 +901,9 @@ export interface RegistrationCheck {
   our_address: string | null;
   /** null — сравнить не с чем (в ЕГРЮЛ нет адреса). */
   address_matches: boolean | null;
+  /** Первичная регистрация: название, с которым сверяем, и совпало ли оно. */
+  expected_name: string | null;
+  name_matches: boolean | null;
   warnings: string[];
 }
 
@@ -919,8 +919,9 @@ export interface AdminPayout extends OwnerPayout {
   cancelled_at: string | null;
   payee: PayoutPayee;
   registration_inn: string | null;
-  registration_inn_submitted_at: string | null;
   registration_confirmed_at: string | null;
+  /** Дата регистрации из расписки ИФНС. */
+  registration_expected_on: string | null;
   registration_check: (RegistrationCheck & { checked_at?: string; accepted_address_mismatch?: boolean }) | null;
   suggested_inn: string | null;
   blockers: string[];
@@ -936,10 +937,51 @@ export interface ProviderPayoutSettings {
   bik: string | null;
 }
 
-export interface ApplicationRegistration {
-  application_id: string;
-  registration_inn: string | null;
-  registration_inn_submitted_at: string | null;
-  registration_confirmed_at: string | null;
+
+// --- Статус-трекер (этап 6): расписка ИФНС ---
+
+/** Что найдено в PDF расписки ИФНС (app/services/ifns_receipt.py). */
+export interface IfnsReceiptData {
+  has_text?: boolean;
+  looks_like_receipt?: boolean;
+  expected_on: string | null;
+  submitted_on: string | null;
+  company_name: string | null;
+  inn: string | null;
+  ogrn: string | null;
+  number: string | null;
+  form: string | null;
+  ifns: string | null;
 }
 
+/** Поля трекера после выдачи документов — общие для кабинетов. */
+export interface RegistrationTrackerFields {
+  registration_inn?: string | null;
+  registration_expected_on?: string | null;
+  ifns_receipt_uploaded_at?: string | null;
+  ifns_receipt?: IfnsReceiptData | null;
+  registration_confirmed_at?: string | null;
+}
+
+export interface IfnsReceiptUploadResult {
+  application_id: string;
+  registration_expected_on: string;
+  ifns_receipt_uploaded_at: string;
+  receipt: IfnsReceiptData;
+}
+
+export interface RegistrationLookup {
+  /** inn — смена адреса (ИНН из заявки) или проверка кандидата; name — поиск по названию. */
+  mode: "inn" | "name";
+  query: string | null;
+  candidates: RegistrationCheck[];
+  expected_inn: string | null;
+  expected_name: string | null;
+}
+
+export interface RegistrationConfirmResult {
+  application_id: string;
+  registration_confirmed_at: string;
+  /** null — выплаты по заявке нет (деньги получал собственник). */
+  payout: AdminPayout | null;
+}
