@@ -9,7 +9,7 @@
  *   отслеживает регистрацию и подтверждает компанию для ФНС) и админу.
  */
 import { CheckCircle2, FileText, Loader2, Upload } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { api } from "../api";
 import { trackerDate } from "../applications/progress";
 import type { ClientApplication, IfnsReceiptData, RegistrationTrackerFields } from "../types";
@@ -62,6 +62,9 @@ export function ClientRegistrationPanel({
   const [expectedOn, setExpectedOn] = useState("");
   const [busy, setBusy] = useState<"preview" | "upload" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Номер последнего предпросмотра: ответ по прежнему файлу, пришедший позже,
+  // не должен подставить свою дату к новому.
+  const previewRun = useRef(0);
 
   if (application.registration_confirmed_at) {
     return (
@@ -73,20 +76,34 @@ export function ClientRegistrationPanel({
   }
 
   async function pick(next: File | null) {
+    const run = ++previewRun.current;
     setFile(next);
     setPreview(null);
     setError(null);
-    if (!next) return;
+    if (!next) {
+      setBusy(null);
+      return;
+    }
     setBusy("preview");
     try {
       const found = await api.previewIfnsReceipt(application.id, next);
+      if (run !== previewRun.current) return;
       setPreview(found);
       setExpectedOn(found.expected_on || "");
     } catch (err) {
-      setError((err as Error).message);
+      if (run === previewRun.current) setError((err as Error).message);
     } finally {
-      setBusy(null);
+      if (run === previewRun.current) setBusy(null);
     }
+  }
+
+  function cancelEditing() {
+    previewRun.current += 1;
+    setEditing(false);
+    setFile(null);
+    setPreview(null);
+    setError(null);
+    setBusy(null);
   }
 
   async function submit(event: FormEvent) {
@@ -132,7 +149,13 @@ export function ClientRegistrationPanel({
             <span>{file ? file.name : "Выбрать PDF из письма ИФНС"}</span>
             <input
               accept="application/pdf,.pdf"
-              onChange={(event) => void pick(event.target.files?.[0] || null)}
+              disabled={busy === "upload"}
+              onChange={(event) => {
+                const next = event.target.files?.[0] || null;
+                // Сброс — чтобы тот же файл можно было выбрать снова после ошибки.
+                event.target.value = "";
+                void pick(next);
+              }}
               type="file"
             />
           </label>
@@ -165,15 +188,15 @@ export function ClientRegistrationPanel({
                 <button className="cab-btn cab-btn--primary cab-btn--sm" disabled={busy !== null || !expectedOn} type="submit">
                   {busy === "upload" ? <Loader2 className="spin" size={15} /> : null} Отправить расписку
                 </button>
-                {hasReceipt ? (
-                  <button className="text-action" onClick={() => setEditing(false)} type="button">
-                    Отмена
-                  </button>
-                ) : null}
               </div>
             </div>
           ) : null}
           {error ? <p className="payout-error" role="alert">{error}</p> : null}
+          {hasReceipt ? (
+            <button className="text-action" disabled={busy === "upload"} onClick={cancelEditing} type="button">
+              Отмена — оставить прежнюю расписку
+            </button>
+          ) : null}
         </form>
       )}
     </div>

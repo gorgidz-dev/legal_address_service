@@ -2092,7 +2092,7 @@ function ClientDashboardView({
     return () => {
       alive = false;
     };
-  }, [selectedApplication?.id, selectedApplication?.status]);
+  }, [selectedApplication?.id, selectedApplication?.status, selectedApplication?.ifns_receipt_uploaded_at]);
 
   const [applicationChat, setApplicationChat] = useState<AddressChat | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
