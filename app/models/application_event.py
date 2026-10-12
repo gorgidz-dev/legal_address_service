@@ -8,16 +8,18 @@ from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Te
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.enums import ApplicationEventKind
 from app.models.base import Base, UUIDPKMixin
 
 
 class ApplicationEvent(UUIDPKMixin, Base):
     __tablename__ = "application_events"
     __table_args__ = (
+        # Из перечисления — чтобы новый вид не разошёлся с моделью. Базу меняет
+        # только миграция (последняя — 0038); tests/test_event_kind_constraint.py
+        # ловит вид события, добавленный без неё.
         CheckConstraint(
-            "kind IN ('created', 'status_changed', 'comment_added', 'document_uploaded', "
-            "'document_approved', 'correction_requested', 'dispute_opened', 'cancelled', "
-            "'contract_expiring')",
+            "kind IN (" + ", ".join(f"'{kind.value}'" for kind in ApplicationEventKind) + ")",
             name="kind_valid",
         ),
         CheckConstraint("audience IN ('client', 'owner', 'admin')", name="audience_valid"),
