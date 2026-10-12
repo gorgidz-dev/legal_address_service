@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
@@ -293,7 +294,7 @@ async def get_application_document(
     return file_record
 
 
-def read_ifns_receipt(file_content: bytes, original_filename: str) -> ReceiptData:
+async def read_ifns_receipt(file_content: bytes, original_filename: str) -> ReceiptData:
     """Проверить, что это PDF расписки из письма ИФНС, и разобрать его.
 
     PDF без текста — скан или фото: такой не принимаем, просим файл из письма
@@ -306,11 +307,19 @@ def read_ifns_receipt(file_content: bytes, original_filename: str) -> ReceiptDat
             "Загрузите PDF-файл расписки из письма ИФНС — именно его, без сканов и фото.",
         )
     ensure_within_limits(content=file_content, original_filename=original_filename)
-    receipt = parse_receipt_pdf(file_content)
+    # Разбор PDF — работа процессора: в потоке, чтобы не держать остальные запросы.
+    receipt = await asyncio.to_thread(parse_receipt_pdf, file_content)
     if not receipt.has_text:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "В файле нет текста — похоже, это скан или фото. Загрузите PDF расписки из письма ИФНС.",
+        )
+    if not (receipt.looks_like_receipt or receipt.ifns):
+        # Ни слов расписки, ни инспекции ФНС — это другой документ (счёт, договор).
+        # Номер и даты не в счёт: «№ 123 от 01.10.2026» есть в любом счёте.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Это не похоже на расписку ИФНС о приёме документов. Загрузите PDF из письма налоговой.",
         )
     return receipt
 
@@ -354,7 +363,7 @@ async def preview_ifns_receipt(
     """Что нашлось в расписке — до сохранения: клиент проверит дату и название."""
     application = await load_application_for_documents(db, application_id)
     ensure_client_can_add_receipt(application, user)
-    receipt = read_ifns_receipt(file_content, original_filename)
+    receipt = await read_ifns_receipt(file_content, original_filename)
     await ensure_receipt_is_for_this_company(db, application, receipt)
     return receipt
 
@@ -376,7 +385,7 @@ async def upload_ifns_receipt(
     """
     application = await load_application_for_documents(db, application_id)
     ensure_client_can_add_receipt(application, user)
-    receipt = read_ifns_receipt(file_content, original_filename)
+    receipt = await read_ifns_receipt(file_content, original_filename)
     await ensure_receipt_is_for_this_company(db, application, receipt)
     today = now.astimezone(_MOSCOW).date()
     if expected_registration_on > today + timedelta(days=IFNS_DATE_MAX_AHEAD_DAYS):

@@ -19,6 +19,14 @@ from typing import Any, Optional
 
 #: Сколько страниц читать: расписка — 1–2 страницы, дальше незачем.
 MAX_PAGES = 5
+#: Пределы разбора. PDF в 16 КБ может распаковаться в десятки мегабайт
+#: операторов, и pypdf будет разбирать их минутами. У настоящей расписки —
+#: ~8 КБ содержимого и ~1 тыс. операторов на страницу, так что запас стократный.
+MAX_CONTENT_BYTES = 2 * 1024 * 1024
+MAX_OPERATORS = 200_000
+MAX_TEXT_CHARS = 50_000
+#: Глубина вложенных форм (XObject), которую считаем в размер содержимого.
+_MAX_FORM_DEPTH = 4
 
 _MONTHS = {
     "января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6,
@@ -34,9 +42,11 @@ _READY_WORDS = re.compile(r"готов|выдач|не\s+позднее|срок
 #: После этих — дата, когда ИФНС получила документы.
 _RECEIVED_WORDS = re.compile(r"получени|получен|поступ|представлен|приня", re.IGNORECASE)
 _RECEIPT_WORDS = re.compile(r"расписк|получении\s+документов|регистрирующ", re.IGNORECASE)
+#: Название — до последней кавычки в строке: вложенные кавычки в ЕГРЮЛ обычны
+#: (ООО "ТОРГОВЫЙ ДОМ "РОМАШКА""), и первая закрывающая обрезала бы его.
 _QUOTED_NAME = re.compile(
     r"((?:ОБЩЕСТВ[А-Я]*\s+С\s+ОГРАНИЧЕННОЙ\s+ОТВЕТСТВЕННОСТЬЮ|АКЦИОНЕРН[А-Я]*\s+ОБЩЕСТВ[А-Я]*|"
-    r"ООО|АО|ПАО|НАО)\s*[«\"“„]([^»\"”“\n]{1,150})[»\"”“])",
+    r"ООО|АО|ПАО|НАО)\s*[«\"“„][^\n]{0,150}[»\"”“])",
     re.IGNORECASE,
 )
 _NAME_LINE = re.compile(r"наименование[^:\n]{0,60}[:\-]\s*([^\n]{2,200})", re.IGNORECASE)
@@ -76,15 +86,66 @@ class ReceiptData:
         return data
 
 
+class _TooHeavy(Exception):
+    """PDF слишком тяжёл для расписки — разбирать не будем."""
+
+
+def _content_size(stream: Any) -> int:
+    try:
+        return len(stream.get_data()) if stream is not None else 0
+    except Exception:  # noqa: BLE001 — битый поток: pypdf его всё равно пропустит
+        return 0
+
+
+def _forms_size(resources: Any, depth: int = 0) -> int:
+    """Распакованный размер форм (XObject), которые рисует страница или форма:
+    pypdf разбирает их вместе со страницей, и тяжесть можно спрятать туда."""
+    if depth >= _MAX_FORM_DEPTH or resources is None:
+        return 0
+    try:
+        xobjects = resources.get_object().get("/XObject")
+        items = list(xobjects.get_object().values()) if xobjects is not None else []
+    except Exception:  # noqa: BLE001
+        return 0
+    total = 0
+    for item in items:
+        form = item.get_object()
+        if form.get("/Subtype") != "/Form":
+            continue
+        total += _content_size(form) + _forms_size(form.get("/Resources"), depth + 1)
+        if total > MAX_CONTENT_BYTES:
+            break
+    return total
+
+
 def extract_text(content: bytes) -> str:
-    """Текст первых страниц PDF. Пустая строка — не PDF или PDF без текста (скан)."""
+    """Текст первых страниц PDF. Пустая строка — не PDF, PDF без текста (скан)
+    или файл, разбор которого вышел бы за пределы (MAX_CONTENT_BYTES, MAX_OPERATORS).
+
+    Синхронная и может занять до секунды — вызывать из потока, не из event loop.
+    """
     from pypdf import PdfReader  # тяжёлый импорт — только когда правда нужен
+
+    operators = 0
+
+    def count_operator(*_: Any) -> None:
+        nonlocal operators
+        operators += 1
+        if operators > MAX_OPERATORS:
+            raise _TooHeavy
 
     try:
         reader = PdfReader(BytesIO(content))
-        pages = reader.pages[:MAX_PAGES]
-        return "\n".join((page.extract_text() or "") for page in pages)
-    except Exception:  # noqa: BLE001 — битый/зашифрованный/не PDF: разбирать нечего
+        budget = MAX_CONTENT_BYTES
+        texts = []
+        for page in reader.pages[:MAX_PAGES]:
+            # Размер — до разбора: сам разбор потока операторов и есть дорогая часть.
+            budget -= _content_size(page.get_contents()) + _forms_size(page.get("/Resources"))
+            if budget < 0:
+                raise _TooHeavy
+            texts.append(page.extract_text(visitor_operand_before=count_operator) or "")
+        return "\n".join(texts)[:MAX_TEXT_CHARS]
+    except Exception:  # noqa: BLE001 — битый/зашифрованный/не PDF/слишком тяжёлый: разбирать нечего
         return ""
 
 
