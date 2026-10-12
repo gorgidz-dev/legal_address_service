@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 """Pydantic-схемы для собственника помещения (Исполнитель). По умолчанию ИП."""
 from datetime import datetime
 from typing import Optional
@@ -54,5 +56,8 @@ class ProviderRead(ProviderBase):
 
     id: UUID
     is_active: bool
+    # Комиссия площадки, % (null — общий процент из настроек). Меняется отдельно:
+    # PATCH /providers/{id}/commission, только админ.
+    commission_percent: Optional[Decimal] = None
     created_at: datetime
     updated_at: datetime

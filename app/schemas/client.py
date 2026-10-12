@@ -34,6 +34,9 @@ class DaDataLookupResponse(BaseModel):
     okved_main_code: Optional[str]
     okved_main_name: Optional[str]
     egrul_status: EgrulStatus
+    # Дата регистрации в ЕГРЮЛ — нужна сверке регистрации перед выплатой
+    # собственнику (owner_payouts). Необязательная: DaData отдаёт её не всегда.
+    registration_date: Optional[date] = None
 
     class Blockers(BaseModel):
         liquidating_or_liquidated: bool

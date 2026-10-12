@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Literal, Optional
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -154,6 +155,11 @@ class Settings(BaseSettings):
     # Сколько раз фоновая сверка повторяет закрывающий чек после явного отказа
     # банка, прежде чем оставить это админу.
     tbank_closing_receipt_max_attempts: int = 5
+
+    # --- Выплаты собственникам (app/services/owner_payouts.py) ---
+    # Комиссия площадки, % — для собственников, у которых свой процент не задан.
+    # Пусто — процент обязан быть у собственника, иначе выплату не посчитать.
+    owner_commission_default_percent: Optional[Decimal] = Field(default=None, ge=0, lt=100)
 
     # Web Push (VAPID). Если ключи пустые — push выключен (subscribe возвращает
     # 503, существующие подписки игнорируются при попытке отправки).

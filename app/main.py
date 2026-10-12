@@ -25,6 +25,7 @@ from app.models.user_session import UserSession
 from app.routers import (
     address_chats,
     address_documents,
+    owner_payouts,
     owner_tasks,
     provider_ratings,
     address_moderation,
@@ -295,6 +296,7 @@ if settings.app_env != "production":
     api_v1.include_router(demo.router)
 api_v1.include_router(webhooks.router)
 api_v1.include_router(payments.router)
+api_v1.include_router(owner_payouts.router)
 app.include_router(api_v1)
 
 

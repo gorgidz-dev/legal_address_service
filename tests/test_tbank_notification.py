@@ -16,6 +16,7 @@ from starlette.requests import Request
 
 from app.enums import ApplicationStatus, PaymentProvider, PaymentStatus
 from app.models.application import Application
+from app.models.owner_payout import OwnerPayout
 from app.models.payment import Payment
 from app.routers import webhooks as webhooks_router
 from app.services.dadata import CircuitBreaker
@@ -122,6 +123,8 @@ class _FakeDB:
         entity = stmt.column_descriptions[0].get("entity") if hasattr(stmt, "column_descriptions") else None
         if entity is Application:
             return _Result(self._application)
+        if entity is OwnerPayout:  # owner_payouts.ensure_payout: живых выплат ещё нет
+            return _Result(None)
         raise RuntimeError("no subscriptions in unit tests")
 
     def add(self, item):
@@ -140,7 +143,9 @@ class _FakeDB:
 @pytest.fixture
 def env(monkeypatch):
     payment = _payment()
-    application = SimpleNamespace(id=payment.application_id, status=ApplicationStatus.AWAITING_PAYMENT.value)
+    application = SimpleNamespace(
+        id=payment.application_id, status=ApplicationStatus.AWAITING_PAYMENT.value, provider_id=None
+    )
     bank = _FakeBank()
     state = SimpleNamespace(
         payment=payment, application=application, db=_FakeDB(application), bank=bank,

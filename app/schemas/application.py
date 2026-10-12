@@ -75,6 +75,11 @@ ApplicationCreate = Annotated[
 class ApplicationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    # Подтверждение регистрации компании (условие выплаты собственнику):
+    # клиент видит, сообщил ли он ИНН и подтвердила ли площадка.
+    registration_inn: Optional[str] = None
+    registration_inn_submitted_at: Optional[datetime] = None
+    registration_confirmed_at: Optional[datetime] = None
     id: UUID
     type: ApplicationType
     status: ApplicationStatus

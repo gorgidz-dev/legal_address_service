@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from app.enums import ApplicationStatus, PaymentProvider, PaymentStatus, UserRole
 from app.models.address import Address
 from app.models.application import Application
+from app.models.owner_payout import OwnerPayout
 from app.models.payment import Payment
 from app.routers import payments as payments_router
 from app.schemas.payment import PaymentInitiateRequest, PaymentRefundRequest
@@ -128,6 +129,8 @@ class _FakeDB:
         entity = stmt.column_descriptions[0].get("entity") if hasattr(stmt, "column_descriptions") else None
         if entity is Application:  # _lock_application в автомате
             return _Result(self._application)
+        if entity is OwnerPayout:  # owner_payouts.ensure_payout: живых выплат ещё нет
+            return _Result(None)
         raise RuntimeError("no subscriptions in unit tests")  # dispatch_event внутри событий
 
     def add(self, item):

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, CheckConstraint, Index, Text
+from sqlalchemy import Boolean, CheckConstraint, Index, Numeric, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -17,6 +18,10 @@ class Provider(UUIDPKMixin, TimestampMixin, Base):
         CheckConstraint("inn IS NULL OR length(inn) IN (10, 12)", name="inn_length"),
         CheckConstraint("ogrn IS NULL OR length(ogrn) IN (13, 15)", name="ogrn_length"),
         CheckConstraint("bik IS NULL OR length(bik) = 9", name="bik_length"),
+        CheckConstraint(
+            "commission_percent IS NULL OR (commission_percent >= 0 AND commission_percent < 100)",
+            name="commission_percent_range",
+        ),
         Index("ix_providers_is_active", "is_active"),
     )
 
@@ -44,5 +49,10 @@ class Provider(UUIDPKMixin, TimestampMixin, Base):
     phone: Mapped[Optional[str]] = mapped_column(Text)
 
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+
+    # Комиссия площадки с этого собственника, %. NULL — общий процент из
+    # настроек (OWNER_COMMISSION_DEFAULT_PERCENT). В выплату попадает снимок на
+    # момент оплаты — смена здесь старые сделки не меняет.
+    commission_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2))
 
     addresses: Mapped[list["Address"]] = relationship(back_populates="provider")

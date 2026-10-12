@@ -42,6 +42,7 @@ from app.enums import (
 from app.models.application import Application
 from app.models.payment import Payment
 from app.models.user import User
+from app.services import owner_payouts
 from app.services.notification_events import create_application_event
 from app.services.tbank_acquiring import TBankError, TBankNotConfigured, get_tbank_service
 from app.services import tbank_receipts
@@ -496,6 +497,9 @@ async def _on_paid(db: AsyncSession, payment: Payment, *, previous_local: str) -
 
     if application.status == ApplicationStatus.AWAITING_PAYMENT.value:
         application.status = ApplicationStatus.PAID.value
+        # Деньги у площадки — заводим будущую выплату собственнику (процент и
+        # суммы фиксируются сейчас). Тестовый терминал выплат не порождает.
+        await owner_payouts.ensure_payout(db, application, payment)
         await _client_event(
             db, payment, title="Оплата получена",
             message="Заявка переведена в статус «Оплачена» и ушла на проверку.",

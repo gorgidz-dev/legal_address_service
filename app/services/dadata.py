@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 import httpx
@@ -38,6 +39,16 @@ class DaDataError(RuntimeError):
 # ============================================================
 # Маппинг ответа DaData → наша схема
 # ============================================================
+
+def _ms_to_date(value: Any) -> Optional[date]:
+    """DaData отдаёт даты как миллисекунды Unix-времени (UTC)."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc).date()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
 
 def map_party_to_lookup(party: dict[str, Any]) -> DaDataLookupResponse:
     """
@@ -86,6 +97,7 @@ def map_party_to_lookup(party: dict[str, Any]) -> DaDataLookupResponse:
         okved_main_name=main_okved.get("name") if main_okved else None,
         egrul_status=egrul_status,
         blockers=blockers,
+        registration_date=_ms_to_date(state.get("registration_date")),
     )
 
 

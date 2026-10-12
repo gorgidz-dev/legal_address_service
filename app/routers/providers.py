@@ -8,10 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_staff
+from app.auth import require_admin, require_staff
 from app.database import get_db
 from app.models.provider import Provider
+from app.schemas.owner_payout import ProviderCommissionRead, ProviderCommissionUpdate
 from app.schemas.provider import ProviderCreate, ProviderRead
+from app.services.owner_payouts import resolve_commission_percent
 
 router = APIRouter(prefix="/providers", tags=["providers"], dependencies=[Depends(require_staff)])
 
@@ -62,3 +64,32 @@ async def get_provider(
     if provider is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Provider {provider_id} не найден")
     return provider
+
+
+@router.patch(
+    "/{provider_id}/commission",
+    response_model=ProviderCommissionRead,
+    summary="Процент комиссии площадки с собственника",
+    dependencies=[Depends(require_admin)],
+)
+async def set_provider_commission(
+    provider_id: UUID,
+    payload: ProviderCommissionUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> ProviderCommissionRead:
+    """Свой процент собственника; null — действует общий из настроек.
+
+    Применяется к новым оплатам: в уже заведённой выплате процент — снимок на
+    момент оплаты (app/services/owner_payouts.py).
+    """
+    provider = await db.get(Provider, provider_id)
+    if provider is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Собственник не найден")
+    provider.commission_percent = payload.commission_percent
+    await db.commit()
+    return ProviderCommissionRead(
+        provider_id=provider.id,
+        commission_percent=provider.commission_percent,
+        effective_percent=resolve_commission_percent(provider),
+    )
+

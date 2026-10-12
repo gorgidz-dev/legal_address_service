@@ -1,0 +1,423 @@
+"""Выплаты собственникам: реестр админа, подтверждение регистрации, отметка выплаты.
+
+Правила и жизненный цикл — app/services/owner_payouts.py. Здесь — доступ,
+блокировки строк и ответы. Порядок блокировок везде один, как в автомате
+платежей Т-Банка: платёж → заявка → выплата, — иначе встречные транзакции
+могли бы ждать друг друга.
+"""
+from __future__ import annotations
+
+from typing import Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth import require_admin, require_client, require_owner, utcnow
+from app.database import get_db
+from app.enums import (
+    ApplicationEventKind,
+    ApplicationType,
+    NotificationAudience,
+    PaymentStatus,
+)
+from app.models.address import Address
+from app.models.application import Application
+from app.models.client import Client
+from app.models.owner_payout import OwnerPayout
+from app.models.payment import Payment
+from app.models.provider import Provider
+from app.models.user import User
+from app.schemas.owner_payout import (
+    AdminPayoutRead,
+    ApplicationRegistrationRead,
+    OwnerPayoutRead,
+    PayoutCancelRequest,
+    PayoutMarkPaidRequest,
+    PayoutPayee,
+    PayoutStatus,
+    RegistrationCheckRead,
+    RegistrationConfirmRequest,
+    RegistrationInnRequest,
+)
+from app.services import owner_payouts
+from app.services.dadata import DaDataError, DaDataNotConfigured, get_dadata_service
+from app.services.notification_events import create_application_event
+from app.services.owner_payouts import PayoutError
+from app.services.tbank_payments import lock_payment
+
+router = APIRouter(prefix="/payouts", tags=["payouts"])
+
+#: Платёж, по которому может идти выплата: оплачен, или деньги уже уходят назад
+#: (тогда блокировки объяснят админу, почему двигать нельзя).
+_PAID_LIKE = (
+    PaymentStatus.SUCCEEDED.value,
+    PaymentStatus.REFUND_REQUESTED.value,
+    PaymentStatus.REFUNDED.value,
+)
+
+
+def _conflict(e: PayoutError) -> HTTPException:
+    return HTTPException(status.HTTP_409_CONFLICT, str(e))
+
+
+def _label(application: Application) -> str:
+    return application.company_name or application.planned_client_name or "Заявка"
+
+
+async def _lock_application(db: AsyncSession, application_id: UUID) -> Optional[Application]:
+    stmt = (
+        select(Application)
+        .where(Application.id == application_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _lock_payout(db: AsyncSession, payout_id: UUID) -> Optional[OwnerPayout]:
+    stmt = (
+        select(OwnerPayout)
+        .where(OwnerPayout.id == payout_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _platform_payment_id(db: AsyncSession, application_id: UUID) -> Optional[UUID]:
+    """Платёж, принятый площадкой по заявке: тот, на который заведена выплата,
+    иначе последний оплаченный через эквайринг."""
+    payout = await owner_payouts.active_payout(db, application_id)
+    if payout is not None:
+        return payout.payment_id
+    return (
+        await db.execute(
+            select(Payment.id)
+            .where(
+                Payment.application_id == application_id,
+                Payment.provider.in_(owner_payouts.PLATFORM_COLLECTED),
+                Payment.status.in_(_PAID_LIKE),
+            )
+            .order_by(Payment.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def _admin_views(db: AsyncSession, payouts: list[OwnerPayout]) -> list[AdminPayoutRead]:
+    if not payouts:
+        return []
+    app_ids = {p.application_id for p in payouts}
+    applications = {
+        a.id: a for a in (await db.execute(select(Application).where(Application.id.in_(app_ids)))).scalars()
+    }
+    providers = {
+        p.id: p
+        for p in (
+            await db.execute(select(Provider).where(Provider.id.in_({p.provider_id for p in payouts})))
+        ).scalars()
+    }
+    payments = {
+        p.id: p
+        for p in (
+            await db.execute(select(Payment).where(Payment.id.in_({p.payment_id for p in payouts})))
+        ).scalars()
+    }
+    address_ids = {a.address_id for a in applications.values()}
+    addresses = {
+        a.id: a for a in (await db.execute(select(Address).where(Address.id.in_(address_ids)))).scalars()
+    }
+    client_ids = {a.client_id for a in applications.values() if a.client_id}
+    clients = (
+        {c.id: c for c in (await db.execute(select(Client).where(Client.id.in_(client_ids)))).scalars()}
+        if client_ids
+        else {}
+    )
+
+    views: list[AdminPayoutRead] = []
+    for payout in payouts:
+        application = applications[payout.application_id]
+        provider = providers[payout.provider_id]
+        payment = payments[payout.payment_id]
+        address = addresses.get(application.address_id)
+        client = clients.get(application.client_id) if application.client_id else None
+        if payout.status == owner_payouts.PAID and payout.payee:
+            payee = PayoutPayee(**payout.payee)
+        else:
+            payee = PayoutPayee(**owner_payouts._payee_snapshot(provider))
+        suggested = application.registration_inn or (
+            client.inn if client and application.type == ApplicationType.ADDRESS_CHANGE.value else None
+        )
+        live = payout.status in (owner_payouts.AWAITING_REGISTRATION, owner_payouts.DUE)
+        views.append(
+            AdminPayoutRead(
+                id=payout.id,
+                status=payout.status,
+                application_id=application.id,
+                application_label=_label(application),
+                application_type=application.type,
+                application_status=application.status,
+                address=address.full_address if address else None,
+                provider_id=provider.id,
+                provider_name=provider.short_name,
+                payment_id=payment.id,
+                payment_status=payment.status,
+                gross_kopeks=payout.gross_kopeks,
+                commission_percent=payout.commission_percent,
+                commission_kopeks=payout.commission_kopeks,
+                payout_kopeks=payout.payout_kopeks,
+                due_at=payout.due_at,
+                paid_on=payout.paid_on,
+                paid_at=payout.paid_at,
+                bank_reference=payout.bank_reference,
+                comment=payout.comment,
+                cancelled_at=payout.cancelled_at,
+                cancel_reason=payout.cancel_reason,
+                created_at=payout.created_at,
+                payee=payee,
+                registration_inn=application.registration_inn,
+                registration_inn_submitted_at=application.registration_inn_submitted_at,
+                registration_confirmed_at=application.registration_confirmed_at,
+                registration_check=application.registration_check,
+                suggested_inn=suggested,
+                blockers=owner_payouts.payout_blockers(application, payment) if live else [],
+            )
+        )
+    return views
+
+
+async def _admin_view(db: AsyncSession, payout: OwnerPayout) -> AdminPayoutRead:
+    return (await _admin_views(db, [payout]))[0]
+
+
+# ============================================================
+# Реестр
+# ============================================================
+
+
+@router.get("", response_model=list[AdminPayoutRead])
+async def list_payouts(
+    status_filter: Optional[PayoutStatus] = Query(default=None, alias="status"),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> list[AdminPayoutRead]:
+    stmt = select(OwnerPayout).order_by(OwnerPayout.created_at.desc())
+    if status_filter:
+        stmt = stmt.where(OwnerPayout.status == status_filter)
+    payouts = list((await db.execute(stmt)).scalars())
+    return await _admin_views(db, payouts)
+
+
+@router.get("/mine", response_model=list[OwnerPayoutRead])
+async def my_payouts(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> list[OwnerPayoutRead]:
+    """Выплаты собственника — только его и только то, что ему положено знать."""
+    if user.provider_id is None:
+        return []
+    payouts = list(
+        (
+            await db.execute(
+                select(OwnerPayout)
+                .where(OwnerPayout.provider_id == user.provider_id)
+                .order_by(OwnerPayout.created_at.desc())
+            )
+        ).scalars()
+    )
+    return [
+        OwnerPayoutRead(**view.model_dump(include=set(OwnerPayoutRead.model_fields)))
+        for view in await _admin_views(db, payouts)
+    ]
+
+
+# ============================================================
+# Регистрация компании клиента
+# ============================================================
+
+
+async def _run_check(
+    db: AsyncSession, application_id: UUID, inn: str
+) -> tuple[Application, owner_payouts.RegistrationCheck]:
+    application = await db.get(Application, application_id)
+    if application is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка не найдена")
+    address = await db.get(Address, application.address_id)
+    if address is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Адрес заявки не найден")
+    try:
+        service = get_dadata_service()
+    except DaDataNotConfigured as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
+    try:
+        check = await owner_payouts.check_registration(application, address.full_address, inn, service)
+    except DaDataError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+    return application, check
+
+
+@router.post(
+    "/applications/{application_id}/registration/check", response_model=RegistrationCheckRead
+)
+async def check_registration(
+    application_id: UUID,
+    payload: RegistrationInnRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> RegistrationCheckRead:
+    """Сверка с ЕГРЮЛ без изменений: что DaData знает о компании и совпадает ли адрес."""
+    _, check = await _run_check(db, application_id, payload.inn)
+    return RegistrationCheckRead(**{**check.__dict__, "warnings": list(check.warnings)})
+
+
+@router.post(
+    "/applications/{application_id}/registration/confirm", response_model=AdminPayoutRead
+)
+async def confirm_registration(
+    application_id: UUID,
+    payload: RegistrationConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> AdminPayoutRead:
+    """Регистрация подтверждена → выплата собственнику «к перечислению»."""
+    # Запрос в ЕГРЮЛ — до блокировок: сеть не должна держать строки.
+    _, check = await _run_check(db, application_id, payload.inn)
+
+    payment_id = await _platform_payment_id(db, application_id)
+    if payment_id is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Оплаты через площадку по заявке нет — выплачивать собственнику нечего.",
+        )
+    payment = await lock_payment(db, payment_id)
+    application = await _lock_application(db, application_id)
+    if payment is None or application is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка или платёж не найдены")
+    try:
+        payout = await owner_payouts.confirm_registration(
+            db,
+            application=application,
+            payment=payment,
+            check=check,
+            accept_address_mismatch=payload.accept_address_mismatch,
+            admin_id=admin.id,
+            now=utcnow(),
+        )
+    except PayoutError as e:
+        await db.rollback()
+        raise _conflict(e) from e
+    await db.commit()
+    return await _admin_view(db, payout)
+
+
+@router.post(
+    "/applications/{application_id}/registration/inn", response_model=ApplicationRegistrationRead
+)
+async def submit_registration_inn(
+    application_id: UUID,
+    payload: RegistrationInnRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_client),
+) -> ApplicationRegistrationRead:
+    """Клиент сообщает ИНН зарегистрированной компании. Подтверждает админ."""
+    application = await _lock_application(db, application_id)
+    if application is None or application.created_by != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка не найдена")
+    if application.status not in owner_payouts.REGISTRATION_ALLOWED:
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Сообщить ИНН можно после получения документов."
+        )
+    if application.registration_confirmed_at is not None:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Регистрация уже подтверждена.")
+    application.registration_inn = payload.inn
+    application.registration_inn_submitted_at = utcnow()
+    await create_application_event(
+        db=db,
+        application_id=application.id,
+        kind=ApplicationEventKind.STATUS_CHANGED,
+        audience=NotificationAudience.ADMIN,
+        title="Клиент сообщил ИНН компании",
+        message=(
+            f"ИНН {payload.inn}. Сверьте регистрацию с ЕГРЮЛ в разделе «Выплаты» — "
+            "после подтверждения выплата собственнику встанет в очередь."
+        ),
+        payload={"registration_inn": payload.inn},
+        created_by=user.id,
+    )
+    await db.commit()
+    return ApplicationRegistrationRead(
+        application_id=application.id,
+        registration_inn=application.registration_inn,
+        registration_inn_submitted_at=application.registration_inn_submitted_at,
+        registration_confirmed_at=application.registration_confirmed_at,
+    )
+
+
+# ============================================================
+# Выплата
+# ============================================================
+
+
+async def _lock_payout_chain(
+    db: AsyncSession, payout_id: UUID
+) -> tuple[OwnerPayout, Application, Payment]:
+    head = await db.get(OwnerPayout, payout_id)
+    if head is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Выплата не найдена")
+    payment = await lock_payment(db, head.payment_id)
+    application = await _lock_application(db, head.application_id)
+    payout = await _lock_payout(db, payout_id)
+    if payment is None or application is None or payout is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Выплата не найдена")
+    return payout, application, payment
+
+
+@router.post("/{payout_id}/mark-paid", response_model=AdminPayoutRead)
+async def mark_paid(
+    payout_id: UUID,
+    payload: PayoutMarkPaidRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> AdminPayoutRead:
+    """Админ перевёл деньги собственнику в банке и отмечает это здесь."""
+    payout, application, payment = await _lock_payout_chain(db, payout_id)
+    try:
+        await owner_payouts.mark_paid(
+            db,
+            payout=payout,
+            application=application,
+            payment=payment,
+            paid_on=payload.paid_on,
+            bank_reference=payload.bank_reference,
+            comment=payload.comment,
+            admin_id=admin.id,
+            now=utcnow(),
+        )
+    except PayoutError as e:
+        await db.rollback()
+        raise _conflict(e) from e
+    await db.commit()
+    return await _admin_view(db, payout)
+
+
+@router.post("/{payout_id}/cancel", response_model=AdminPayoutRead)
+async def cancel_payout(
+    payout_id: UUID,
+    payload: PayoutCancelRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> AdminPayoutRead:
+    payout, _application, _payment = await _lock_payout_chain(db, payout_id)
+    try:
+        await owner_payouts.cancel(
+            db, payout=payout, reason=payload.reason, admin_id=admin.id, now=utcnow()
+        )
+    except PayoutError as e:
+        await db.rollback()
+        raise _conflict(e) from e
+    await db.commit()
+    return await _admin_view(db, payout)

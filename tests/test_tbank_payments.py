@@ -20,6 +20,7 @@ from app.enums import (
     UserRole,
 )
 from app.models.application import Application
+from app.models.owner_payout import OwnerPayout
 from app.models.application_event import ApplicationEvent
 from app.models.payment import Payment
 from app.models.user import User
@@ -91,6 +92,8 @@ class _FakeDB:
         entity = stmt.column_descriptions[0].get("entity") if hasattr(stmt, "column_descriptions") else None
         if entity is Application:
             return _Result(self._application)
+        if entity is OwnerPayout:  # owner_payouts.ensure_payout: живых выплат ещё нет
+            return _Result(None)
         # dispatch_event ищет вебхук-подписки — в юнит-тестах их нет.
         raise RuntimeError("no subscriptions in unit tests")
 
@@ -113,7 +116,7 @@ class _FakeDB:
 
 
 def _linked(status=PaymentStatus.AWAITING_USER, app_status=ApplicationStatus.AWAITING_PAYMENT, users=(), **kw):
-    application = SimpleNamespace(id=uuid4(), status=app_status.value)
+    application = SimpleNamespace(id=uuid4(), status=app_status.value, provider_id=None)
     payment = _payment(status, **kw)
     payment.application_id = application.id
     return payment, application, _FakeDB(application, users)

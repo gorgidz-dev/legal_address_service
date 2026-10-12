@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from sqlalchemy import (
@@ -14,7 +14,7 @@ from sqlalchemy import (
     SmallInteger,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -102,4 +102,16 @@ class Application(UUIDPKMixin, TimestampMixin, Base):
 
     created_by: Mapped[Optional[UUID]] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"),
+    )
+
+    # Подтверждение регистрации компании клиента по адресу — условие выплаты
+    # собственнику (app/services/owner_payouts.py). ИНН сообщает клиент или
+    # вводит админ; registration_check — снимок сверки с ЕГРЮЛ (DaData) на
+    # момент подтверждения.
+    registration_inn: Mapped[Optional[str]] = mapped_column(Text)
+    registration_inn_submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    registration_check: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB(none_as_null=True))
+    registration_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    registration_confirmed_by: Mapped[Optional[UUID]] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"),
     )
