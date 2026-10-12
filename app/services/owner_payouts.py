@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
@@ -74,15 +74,29 @@ _BLOCKING_APPLICATION = {
 
 _PARTIAL_REFUNDED = "PARTIAL_REFUNDED"  # статус банка, см. tbank_payments
 
+#: Даты платёжек и «сегодня» — по Москве: сервер живёт в UTC, и с 00:00 до 03:00
+#: МСК сегодняшняя дата платёжки отклонялась бы как «будущая». Перехода на
+#: летнее время в России нет с 2014 года — фиксированного смещения достаточно.
+MOSCOW = timezone(timedelta(hours=3))
+
 
 class PayoutError(Exception):
     """Шаг запрещён: текст — для админа, роутер отдаёт его как 409."""
 
 
+_PERCENT_STEP = Decimal("0.01")
+
+
 def resolve_commission_percent(provider: Provider) -> Optional[Decimal]:
-    if provider.commission_percent is not None:
-        return Decimal(provider.commission_percent)
-    return settings.owner_commission_default_percent
+    """Свой процент собственника или общий. Всегда ровно два знака: колонка
+    Numeric(5,2) округлила бы 12.345 до 12.35, а комиссия была бы посчитана по
+    12.345 — снимок процента разошёлся бы с удержанной суммой."""
+    value = provider.commission_percent
+    if value is None:
+        value = settings.owner_commission_default_percent
+    if value is None:
+        return None
+    return Decimal(value).quantize(_PERCENT_STEP, rounding=ROUND_HALF_UP)
 
 
 def split(gross_kopeks: int, percent: Decimal) -> tuple[int, int]:
@@ -142,6 +156,14 @@ async def ensure_payout(
         return None
     if is_demo_terminal(payment.provider_account):
         return None  # тестовый терминал: денег нет, платить собственнику нечем
+    # По этому платежу выплата уже есть — в любом статусе. Отменённую не
+    # переоткрываем молча: вторая строка на тот же платёж нарушила бы уникальный
+    # индекс (500), а решение «всё-таки платить» — за человеком.
+    by_payment = (
+        await db.execute(select(OwnerPayout).where(OwnerPayout.payment_id == payment.id))
+    ).scalar_one_or_none()
+    if by_payment is not None:
+        return by_payment
     existing = await active_payout(db, application.id)
     if existing is not None:
         return existing
@@ -168,51 +190,90 @@ async def ensure_payout(
 # ============================================================
 
 #: Служебные слова адреса — по ним не сравниваем: DaData и наш каталог пишут
-#: их по-разному («ул»/«улица», «д.»/«дом», «вн.тер.г.»).
+#: их по-разному («ул»/«улица», «вн.тер.г.»). Слова-метки номеров (дом, корпус,
+#: строение, помещение) разбираются отдельно — см. _NUMBER_KINDS.
 _ADDRESS_NOISE = frozenset({
-    "г", "город", "гор", "ул", "улица", "д", "дом", "к", "корп", "корпус", "стр", "строение",
-    "пом", "помещ", "помещение", "кв", "квартира", "оф", "офис", "эт", "этаж", "ком", "комн",
-    "комната", "пр", "пр-т", "просп", "проспект", "пер", "переулок", "ш", "шоссе", "наб",
-    "набережная", "пл", "площадь", "б-р", "бульвар", "проезд", "туп", "тупик", "мкр",
-    "микрорайон", "вл", "владение", "р-н", "район", "обл", "область", "респ", "республика",
-    "муниципальный", "округ", "мо", "вн", "тер", "внутригородская", "территория", "поселение",
-    "пос", "поселок", "п", "с", "село", "деревня", "рф", "российская", "федерация", "россия",
+    "г", "город", "гор", "ул", "улица", "пр", "пр-т", "пр-кт", "просп", "проспект", "пер",
+    "переулок", "ш", "шоссе", "наб", "набережная", "пл", "площадь", "б-р", "бульвар", "проезд",
+    "пр-д", "туп", "тупик", "мкр", "микрорайон", "р-н", "район", "обл", "область", "респ",
+    "республика", "муниципальный", "округ", "мо", "вн", "тер", "внутригородская", "территория",
+    "поселение", "пос", "поселок", "п", "с", "село", "деревня", "рф", "российская",
+    "федерация", "россия", "эт", "этаж",
 })
-_TOKEN = re.compile(r"[0-9a-zа-я]+")
+#: Метка → вид номера. «д» бывает и «деревней» («д. Марьино») — номером считаем,
+#: только если за меткой идёт что-то с цифрой.
+_NUMBER_KINDS = {
+    **dict.fromkeys(("д", "дом", "вл", "владение", "двлд"), "house"),
+    **dict.fromkeys(("к", "корп", "корпус"), "korpus"),
+    **dict.fromkeys(("стр", "строение", "соор", "сооружение"), "building"),
+    **dict.fromkeys(
+        ("пом", "помещ", "помещение", "оф", "офис", "кв", "квартира", "ком", "комн", "комната"),
+        "premises",
+    ),
+}
+#: Дом, корпус и строение определяют здание: лишний корпус или строение в ЕГРЮЛ —
+#: это уже другое здание (в Москве «стр. 1» — отдельный дом).
+_BUILDING_KINDS = ("house", "korpus", "building")
+_TOKEN = re.compile(r"[0-9a-zа-я]+(?:[/-][0-9a-zа-я]+)*")
 
 
-def _address_tokens(value: str) -> tuple[set[str], set[str]]:
-    """(слова, номера) адреса без индекса и служебных слов."""
-    words: set[str] = set()
-    numbers: set[str] = set()
-    for token in _TOKEN.findall(value.lower().replace("ё", "е")):
-        if token in _ADDRESS_NOISE:
+@dataclass
+class _ParsedAddress:
+    words: set[str]
+    numbers: dict[str, set[str]]  # вид → номера
+    loose: set[str]  # номера без метки
+
+
+def _parse_address(value: str, room_number: Optional[str] = None) -> _ParsedAddress:
+    tokens = _TOKEN.findall(value.lower().replace("ё", "е"))
+    parsed = _ParsedAddress(words=set(), numbers={}, loose=set())
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        kind = _NUMBER_KINDS.get(token)
+        following = tokens[i + 1] if i + 1 < len(tokens) else ""
+        if kind and any(ch.isdigit() for ch in following):
+            parsed.numbers.setdefault(kind, set()).add(following)
+            i += 2
             continue
         if any(ch.isdigit() for ch in token):
-            if len(token) == 6 and token.isdigit():
-                continue  # почтовый индекс: в каталоге его обычно нет
-            numbers.add(token)
-        elif len(token) >= 3:
-            words.add(token)
-    return words, numbers
+            if not (len(token) == 6 and token.isdigit()):  # почтовый индекс не сравниваем
+                parsed.loose.add(token)
+        elif token not in _ADDRESS_NOISE and token not in _NUMBER_KINDS and len(token) >= 3:
+            parsed.words.add(token)
+        i += 1
+    if room_number and "premises" not in parsed.numbers:
+        room = {t for t in _TOKEN.findall(room_number.lower()) if any(ch.isdigit() for ch in t)}
+        if room:
+            parsed.numbers["premises"] = room
+    return parsed
 
 
-def addresses_match(ours: str, egrul: Optional[str]) -> Optional[bool]:
+def addresses_match(ours: str, egrul: Optional[str], room_number: Optional[str] = None) -> Optional[bool]:
     """Похоже ли, что юрадрес из ЕГРЮЛ — наш адрес. None — сравнивать не с чем.
 
-    Подсказка админу, а не решение: все номера нашего адреса (дом, корпус,
-    помещение) должны найтись в адресе ЕГРЮЛ, и большая часть слов (город,
-    улица) — тоже. Подтверждает регистрацию всё равно человек.
+    Подсказка админу, а не решение — подтверждает регистрацию всё равно человек,
+    но «совпадает» снимает с него обязанность сверять вручную, поэтому правило
+    строгое: все значимые слова нашего адреса (город, улица) есть в ЕГРЮЛ; дом,
+    корпус и строение совпадают по видам (лишний корпус или строение — другое
+    здание); помещение, если указано с обеих сторон, тоже совпадает.
     """
     if not egrul:
         return None
-    our_words, our_numbers = _address_tokens(ours)
-    their_words, their_numbers = _address_tokens(egrul)
-    if not our_numbers or not our_numbers <= their_numbers:
+    our = _parse_address(ours, room_number)
+    their = _parse_address(egrul)
+    if not our.numbers and not our.loose:
+        return None  # в нашем адресе нет ни одного номера — сравнивать нечего
+    if not our.words <= their.words:
         return False
-    if not our_words:
-        return True
-    return len(our_words & their_words) * 3 >= len(our_words) * 2
+    for kind in _BUILDING_KINDS:
+        if our.numbers.get(kind, set()) != their.numbers.get(kind, set()):
+            return False
+    if "premises" in our.numbers and "premises" in their.numbers:
+        if our.numbers["premises"] != their.numbers["premises"]:
+            return False
+    their_all = their.loose.union(*their.numbers.values()) if their.numbers else their.loose
+    return our.loose <= their_all
 
 
 @dataclass
@@ -245,7 +306,7 @@ class RegistrationCheck:
 
 
 async def check_registration(
-    application: Application, our_address: str, inn: str, dadata: Any
+    application: Application, our_address: str, inn: str, dadata: Any, room_number: Optional[str] = None
 ) -> RegistrationCheck:
     """Запрос в ЕГРЮЛ (DaData) по ИНН и сравнение юрадреса с адресом заявки.
 
@@ -259,7 +320,7 @@ async def check_registration(
             inn=inn, found=False, our_address=our_address,
             warnings=("Компания с таким ИНН в ЕГРЮЛ не найдена — возможно, запись ещё не появилась.",),
         )
-    match = addresses_match(our_address, found.legal_address)
+    match = addresses_match(our_address, found.legal_address, room_number)
     warnings: list[str] = []
     if match is False:
         warnings.append("Юрадрес в ЕГРЮЛ не похож на адрес заявки — сравните вручную.")
@@ -349,6 +410,11 @@ async def confirm_registration(
     payout = await ensure_payout(db, application, payment)
     if payout is None:
         raise PayoutError("По этому платежу выплата не положена (тестовый терминал или нет собственника).")
+    if payout.status == CANCELLED:
+        raise PayoutError(
+            "Выплату по этому платежу отменили. Если деньги собственнику всё же положены, "
+            "рассчитайтесь с ним вне реестра."
+        )
     if payout.status != AWAITING_REGISTRATION:
         raise PayoutError(f"Выплата уже в статусе «{payout.status}».")
     if payout.commission_percent is None:
@@ -420,7 +486,7 @@ async def mark_paid(
     blockers = payout_blockers(application, payment)
     if blockers:
         raise PayoutError("Нельзя: " + "; ".join(blockers) + ". Отмените выплату, если она больше не положена.")
-    if paid_on > now.date():
+    if paid_on > now.astimezone(MOSCOW).date():
         raise PayoutError("Дата платёжки не может быть в будущем.")
     reference = bank_reference.strip()
     if not reference:

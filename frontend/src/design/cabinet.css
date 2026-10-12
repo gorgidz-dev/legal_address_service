@@ -800,6 +800,20 @@
   cursor: pointer;
 }
 .cab-tabbar__item.is-active { color: var(--ds-indigo-700); }
+/* «Ещё» в нижней панели: разделы, которые не влезли в пять кнопок. */
+.cab-tabbar__more {
+  position: fixed; left: 8px; right: 8px; bottom: 76px; z-index: 6;
+  display: grid; gap: 2px; padding: 6px;
+  background: #fff; border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-xl); box-shadow: var(--ds-shadow-lg);
+}
+@media (min-width: 901px) { .cab-tabbar__more { display: none; } }
+.cab-tabbar__more-item {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px;
+  border: 0; border-radius: var(--ds-radius-lg); background: transparent;
+  color: var(--ds-slate-700); font: inherit; font-size: 14px; font-weight: 550; text-align: left; cursor: pointer;
+}
+.cab-tabbar__more-item.is-active { background: var(--ds-indigo-50); color: var(--ds-indigo-700); }
 
 /* ============================== Каталог ============================== */
 /*
@@ -1315,7 +1329,8 @@
 }
 .payout-card__blockers li { display: flex; gap: 6px; align-items: flex-start; }
 .payout-card__blockers svg { flex: none; margin-top: 2px; }
-.payout-card__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.payout-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.payout-card__hint { font-size: 12px; }
 
 .payout-money { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .payout-money div { display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--ds-radius-md); background: var(--ds-slate-50); }

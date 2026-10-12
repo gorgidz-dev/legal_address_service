@@ -162,8 +162,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // Versioned API uses { error: { code, message, details } }; tolerate legacy { detail }.
     const errorObj = body?.error;
     const detail = body?.detail;
-    const message =
-      typeof errorObj?.message === "string"
+    // Ошибка валидации полей: показываем, какое поле и что не так («ИНН:
+    // контрольная сумма не сошлась»), а не общее «Запрос не прошёл валидацию».
+    const fieldErrors: string[] =
+      errorObj?.code === "validation_error" && Array.isArray(errorObj.details)
+        ? errorObj.details
+            .map((item: { msg?: unknown }) => (typeof item?.msg === "string" ? item.msg.replace(/^Value error, /, "") : ""))
+            .filter(Boolean)
+        : [];
+    const message = fieldErrors.length
+      ? fieldErrors.join("; ")
+      : typeof errorObj?.message === "string"
         ? errorObj.message
         : typeof detail === "string"
           ? detail

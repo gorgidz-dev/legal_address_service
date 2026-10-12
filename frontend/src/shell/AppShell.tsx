@@ -9,7 +9,7 @@
  *
  * Различается только конфигурация разделов (shell/navConfig.ts) и содержимое.
  */
-import { ChevronLeft, ExternalLink, LogOut, MailWarning, RefreshCw } from "lucide-react";
+import { ChevronLeft, ExternalLink, LogOut, MailWarning, MoreHorizontal, RefreshCw } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { EmailVerificationBanner } from "../sections/EmailVerification";
 import type { CurrentUser } from "../types";
@@ -227,6 +227,9 @@ function NavGroupView({
  * пять — берём первые из каждой группы, остальное остаётся доступным по прямой
  * ссылке. Лучше пять достижимых кнопок, чем тринадцать нечитаемых.
  */
+/** Сколько кнопок помещается в нижнюю панель телефона. */
+const TABBAR_SLOTS = 5;
+
 function MobileTabbar({
   groups,
   section,
@@ -236,26 +239,74 @@ function MobileTabbar({
   section: string;
   onSection: (id: string) => void;
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
   const flat = groups.flatMap((group) => group.items);
-  const items = flat.length <= 5 ? flat : groups.map((group) => group.items[0]).slice(0, 5);
+  // Не влезает — четыре кнопки и «Ещё» с остальными. Раньше лишние разделы
+  // просто пропадали: у собственника с шестым пунктом в панели оставались
+  // одни «Заявки», и до остальных разделов с телефона было не добраться.
+  const overflow = flat.length > TABBAR_SLOTS;
+  const primary = !overflow
+    ? flat
+    : groups.length > 1
+      ? groups.map((group) => group.items[0]).slice(0, TABBAR_SLOTS - 1)
+      : flat.slice(0, TABBAR_SLOTS - 1);
+  const rest = flat.filter((item) => !primary.includes(item));
+  const restActive = rest.some((item) => item.id === section);
+
+  function go(id: string) {
+    setMoreOpen(false);
+    onSection(id);
+  }
 
   return (
-    <nav className="cab-tabbar">
-      {items.map((item) => {
-        const Icon = item.icon;
-        return (
+    <>
+      {moreOpen ? (
+        <div className="cab-tabbar__more" role="menu">
+          {rest.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                className={section === item.id ? "cab-tabbar__more-item is-active" : "cab-tabbar__more-item"}
+                key={item.id}
+                onClick={() => go(item.id)}
+                role="menuitem"
+                type="button"
+              >
+                <Icon size={18} strokeWidth={1.8} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      <nav className="cab-tabbar">
+        {primary.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              aria-current={section === item.id ? "page" : undefined}
+              className={section === item.id ? "cab-tabbar__item is-active" : "cab-tabbar__item"}
+              key={item.id}
+              onClick={() => go(item.id)}
+              type="button"
+            >
+              <Icon size={18} strokeWidth={1.8} />
+              <span>{item.shortLabel || item.label}</span>
+            </button>
+          );
+        })}
+        {overflow ? (
           <button
-            aria-current={section === item.id ? "page" : undefined}
-            className={section === item.id ? "cab-tabbar__item is-active" : "cab-tabbar__item"}
-            key={item.id}
-            onClick={() => onSection(item.id)}
+            aria-expanded={moreOpen}
+            className={restActive || moreOpen ? "cab-tabbar__item is-active" : "cab-tabbar__item"}
+            onClick={() => setMoreOpen((open) => !open)}
             type="button"
           >
-            <Icon size={18} strokeWidth={1.8} />
-            <span>{item.shortLabel || item.label}</span>
+            <MoreHorizontal size={18} strokeWidth={1.8} />
+            <span>Ещё</span>
           </button>
-        );
-      })}
-    </nav>
+        ) : null}
+      </nav>
+    </>
   );
 }

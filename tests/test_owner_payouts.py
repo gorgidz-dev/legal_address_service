@@ -82,6 +82,35 @@ def test_no_egrul_address_is_unknown_not_mismatch() -> None:
     assert addresses_match(OUR_ADDRESS, None) is None
 
 
+@pytest.mark.parametrize(
+    ("ours", "egrul", "room"),
+    [
+        # номера те же, но перепутаны дом и помещение
+        ("г Москва, ул Тверская, д 1, пом 5", "г Москва, ул Тверская, д 5, пом 1", None),
+        # другая улица в том же городе, у ЕГРЮЛ лишняя квартира
+        ("Московская обл, г Химки, ул Ленина, д 7", "141400, Московская обл, г Химки, ул Мира, д 7, кв 3", None),
+        # в Москве «стр. 1» — отдельное здание
+        ("г Москва, ул Тверская, д 7", "г Москва, ул Тверская, д 7, стр 1", None),
+        # помещение из карточки адреса не то
+        ("г Москва, ул Тверская, д 7", "г Москва, ул Тверская, д 7, помещ. 2", "3"),
+    ],
+)
+def test_lookalike_addresses_are_not_a_match(ours, egrul, room) -> None:
+    assert addresses_match(ours, egrul, room) is False
+
+
+def test_room_from_address_card_and_abbreviations_still_match() -> None:
+    assert addresses_match("г Москва, ул Тверская, д 7", "г Москва, ул Тверская, д 7, помещ. 2", "2") is True
+    assert addresses_match(
+        "г. Москва, Ленинградский пр-т, д. 39, стр. 80", "125167, г Москва, пр-кт Ленинградский, д 39, стр 80"
+    ) is True
+
+
+def test_commission_percent_is_quantized_to_two_places(monkeypatch) -> None:
+    monkeypatch.setattr(owner_payouts.settings, "owner_commission_default_percent", Decimal("12.345"))
+    assert owner_payouts.resolve_commission_percent(_provider(None)) == Decimal("12.35")
+
+
 # ------------------------------------------------------------------
 # Подставная сессия
 # ------------------------------------------------------------------
@@ -433,4 +462,30 @@ async def test_mark_paid_needs_owner_bank_details() -> None:
     with pytest.raises(PayoutError, match="реквизиты"):
         await _mark(_DB(provider=provider), payout, _application(provider=provider), _payment())
     assert payout.status == DUE
+
+
+@pytest.mark.asyncio
+async def test_cancelled_payout_cannot_be_reconfirmed_by_same_payment() -> None:
+    provider = _provider()
+    cancelled = OwnerPayout(
+        id=uuid4(), application_id=uuid4(), payment_id=uuid4(), provider_id=provider.id,
+        status=CANCELLED, gross_kopeks=3_000_000, cancel_reason="ошибка",
+    )
+    application = _application(provider=provider)
+    with pytest.raises(PayoutError, match="отменили"):
+        await _confirm(_DB(provider=provider, active=cancelled), application, _payment())
+    assert application.registration_confirmed_at is None
+
+
+@pytest.mark.asyncio
+async def test_payment_order_date_is_compared_in_moscow_time() -> None:
+    """01:30 МСК 13.10 — в UTC ещё 12.10; платёжка от 13.10 не «будущая»."""
+    provider = _provider()
+    night = datetime(2026, 10, 12, 22, 30, tzinfo=timezone.utc)
+    payout = await owner_payouts.mark_paid(
+        _DB(provider=provider), payout=_due_payout(provider), application=_application(provider=provider),
+        payment=_payment(), paid_on=date(2026, 10, 13), bank_reference="7", comment=None,
+        admin_id=uuid4(), now=night,
+    )
+    assert payout.status == PAID
 

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_admin, require_client, require_owner, utcnow
@@ -41,6 +42,7 @@ from app.schemas.owner_payout import (
     RegistrationConfirmRequest,
     RegistrationInnRequest,
 )
+from app.routers.owner_dashboard import OWNER_VISIBLE_STATUSES
 from app.services import owner_payouts
 from app.services.dadata import DaDataError, DaDataNotConfigured, get_dadata_service
 from app.services.notification_events import create_application_event
@@ -218,11 +220,18 @@ async def my_payouts(
     """Выплаты собственника — только его и только то, что ему положено знать."""
     if user.provider_id is None:
         return []
+    # Только по заявкам, которые собственник уже видит в кабинете: оплаченная
+    # заявка до назначения админом ему не показывается — и выплата по ней тоже,
+    # иначе раздел «Выплаты» раскрывал бы клиента раньше времени.
     payouts = list(
         (
             await db.execute(
                 select(OwnerPayout)
-                .where(OwnerPayout.provider_id == user.provider_id)
+                .join(Application, Application.id == OwnerPayout.application_id)
+                .where(
+                    OwnerPayout.provider_id == user.provider_id,
+                    Application.status.in_(OWNER_VISIBLE_STATUSES),
+                )
                 .order_by(OwnerPayout.created_at.desc())
             )
         ).scalars()
@@ -252,9 +261,34 @@ async def _run_check(
     except DaDataNotConfigured as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from e
     try:
-        check = await owner_payouts.check_registration(application, address.full_address, inn, service)
+        check = await owner_payouts.check_registration(
+            application, address.full_address, inn, service, room_number=address.room_number
+        )
     except DaDataError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+
+    # Признаки «не тот ИНН»: подсказки админу, решает он (одна компания законно
+    # бывает в нескольких заявках — например, при продлении).
+    warnings = list(check.warnings)
+    taken = (
+        await db.execute(
+            select(Application.company_name, Application.planned_client_name).where(
+                Application.registration_inn == inn,
+                Application.registration_confirmed_at.is_not(None),
+                Application.id != application.id,
+            )
+        )
+    ).first()
+    if taken is not None:
+        warnings.append(
+            f"Этот ИНН уже подтверждён по другой заявке ({taken[0] or taken[1] or 'без названия'}) — "
+            "проверьте, что это не ошибка."
+        )
+    if application.type == ApplicationType.ADDRESS_CHANGE.value and application.client_id:
+        client = await db.get(Client, application.client_id)
+        if client is not None and client.inn != inn:
+            warnings.append(f"ИНН не совпадает с компанией из заявки ({client.inn}).")
+    check.warnings = tuple(warnings)
     return application, check
 
 
@@ -305,10 +339,16 @@ async def confirm_registration(
             admin_id=admin.id,
             now=utcnow(),
         )
+        await db.commit()
     except PayoutError as e:
         await db.rollback()
         raise _conflict(e) from e
-    await db.commit()
+    except IntegrityError as e:
+        # Параллельная оплата/подтверждение успели завести выплату первыми.
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Выплату по заявке только что изменили — обновите реестр."
+        ) from e
     return await _admin_view(db, payout)
 
 

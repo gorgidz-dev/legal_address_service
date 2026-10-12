@@ -82,7 +82,7 @@ from app.services.tbank_payments import (
     recheck_payment,
     refund_failed,
 )
-from app.services import tbank_receipts
+from app.services import owner_payouts, tbank_receipts
 from app.services.tbank_receipts import ReceiptContactMissing, build_prepayment_receipt
 from app.services.storage import (
     attachment_disposition,
@@ -1386,6 +1386,8 @@ async def handle_cdek_pay_payment_callback(
     application = await db.get(Application, payment.application_id)
     if application is not None and application.status == ApplicationStatus.AWAITING_PAYMENT.value:
         application.status = ApplicationStatus.PAID.value
+        # Деньги у площадки — как и у Т-Банка, заводим будущую выплату собственнику.
+        await owner_payouts.ensure_payout(db, application, payment)
         await create_application_event(
             db=db,
             application_id=application.id,

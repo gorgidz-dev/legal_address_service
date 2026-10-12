@@ -36,16 +36,29 @@ const STATUS_META: Record<PayoutStatus, { label: string; tone: "warning" | "bran
 
 const TAB_ORDER: PayoutStatus[] = ["due", "awaiting_registration", "paid", "cancelled"];
 
+/** Документы выданы — можно подтверждать регистрацию (owner_payouts.REGISTRATION_ALLOWED). */
+const DOCUMENTS_ISSUED = new Set(["ready_for_client", "completed"]);
+
 function rub(kopeks: number | null | undefined): string {
   if (kopeks === null || kopeks === undefined) return "—";
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB" }).format(kopeks / 100);
 }
 
-/** «2026-10-12» или ISO-время → «12.10.2026» без сдвига дня из-за часового пояса. */
+/**
+ * «2026-10-12» → «12.10.2026» как есть (дата без времени: платёжка, регистрация);
+ * отметка времени из базы (в UTC) → дата по Москве, иначе оплата в 01:15 МСК
+ * показывалась бы вчерашним числом.
+ */
 function day(value: string | null | undefined): string {
   if (!value) return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  return d && m && y ? `${d}.${m}.${y}` : value;
+  if (value.length <= 10) {
+    const [y, m, d] = value.split("-");
+    return d && m && y ? `${d}.${m}.${y}` : value;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : parsed.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
 }
 
 /** Сегодня по местному времени в формате поля <input type="date">. */
@@ -259,6 +272,9 @@ function AdminPayoutCard({
   const blocked = payout.blockers.length > 0;
   const check = payout.registration_check;
   const missingRequisites = !payout.payee.settlement_account || !payout.payee.bik;
+  // Подтверждать регистрацию можно после выдачи документов — раньше сервер всё
+  // равно ответит 409, успев дважды сходить в ЕГРЮЛ.
+  const documentsIssued = DOCUMENTS_ISSUED.has(payout.application_status);
 
   return (
     <li className="payout-card">
@@ -332,9 +348,19 @@ function AdminPayoutCard({
       {live ? (
         <div className="payout-card__actions">
           {payout.status === "awaiting_registration" ? (
-            <button className="cab-btn cab-btn--primary cab-btn--sm" disabled={blocked} onClick={onRegister} type="button">
-              <ShieldCheck size={15} /> Проверить регистрацию
-            </button>
+            <>
+              <button
+                className="cab-btn cab-btn--primary cab-btn--sm"
+                disabled={blocked || !documentsIssued}
+                onClick={onRegister}
+                type="button"
+              >
+                <ShieldCheck size={15} /> Проверить регистрацию
+              </button>
+              {!documentsIssued && !blocked ? (
+                <span className="payout-card__muted payout-card__hint">После выдачи документов клиенту</span>
+              ) : null}
+            </>
           ) : (
             <button
               className="cab-btn cab-btn--primary cab-btn--sm"
@@ -566,7 +592,8 @@ function CancelModal({
     <ModalShell eyebrow="Отмена выплаты" onClose={onClose} title={payout.application_label}>
       <p className="payout-modal__text">
         Отменённую выплату нельзя вернуть: если деньги всё же положены собственнику, их придётся
-        рассчитать вручную. {payout.status === "due" ? "Собственнику уйдёт уведомление с причиной." : ""}
+        рассчитать вручную. Причину увидит собственник в разделе «Выплаты»
+        {payout.status === "due" ? ", и ему уйдёт уведомление" : ""} — пишите её для него.
       </p>
       <form className="payout-modal__form" onSubmit={submit}>
         <label className="field payout-modal__wide">
@@ -700,8 +727,12 @@ export function OwnerPayoutsView() {
   if (error) return <ListError message={error} onRetry={reload} />;
   if (!payouts) return <ListLoading />;
 
-  const total = (status: PayoutStatus) =>
-    payouts.filter((p) => p.status === status).reduce((sum, p) => sum + (p.payout_kopeks || 0), 0);
+  // Пока процент комиссии не задан, сумма выплаты неизвестна — не выдаём ноль за итог.
+  const total = (status: PayoutStatus): string => {
+    const group = payouts.filter((p) => p.status === status);
+    if (group.some((p) => p.payout_kopeks === null)) return "уточняется";
+    return rub(group.reduce((sum, p) => sum + (p.payout_kopeks || 0), 0));
+  };
 
   return (
     <div className="payouts">
@@ -713,15 +744,15 @@ export function OwnerPayoutsView() {
       <div className="cab-stats payouts__stats">
         <div className="cab-stat">
           <span className="cab-stat__label">Ждут регистрации</span>
-          <strong className="cab-stat__value">{rub(total("awaiting_registration"))}</strong>
+          <strong className="cab-stat__value">{total("awaiting_registration")}</strong>
         </div>
         <div className="cab-stat">
           <span className="cab-stat__label">К выплате</span>
-          <strong className="cab-stat__value">{rub(total("due"))}</strong>
+          <strong className="cab-stat__value">{total("due")}</strong>
         </div>
         <div className="cab-stat">
           <span className="cab-stat__label">Выплачено</span>
-          <strong className="cab-stat__value">{rub(total("paid"))}</strong>
+          <strong className="cab-stat__value">{total("paid")}</strong>
         </div>
       </div>
       {payouts.length === 0 ? (
