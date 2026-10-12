@@ -19,6 +19,7 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -101,6 +102,26 @@ async def _http_exception_handler(
     )
 
 
+def _json_safe_errors(errors: Any) -> list[dict[str, Any]]:
+    """Ошибки валидации в виде, который можно отдать JSON-ом.
+
+    Наши валидаторы (ИНН, ОГРН, БИК, счёт — app/validators.py) бросают
+    ValueError, и Pydantic кладёт сам объект исключения в ctx.error. JSONResponse
+    его не сериализует — вместо 422 клиент получал 500 «Внутренняя ошибка».
+    """
+    safe: list[dict[str, Any]] = []
+    for error in errors:
+        item = dict(error)
+        ctx = item.get("ctx")
+        if isinstance(ctx, dict):
+            item["ctx"] = {
+                key: str(value) if isinstance(value, BaseException) else value
+                for key, value in ctx.items()
+            }
+        safe.append(item)
+    return jsonable_encoder(safe)
+
+
 async def _validation_handler(
     request: Request,
     exc: RequestValidationError,
@@ -109,7 +130,7 @@ async def _validation_handler(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         code="validation_error",
         message="Запрос не прошёл валидацию",
-        details=exc.errors(),
+        details=_json_safe_errors(exc.errors()),
     )
 
 

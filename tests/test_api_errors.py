@@ -106,3 +106,20 @@ async def test_unhandled_exception_returns_500_envelope() -> None:
     assert payload == {
         "error": {"code": "internal_error", "message": "Внутренняя ошибка сервиса"}
     }
+
+
+def test_custom_validator_error_is_422_not_500() -> None:
+    """ИНН с неверной контрольной суммой: ValueError из валидатора не должен ронять ответ.
+
+    Раньше Pydantic клал объект ValueError в ctx.error, JSONResponse не мог его
+    сериализовать, и клиент вместо «проверьте ИНН» получал 500.
+    """
+    from app.api_errors import _json_safe_errors
+
+    errors = _json_safe_errors([
+        {"type": "value_error", "loc": ("body", "inn"), "msg": "Value error, ИНН: контрольная сумма не сошлась",
+         "input": "7707083894", "ctx": {"error": ValueError("ИНН: контрольная сумма не сошлась")}},
+    ])
+    assert errors[0]["ctx"]["error"] == "ИНН: контрольная сумма не сошлась"
+    json.dumps(errors)  # сериализуется
+
