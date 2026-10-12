@@ -1278,3 +1278,89 @@
 .sbp-pay-btn:focus-visible { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
 .sbp-pay-btn:disabled { cursor: default; opacity: 0.75; }
 .sbp-pay-btn__logo { display: block; width: auto; height: 22px; }
+
+/* ── Выплаты собственникам (sections/Payouts.tsx) ───────────────────────── */
+.payouts { display: grid; gap: 12px; }
+.payouts__intro { margin: 0; color: var(--ds-slate-500); font-size: 13px; line-height: 1.5; max-width: 760px; }
+.payouts__summary {
+  display: inline-flex; align-items: center; gap: 8px; justify-self: start;
+  padding: 8px 12px; border-radius: var(--ds-radius-md);
+  background: var(--ds-indigo-50); color: var(--ds-indigo-700); font-size: 13px; font-weight: 650;
+}
+.payouts__tabs { padding: 0; flex-wrap: wrap; }
+.payouts__tabs .cab-tab { flex: 0 1 auto; padding: 0 12px; }
+.payouts__stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 640px) { .payouts__stats { grid-template-columns: 1fr; } }
+.payouts__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.payout-card {
+  display: grid; gap: 10px; padding: 14px 16px;
+  background: #fff; border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-xl); box-shadow: var(--ds-shadow-sm);
+}
+.payout-card__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 6px 12px; }
+.payout-card__head > div { display: grid; gap: 2px; min-width: 0; flex: 1 1 220px; }
+/* Бейдж не сжимается: на узком экране он переносится под название целиком. */
+.payout-card__head .cab-badge { flex: none; }
+.payout-card__head strong { color: var(--ds-indigo-950); font-size: 14px; }
+.payout-card__sub { color: var(--ds-slate-500); font-size: 12px; overflow-wrap: anywhere; }
+.payout-card__facts { display: grid; gap: 4px; font-size: 12.5px; color: var(--ds-slate-700); }
+.payout-card__facts span { display: inline-flex; align-items: flex-start; gap: 6px; overflow-wrap: anywhere; }
+.payout-card__facts svg { flex: none; margin-top: 2px; }
+.payout-card__muted { color: var(--ds-slate-500); }
+.payout-card__warn { color: var(--ds-warning-fg); }
+.payout-card__blockers {
+  list-style: none; margin: 0; padding: 8px 10px; display: grid; gap: 4px;
+  border-radius: var(--ds-radius-md); background: var(--ds-warning-bg); color: var(--ds-warning-fg); font-size: 12.5px;
+}
+.payout-card__blockers li { display: flex; gap: 6px; align-items: flex-start; }
+.payout-card__blockers svg { flex: none; margin-top: 2px; }
+.payout-card__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.payout-money { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.payout-money div { display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--ds-radius-md); background: var(--ds-slate-50); }
+.payout-money dt { color: var(--ds-slate-500); font-size: 11px; }
+.payout-money dd { margin: 0; font-weight: 650; font-size: 13px; color: var(--ds-indigo-950); font-variant-numeric: tabular-nums; }
+.payout-money__total { background: var(--ds-indigo-50) !important; }
+.payout-money__total dd { color: var(--ds-indigo-700); }
+@media (max-width: 560px) { .payout-money { grid-template-columns: 1fr; } }
+
+/* Модалки выплат: длинная сверка ЕГРЮЛ не должна уезжать за экран телефона. */
+.payout-modal { max-height: calc(100dvh - 40px); overflow-y: auto; width: min(640px, 100%); }
+.payout-modal__text { font-size: 13px; }
+.payout-modal__row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.payout-modal__row .field { flex: 1 1 200px; }
+.payout-modal__form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.payout-modal__wide { grid-column: 1 / -1; }
+@media (max-width: 560px) { .payout-modal__form { grid-template-columns: 1fr; } }
+.payout-modal__actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.payout-check { display: grid; gap: 10px; }
+.payout-check__kv { margin: 0; display: grid; gap: 6px; font-size: 12.5px; }
+.payout-check__kv div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; }
+.payout-check__kv dt { color: var(--ds-slate-500); }
+.payout-check__kv dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .payout-check__kv div { grid-template-columns: 1fr; gap: 0; } }
+.payout-check__verdict {
+  display: inline-flex; align-items: center; gap: 6px; justify-self: start;
+  padding: 6px 10px; border-radius: var(--ds-radius-md); font-size: 13px; font-weight: 650;
+}
+.payout-check__verdict--ok { background: var(--ds-success-bg); color: var(--ds-success-fg); }
+.payout-check__verdict--warn { background: var(--ds-warning-bg); color: var(--ds-warning-fg); }
+.payout-check__manual { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.payout-error { margin: 0; color: var(--ds-danger-fg); font-size: 13px; }
+.payout-modal__form .payout-error { grid-column: 1 / -1; }
+
+/* Клиент: ИНН зарегистрированной компании в карточке заявки. */
+.registration-inn { display: grid; gap: 8px; font-size: 13px; color: var(--ds-slate-700); }
+.registration-inn--done { display: flex; align-items: flex-start; gap: 8px; color: var(--ds-success-fg); }
+.registration-inn--done svg { flex: none; margin-top: 2px; }
+.registration-inn__row { display: flex; gap: 8px; flex-wrap: wrap; }
+.registration-inn__row input {
+  flex: 1 1 160px; min-width: 0; height: 34px; padding: 0 10px;
+  border: 1px solid var(--ds-slate-300); border-radius: var(--ds-radius-md); font: inherit;
+}
+
+/* Админ: процент и реквизиты в списке собственников. */
+.provider-payouts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.provider-payouts small { color: var(--ds-slate-500); }

@@ -58,5 +58,11 @@ class ClientApplicationRead(BaseModel):
     price_total: Decimal = Decimal("0")
     events: list[ApplicationEventRead] = Field(default_factory=list)
 
+    # Регистрация компании по адресу: клиент сообщает ИНН, площадка подтверждает
+    # по ЕГРЮЛ (условие выплаты собственнику, app/services/owner_payouts.py).
+    registration_inn: Optional[str] = None
+    registration_inn_submitted_at: Optional[datetime] = None
+    registration_confirmed_at: Optional[datetime] = None
+
     created_at: datetime
     updated_at: datetime

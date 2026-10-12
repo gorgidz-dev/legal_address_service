@@ -44,6 +44,13 @@ import { parsePath, routeToPath, useRouter } from "./router";
 import { LegalPage } from "./sections/LegalPage";
 import { EmailVerificationPage } from "./sections/EmailVerification";
 import { PaymentReturnPage } from "./payment/PaymentReturnPage";
+import {
+  AdminPayoutsView,
+  OwnerPayoutsView,
+  ProviderPayoutSettingsModal,
+  RegistrationInnPanel,
+  needsRegistrationInn
+} from "./sections/Payouts";
 import { takePaymentReturn } from "./payment/paymentReturn";
 import { SbpPayButton } from "./payment/SbpPayButton";
 import { AddressChatPanel } from "./AddressChatPanel";
@@ -127,7 +134,8 @@ type View =
   | "address-moderation"
   | "address-services"
   | "address-chats"
-  | "review-moderation";
+  | "review-moderation"
+  | "payouts";
 
 /**
  * Разделы кабинетов клиента и собственника — они же сегменты URL /app/<section>.
@@ -1641,7 +1649,11 @@ export default function App() {
             )}
             {view === "providers" && (
               <>
-                <ProvidersView providers={providers} onChanged={() => setRefreshKey((value) => value + 1)} />
+                <ProvidersView
+                  providers={providers}
+                  canEditPayouts={currentUser.role === "admin"}
+                  onChanged={() => setRefreshKey((value) => value + 1)}
+                />
                 <AdminOwnerTasks providers={providers} />
                 <ProviderRatings />
               </>
@@ -1654,6 +1666,7 @@ export default function App() {
               />
             )}
             {view === "photos" && currentUser.role === "admin" && <AdminPhotoModerationView />}
+            {view === "payouts" && currentUser.role === "admin" && <AdminPayoutsView />}
             {view === "provider-requests" && currentUser.role === "admin" && (
               <ProviderRequestsView />
             )}
@@ -2267,6 +2280,16 @@ function ClientDashboardView({
                       </div>
                     ) : null}
 
+                    {needsRegistrationInn(selectedApplication) ? (
+                      <div className="cab-actions">
+                        <RegistrationInnPanel
+                          key={selectedApplication.id}
+                          application={selectedApplication}
+                          onSaved={() => setRefreshKey((value) => value + 1)}
+                        />
+                      </div>
+                    ) : null}
+
                     <DrawerTimeline
                       emptyText="Обновления по заявке появятся после проверки."
                       events={selectedApplication.events}
@@ -2608,7 +2631,9 @@ function OwnerDashboardView({
               ? "Задачи"
               : view === "calendar"
                 ? "Календарь"
-                : "Чаты"
+                : view === "payouts"
+                  ? "Выплаты"
+                  : "Чаты"
       }
       subtitle={
         view === "applications"
@@ -2623,7 +2648,9 @@ function OwnerDashboardView({
               ? "Поручения от площадки"
               : view === "calendar"
                 ? "Сроки аренды по вашим адресам"
-                : "Входящие сообщения по вашим адресам"
+                : view === "payouts"
+                  ? "Деньги от площадки по оплаченным заявкам"
+                  : "Входящие сообщения по вашим адресам"
       }
       counts={{ applications: applications.length, addresses: addresses.length }}
       onOpenSite={onOpenCatalog}
@@ -3033,6 +3060,8 @@ function OwnerDashboardView({
         {view === "calendar" && (
           <LeaseCalendarSection load={api.ownerLeaseCalendar} counterpartyLabel="Клиент" />
         )}
+
+        {view === "payouts" && <OwnerPayoutsView />}
 
         {view === "chats" && (
           <ChatsListPanel
@@ -4472,7 +4501,17 @@ function PaymentDocumentsPanel({
   );
 }
 
-function ProvidersView({ providers, onChanged }: { providers: Provider[]; onChanged: () => void }) {
+function ProvidersView({
+  providers,
+  canEditPayouts,
+  onChanged
+}: {
+  providers: Provider[];
+  /** Процент и реквизиты для выплат меняет только админ (PATCH /providers/{id}/payout-settings). */
+  canEditPayouts: boolean;
+  onChanged: () => void;
+}) {
+  const [payoutProvider, setPayoutProvider] = useState<Provider | null>(null);
   const [form, setForm] = useState({
     code: "",
     full_name: "",
@@ -4568,9 +4607,28 @@ function ProvidersView({ providers, onChanged }: { providers: Provider[]; onChan
           <>
             <strong>{provider.short_name}</strong>
             <span>{provider.legal_address || provider.full_name}</span>
+            {canEditPayouts ? (
+              <span className="provider-payouts">
+                <small>
+                  Комиссия: {provider.commission_percent !== null ? `${Number(provider.commission_percent).toLocaleString("ru-RU")}%` : "общая"}
+                  {" · "}
+                  {provider.settlement_account && provider.bik ? "реквизиты есть" : "реквизитов нет"}
+                </small>
+                <button className="text-action" onClick={() => setPayoutProvider(provider)} type="button">
+                  Выплаты
+                </button>
+              </span>
+            ) : null}
           </>
         )}
       />
+      {payoutProvider ? (
+        <ProviderPayoutSettingsModal
+          provider={payoutProvider}
+          onClose={() => setPayoutProvider(null)}
+          onSaved={onChanged}
+        />
+      ) : null}
     </div>
   );
 }

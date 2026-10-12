@@ -45,6 +45,11 @@ import type {
   ProviderConnectionRequestCreate,
   ProviderConnectionRequestStatusUpdate,
   PublicAddress,
+  AdminPayout,
+  ApplicationRegistration,
+  OwnerPayout,
+  ProviderPayoutSettings,
+  RegistrationCheck,
   PublicReview,
   MyReview,
   ModerationReview,
@@ -405,6 +410,39 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ value_refund_kopeks: valueRefundKopeks, reason })
     }),
+  // --- Выплаты собственникам ---
+  adminPayouts: () => request<AdminPayout[]>("/payouts"),
+  myPayouts: () => request<OwnerPayout[]>("/payouts/mine"),
+  checkRegistration: (applicationId: string, inn: string) =>
+    request<RegistrationCheck>(`/payouts/applications/${applicationId}/registration/check`, {
+      method: "POST",
+      body: JSON.stringify({ inn })
+    }),
+  confirmRegistration: (applicationId: string, inn: string, acceptAddressMismatch: boolean) =>
+    request<AdminPayout>(`/payouts/applications/${applicationId}/registration/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ inn, accept_address_mismatch: acceptAddressMismatch })
+    }),
+  submitRegistrationInn: (applicationId: string, inn: string) =>
+    request<ApplicationRegistration>(`/payouts/applications/${applicationId}/registration/inn`, {
+      method: "POST",
+      body: JSON.stringify({ inn })
+    }),
+  markPayoutPaid: (
+    payoutId: string,
+    body: { paid_on: string; bank_reference: string; comment?: string | null }
+  ) => request<AdminPayout>(`/payouts/${payoutId}/mark-paid`, { method: "POST", body: JSON.stringify(body) }),
+  cancelPayout: (payoutId: string, reason: string) =>
+    request<AdminPayout>(`/payouts/${payoutId}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  setProviderPayoutSettings: (
+    providerId: string,
+    body: Partial<Omit<ProviderPayoutSettings, "provider_id" | "effective_percent">>
+  ) =>
+    request<ProviderPayoutSettings>(`/providers/${providerId}/payout-settings`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    }),
+
   /** Только админ: отправить закрывающий чек ещё раз или отметить найденный в ЛК Т-Бизнеса. */
   closingReceiptAction: (paymentId: string, action: "send" | "mark_sent") =>
     request<Payment>(`/payments/${paymentId}/closing-receipt`, {

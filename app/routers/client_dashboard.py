@@ -110,6 +110,9 @@ async def list_client_applications(
             correspondence_price=address.correspondence_price,
             **_price_fields(application, address),
             events=events_by_application[application.id],
+            registration_inn=application.registration_inn,
+            registration_inn_submitted_at=application.registration_inn_submitted_at,
+            registration_confirmed_at=application.registration_confirmed_at,
             created_at=application.created_at,
             updated_at=application.updated_at,
         )

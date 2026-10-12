@@ -146,6 +146,12 @@ export interface Provider {
   signatory_position: string | null;
   signatory_initials: string | null;
   phone: string | null;
+  bank_name: string | null;
+  settlement_account: string | null;
+  corr_account: string | null;
+  bik: string | null;
+  /** Комиссия площадки, % (строка-Decimal); null — общий процент из настроек. */
+  commission_percent: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -791,6 +797,10 @@ export interface ClientApplication {
   price_lines: PriceLine[];
   price_total: string;
   events: ClientApplicationEvent[];
+  /** ИНН зарегистрированной компании — условие выплаты собственнику. */
+  registration_inn: string | null;
+  registration_inn_submitted_at: string | null;
+  registration_confirmed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -851,3 +861,85 @@ export interface OwnerDashboard {
   addresses: OwnerAddress[];
   applications: OwnerApplication[];
 }
+
+// --- Выплаты собственникам (app/routers/owner_payouts.py) ---
+
+export type PayoutStatus = "awaiting_registration" | "due" | "paid" | "cancelled";
+
+export interface OwnerPayout {
+  id: string;
+  status: PayoutStatus;
+  application_id: string;
+  application_label: string;
+  address: string | null;
+  gross_kopeks: number;
+  commission_percent: string | null;
+  commission_kopeks: number | null;
+  payout_kopeks: number | null;
+  due_at: string | null;
+  paid_on: string | null;
+  bank_reference: string | null;
+  cancel_reason: string | null;
+  created_at: string;
+}
+
+export interface PayoutPayee {
+  full_name: string | null;
+  inn: string | null;
+  kpp: string | null;
+  bank_name: string | null;
+  settlement_account: string | null;
+  corr_account: string | null;
+  bik: string | null;
+}
+
+export interface RegistrationCheck {
+  inn: string;
+  found: boolean;
+  full_name: string | null;
+  ogrn: string | null;
+  registration_date: string | null;
+  egrul_status: string | null;
+  legal_address: string | null;
+  our_address: string | null;
+  /** null — сравнить не с чем (в ЕГРЮЛ нет адреса). */
+  address_matches: boolean | null;
+  warnings: string[];
+}
+
+export interface AdminPayout extends OwnerPayout {
+  application_type: ApplicationType;
+  application_status: ApplicationStatus;
+  provider_id: string;
+  provider_name: string;
+  payment_id: string;
+  payment_status: string;
+  paid_at: string | null;
+  comment: string | null;
+  cancelled_at: string | null;
+  payee: PayoutPayee;
+  registration_inn: string | null;
+  registration_inn_submitted_at: string | null;
+  registration_confirmed_at: string | null;
+  registration_check: (RegistrationCheck & { checked_at?: string; accepted_address_mismatch?: boolean }) | null;
+  suggested_inn: string | null;
+  blockers: string[];
+}
+
+export interface ProviderPayoutSettings {
+  provider_id: string;
+  commission_percent: string | null;
+  effective_percent: string | null;
+  bank_name: string | null;
+  settlement_account: string | null;
+  corr_account: string | null;
+  bik: string | null;
+}
+
+export interface ApplicationRegistration {
+  application_id: string;
+  registration_inn: string | null;
+  registration_inn_submitted_at: string | null;
+  registration_confirmed_at: string | null;
+}
+

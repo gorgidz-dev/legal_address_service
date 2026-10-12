@@ -19,7 +19,8 @@ import {
   Settings,
   ShieldCheck,
   Star,
-  UserPlus
+  UserPlus,
+  Wallet
 } from "lucide-react";
 import type { ComponentType } from "react";
 import type { UserRole } from "../types";
@@ -47,7 +48,7 @@ export type NavGroup = {
  * на раздел, которого компонент не знает, и человек видел бы пустой экран.
  */
 export const CLIENT_SECTION_IDS = ["applications", "calendar", "chats"] as const;
-export const OWNER_SECTION_IDS = ["applications", "addresses", "tasks", "calendar", "chats"] as const;
+export const OWNER_SECTION_IDS = ["applications", "addresses", "tasks", "calendar", "chats", "payouts"] as const;
 
 export type ClientSectionId = (typeof CLIENT_SECTION_IDS)[number];
 export type OwnerSectionId = (typeof OWNER_SECTION_IDS)[number];
@@ -69,6 +70,7 @@ const OWNER_GROUPS: NavGroup[] = [
     items: [
       { id: OWNER_SECTION_IDS[0], label: "Заявки", icon: FolderOpen },
       { id: OWNER_SECTION_IDS[1], label: "Адреса", icon: Home },
+      { id: OWNER_SECTION_IDS[5], label: "Выплаты", icon: Wallet },
       { id: OWNER_SECTION_IDS[2], label: "Задачи", icon: ListChecks },
       { id: OWNER_SECTION_IDS[3], label: "Календарь", icon: CalendarClock },
       { id: OWNER_SECTION_IDS[4], label: "Чаты", icon: MessageSquare }
@@ -106,6 +108,7 @@ const ADMIN_GROUPS: NavGroup[] = [
     items: [
       { id: "providers", label: "Собственники", icon: Building2 },
       { id: "provider-requests", label: "Заявки собственников", icon: UserPlus, shortLabel: "Подключения" },
+      { id: "payouts", label: "Выплаты", icon: Wallet },
       { id: "review-moderation", label: "Отзывы на модерацию", icon: Star, shortLabel: "Отзывы" }
     ]
   },
