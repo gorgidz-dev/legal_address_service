@@ -405,6 +405,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ value_refund_kopeks: valueRefundKopeks, reason })
     }),
+  /** Только админ: отправить закрывающий чек ещё раз или отметить найденный в ЛК Т-Бизнеса. */
+  closingReceiptAction: (paymentId: string, action: "send" | "mark_sent") =>
+    request<Payment>(`/payments/${paymentId}/closing-receipt`, {
+      method: "POST",
+      body: JSON.stringify({ action })
+    }),
   adminMarkPaymentPaid: (paymentId: string, comment?: string) =>
     request<Payment>(`/payments/${paymentId}/mark-paid`, {
       method: "POST",

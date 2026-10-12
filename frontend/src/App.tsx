@@ -3419,6 +3419,7 @@ function ApplicationsView({
 }) {
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [moderatingId, setModeratingId] = useState<string | null>(null);
+  const [receiptId, setReceiptId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -3502,6 +3503,11 @@ function ApplicationsView({
                     <ShieldCheck size={15} /> Проверка
                   </button>
                 ) : null}
+                {DOCUMENTS_ISSUED_STATUSES.has(application.status) ? (
+                  <button className="text-action" onClick={() => setReceiptId(application.id)} type="button">
+                    <ReceiptText size={15} /> Чек
+                  </button>
+                ) : null}
                 {application.type === "initial_registration" ? (
                   <button className="text-action" onClick={() => setPromotingId(application.id)} type="button">
                     <FileCheck2 size={15} /> Договор
@@ -3519,6 +3525,12 @@ function ApplicationsView({
           onDone={onChanged}
         />
       ) : null}
+      {receiptId ? (
+        <ClosingReceiptPanel
+          application={applications.find((item) => item.id === receiptId) || null}
+          onClose={() => setReceiptId(null)}
+        />
+      ) : null}
       {moderatingId ? (
         <DocumentModerationPanel
           application={applications.find((item) => item.id === moderatingId) || null}
@@ -3527,6 +3539,202 @@ function ApplicationsView({
         />
       ) : null}
     </section>
+  );
+}
+
+/** Статусы, в которых документы выданы клиенту — закрывающий чек уже должен быть
+ * (tbank_receipts.DOCUMENTS_ISSUED на бэкенде). */
+const DOCUMENTS_ISSUED_STATUSES = new Set(["ready_for_client", "completed", "dispute"]);
+
+const closingReceiptLabels: Record<string, string> = {
+  due: "в очереди",
+  sending: "отправляется",
+  sent: "отправлен",
+  failed: "банк отказал",
+  unknown: "неизвестно, ушёл ли"
+};
+
+/**
+ * Закрывающий чек «полный расчёт» (54-ФЗ) по заявке: состояние и ручные действия.
+ *
+ * Автоматика (отправка при выдаче документов + крон сверки) сама останавливается
+ * в двух случаях — тогда и нужны эти кнопки:
+ * - failed: банк или касса отказали, автоповторы исчерпаны → «Отправить ещё раз»;
+ * - unknown: связь оборвалась посреди отправки, чек мог уйти. У метода банка нет
+ *   ключа идемпотентности, поэтому сначала админ смотрит ЛК Т-Бизнеса и либо
+ *   отмечает найденный чек, либо отправляет — иначе покупатель получит два чека.
+ */
+function ClosingReceiptPanel({
+  application,
+  onClose
+}: {
+  application: Application | null;
+  onClose: () => void;
+}) {
+  const [payment, setPayment] = useState<Payment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useModalDismiss(!!application, onClose);
+
+  useEffect(() => {
+    if (!application) return;
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    api
+      .getPaymentByApplication(application.id)
+      .then((p) => alive && setPayment(p))
+      .catch((err: Error) => alive && setError(err.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [application?.id, reloadKey]);
+
+  if (!application) return null;
+
+  const state = payment?.closing_receipt_status ?? null;
+
+  async function run(action: "send" | "mark_sent") {
+    if (!payment) return;
+    const question =
+      action === "mark_sent"
+        ? "Отметить закрывающий чек отправленным? Система больше не будет его отправлять — " +
+          "делайте это, только если нашли чек в ЛК Т-Бизнеса."
+        : state === "unknown"
+          ? "Вы проверили ЛК Т-Бизнеса и закрывающего чека там нет? Если чек уже пробит, " +
+            "повторная отправка даст покупателю второй чек."
+          : null;
+    if (question && !window.confirm(question)) return;
+    setBusy(action);
+    setError(null);
+    try {
+      setPayment(await api.closingReceiptAction(payment.id, action));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const sendButton = (label: string, variant: "primary" | "secondary") => (
+    <Button disabled={busy !== null} onClick={() => run("send")} variant={variant}>
+      {busy === "send" ? <Loader2 className="spin" size={16} /> : <ReceiptText size={16} />}
+      {label}
+    </Button>
+  );
+  const markButton = (label: string, variant: "primary" | "secondary") => (
+    <Button disabled={busy !== null} onClick={() => run("mark_sent")} variant={variant}>
+      {busy === "mark_sent" ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+      {label}
+    </Button>
+  );
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-panel moderation-panel" role="dialog" aria-modal="true">
+        <header>
+          <div>
+            <span className="eyebrow">Закрывающий чек 54-ФЗ</span>
+            <h2>{application.company_name || application.planned_client_name || "Заявка"}</h2>
+          </div>
+          <button className="text-action" onClick={onClose} type="button">
+            Закрыть
+          </button>
+        </header>
+
+        {payment ? (
+          <div className="moderation-summary">
+            <div>
+              <span>Платёж</span>
+              <strong>
+                {(payment.amount_kopeks / 100).toLocaleString("ru-RU")} ₽ ·{" "}
+                {paymentStatusLabels[payment.status] || payment.status}
+              </strong>
+            </div>
+            <div>
+              <span>Номер в Т-Банке</span>
+              <strong>{payment.provider_payment_id || "—"}</strong>
+            </div>
+            <div>
+              <span>Закрывающий чек</span>
+              <strong>{state ? closingReceiptLabels[state] || state : "не заводился"}</strong>
+            </div>
+          </div>
+        ) : null}
+
+        <InlineError message={error} />
+
+        {loading ? (
+          <LoadingRows />
+        ) : !payment ? (
+          <EmptyState title="Платежа нет" text="По этой заявке платёж не создавался." />
+        ) : state === null ? (
+          <p>
+            Закрывающий чек по этому платежу не заводился: чеки были выключены, оплата шла не через
+            Т-Банк или платёж не оплачен. Если чек всё же нужен — пробейте его в ЛК Т-Бизнеса.
+          </p>
+        ) : state === "sent" ? (
+          <div className="success-note">
+            <CheckCircle2 size={17} />
+            <span>
+              Отправлен {formatDateTime(payment.closing_receipt_at)}
+              {payment.closing_receipt_error ? ` · ${payment.closing_receipt_error}` : ""}
+            </span>
+          </div>
+        ) : state === "sending" ? (
+          <>
+            <p>Чек отправляется прямо сейчас. Обновите через минуту.</p>
+            <div className="moderation-actions">
+              <Button onClick={() => setReloadKey((value) => value + 1)} variant="secondary">
+                <RefreshCw size={16} /> Обновить
+              </Button>
+            </div>
+          </>
+        ) : state === "due" ? (
+          <>
+            <p>
+              Чек в очереди: фоновая сверка отправляет его сама (раз в 10 минут). Можно не ждать и
+              отправить сейчас.
+            </p>
+            <div className="moderation-actions">
+              {markButton("Чек уже есть в ЛК", "secondary")}
+              {sendButton("Отправить сейчас", "primary")}
+            </div>
+          </>
+        ) : state === "failed" ? (
+          <>
+            <p className="closing-receipt-warn">
+              Банк или касса отказали: {payment.closing_receipt_error || "причина не указана"}.
+              Автоповторы остановлены. Устраните причину (например, касса в ЛК) и отправьте снова.
+            </p>
+            <div className="moderation-actions">
+              {markButton("Чек уже есть в ЛК", "secondary")}
+              {sendButton("Отправить ещё раз", "primary")}
+            </div>
+          </>
+        ) : state === "unknown" ? (
+          <>
+            <p className="closing-receipt-warn">
+              Неизвестно, дошёл ли чек до банка
+              {payment.closing_receipt_error ? ` (${payment.closing_receipt_error})` : ""}. Откройте ЛК
+              Т-Бизнеса → «Операции» → платёж № {payment.provider_payment_id || "—"} и проверьте, есть
+              ли чек «полный расчёт». Отправлять снова, не проверив, нельзя: у покупателя будет два
+              чека.
+            </p>
+            <div className="moderation-actions">
+              {sendButton("Чека в ЛК нет — отправить", "secondary")}
+              {markButton("Чек есть в ЛК — отметить", "primary")}
+            </div>
+          </>
+        ) : (
+          <p>Неизвестное состояние чека: {state}.</p>
+        )}
+      </div>
+    </div>
   );
 }
 

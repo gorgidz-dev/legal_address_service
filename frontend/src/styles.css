@@ -1312,6 +1312,11 @@ h1 {
   gap: 12px;
 }
 
+/* Предупреждение в окне закрывающего чека: .modal-panel p красит текст в muted. */
+.modal-panel p.closing-receipt-warn {
+  color: var(--lg-warning-fg);
+}
+
 .moderation-actions {
   display: flex;
   flex-wrap: wrap;
