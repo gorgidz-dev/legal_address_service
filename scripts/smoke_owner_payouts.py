@@ -303,7 +303,14 @@ async def run_checks() -> None:
         r = await http.post(f"/api/v1/payouts/applications/{apps[1]}/registration/check", json={"inn": INN_OK})
         check(any("уже подтверждён" in w for w in (r.json().get("candidates") or [{}])[0].get("warnings", [])), "предупреждение: ИНН уже подтверждён по другой заявке")
         r = await http.post(f"/api/v1/payouts/applications/{apps[1]}/registration/confirm", json={"inn": INN_OK})
-        check(r.status_code == 409 and "отменили" in r.text, f"отменённую выплату подтверждение не переоткрывает — 409, а не 500 ({r.status_code})")
+        body = r.json()
+        check(
+            r.status_code == 200 and body["registration_confirmed_at"] and body["payout"]["status"] == "cancelled"
+            and "отменили" in (body["payout_held"] or ""),
+            f"отменённая выплата: регистрация подтверждена, выплата не переоткрыта, причина — админу ({r.status_code})",
+        )
+        r = await http.post(f"/api/v1/payouts/applications/{apps[1]}/registration/confirm", json={"inn": INN_OK})
+        check(r.status_code == 409 and "уже подтверждена" in r.text, f"повтор — 409 ({r.status_code})")
 
         print("\n== процент собственника и ограничения базы ==")
         r = await http.patch(f"/api/v1/providers/{ids['provider']}/payout-settings", json={"commission_percent": "12.5"})

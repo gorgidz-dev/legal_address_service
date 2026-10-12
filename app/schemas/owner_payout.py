@@ -144,8 +144,10 @@ class AdminPayoutRead(OwnerPayoutRead):
 
 class RegistrationConfirmResult(BaseModel):
     """Регистрация подтверждена. payout — выплата собственнику, если деньги
-    принимала площадка; null — выплаты по заявке нет (счёт собственника)."""
+    принимала площадка; null — выплаты по заявке нет (счёт собственника).
+    payout_held — почему выплата не перешла «к перечислению» (отменена, возврат)."""
     application_id: UUID
     registration_confirmed_at: datetime
     payout: Optional[AdminPayoutRead] = None
+    payout_held: Optional[str] = None
 

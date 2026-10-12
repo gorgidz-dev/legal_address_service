@@ -984,4 +984,6 @@ export interface RegistrationConfirmResult {
   registration_confirmed_at: string;
   /** null — выплаты по заявке нет (деньги получал собственник). */
   payout: AdminPayout | null;
+  /** Почему выплата не перешла «к перечислению» (отменена, возврат клиенту). */
+  payout_held: string | null;
 }

@@ -366,7 +366,8 @@ async def confirm_registration(
 ) -> RegistrationConfirmResult:
     """Регистрация компании клиента подтверждена по ЕГРЮЛ (последний шаг трекера).
 
-    Если деньги принимала площадка — выплата собственнику «к перечислению».
+    Если деньги принимала площадка — выплата собственнику «к перечислению»;
+    если двигать её нельзя (отменена, возврат), причина — в payout_held.
     """
     # Запрос в ЕГРЮЛ — до блокировок: сеть не должна держать строки.
     _, check, known_inn = await _run_check(db, application_id, payload.inn)
@@ -377,7 +378,7 @@ async def confirm_registration(
     if application is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка не найдена")
     try:
-        payout = await owner_payouts.confirm_registration(
+        outcome = await owner_payouts.confirm_registration(
             db,
             application=application,
             payment=payment,
@@ -400,7 +401,8 @@ async def confirm_registration(
     return RegistrationConfirmResult(
         application_id=application.id,
         registration_confirmed_at=application.registration_confirmed_at,
-        payout=await _admin_view(db, payout) if payout is not None else None,
+        payout=await _admin_view(db, outcome.payout) if outcome.payout is not None else None,
+        payout_held=outcome.payout_held,
     )
 
 

@@ -281,11 +281,15 @@ def test_clean_paid_application_has_no_blockers() -> None:
 # ------------------------------------------------------------------
 
 
-async def _confirm(db, application, payment, check=None, accept=False):
+async def _confirm_outcome(db, application, payment, check=None, accept=False):
     return await owner_payouts.confirm_registration(
         db, application=application, payment=payment, check=check or _check(),
         accept_address_mismatch=accept, admin_id=uuid4(), now=NOW,
     )
+
+
+async def _confirm(db, application, payment, check=None, accept=False):
+    return (await _confirm_outcome(db, application, payment, check, accept)).payout
 
 
 @pytest.mark.asyncio
@@ -374,7 +378,13 @@ async def test_second_confirmation_is_refused() -> None:
     provider = _provider()
     application = _application(provider=provider, registration_confirmed_at=NOW)
     with pytest.raises(PayoutError, match="уже подтверждена"):
-        await _confirm(_DB(provider=provider), application, _payment())
+        await _confirm(_DB(provider=provider), application, _payment("manual_invoice"))
+    due = OwnerPayout(
+        id=uuid4(), application_id=uuid4(), payment_id=uuid4(), provider_id=provider.id,
+        status=DUE, gross_kopeks=3_000_000,
+    )
+    with pytest.raises(PayoutError, match="уже подтверждена"):
+        await _confirm(_DB(provider=provider, active=due), application, _payment())
 
 
 @pytest.mark.asyncio
@@ -497,9 +507,59 @@ async def test_cancelled_payout_cannot_be_reconfirmed_by_same_payment() -> None:
         status=CANCELLED, gross_kopeks=3_000_000, cancel_reason="ошибка",
     )
     application = _application(provider=provider)
-    with pytest.raises(PayoutError, match="отменили"):
-        await _confirm(_DB(provider=provider, active=cancelled), application, _payment())
-    assert application.registration_confirmed_at is None
+    db = _DB(provider=provider, active=cancelled)
+    outcome = await _confirm_outcome(db, application, _payment())
+    # Регистрация — факт трекера: подтверждается, выплата остаётся отменённой.
+    assert application.registration_confirmed_at == NOW
+    assert outcome.payout is cancelled and cancelled.status == CANCELLED
+    assert "отменили" in outcome.payout_held
+    owner_events = db.events(NotificationAudience.OWNER)
+    assert [e.title for e in owner_events] == ["Регистрация подтверждена"]
+    assert "payout_id" not in owner_events[0].payload
+
+
+@pytest.mark.asyncio
+async def test_partial_refund_holds_payout_but_confirms_registration() -> None:
+    provider = _provider()
+    awaiting = OwnerPayout(
+        id=uuid4(), application_id=uuid4(), payment_id=uuid4(), provider_id=provider.id,
+        status=AWAITING_REGISTRATION, gross_kopeks=3_000_000,
+    )
+    application = _application(provider=provider)
+    db = _DB(provider=provider, active=awaiting)
+    outcome = await _confirm_outcome(db, application, _payment(refunded_kopeks=100_000))
+    assert application.registration_confirmed_at == NOW
+    assert awaiting.status == AWAITING_REGISTRATION and "часть денег" in outcome.payout_held
+    assert len(db.events(NotificationAudience.CLIENT)) == 1
+
+    # Пока выплату держит возврат, повторное подтверждение ничего не меняет.
+    with pytest.raises(PayoutError, match="уже подтверждена.*часть денег"):
+        await _confirm(_DB(provider=provider, active=awaiting), application, _payment(refunded_kopeks=100_000))
+
+
+@pytest.mark.asyncio
+async def test_reconfirmation_releases_payout_held_by_failed_refund() -> None:
+    """Возврат не прошёл — деньги у площадки: админ повторяет подтверждение из реестра."""
+    provider = _provider(Decimal("20"))
+    awaiting = OwnerPayout(
+        id=uuid4(), application_id=uuid4(), payment_id=uuid4(), provider_id=provider.id,
+        status=AWAITING_REGISTRATION, gross_kopeks=3_000_000,
+    )
+    application = _application(provider=provider)
+    outcome = await _confirm_outcome(
+        _DB(provider=provider, active=awaiting), application, _payment(status=PaymentStatus.REFUND_REQUESTED)
+    )
+    assert outcome.payout_held and awaiting.status == AWAITING_REGISTRATION
+    first_check = application.registration_check
+
+    db = _DB(provider=provider, active=awaiting)
+    outcome = await _confirm_outcome(db, application, _payment())
+    assert outcome.payout_held is None and awaiting.status == DUE
+    assert application.registration_check is first_check  # факт регистрации не переписан
+    assert not db.events(NotificationAudience.CLIENT)  # клиенту второй раз не пишем
+    assert [e.title for e in db.events(NotificationAudience.OWNER)] == [
+        "Регистрация подтверждена — выплата в очереди"
+    ]
 
 
 @pytest.mark.asyncio
@@ -543,10 +603,11 @@ async def test_address_change_confirms_only_the_company_from_application() -> No
             admin_id=uuid4(), now=NOW, required_inn="7707083893",
         )
     # Название для смены адреса не сверяется — только ИНН и адрес.
-    assert await owner_payouts.confirm_registration(
+    outcome = await owner_payouts.confirm_registration(
         _DB(provider=provider), application=application, payment=_payment("manual_invoice"),
         check=_check(inn="7707083893", name_matches=None), accept_address_mismatch=False,
         admin_id=uuid4(), now=NOW, required_inn="7707083893",
-    ) is None
+    )
+    assert outcome.payout is None and outcome.payout_held is None
     assert application.registration_confirmed_at == NOW
 

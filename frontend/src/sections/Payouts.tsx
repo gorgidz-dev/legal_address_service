@@ -418,6 +418,9 @@ export function RegistrationModal({
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState<"check" | "confirm" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Регистрацию подтвердили, а выплата встала (отменена, возврат) — показать
+  // админу причину, прежде чем закрыть окно.
+  const [held, setHeld] = useState<RegistrationConfirmResult | null>(null);
 
   async function search(query: { inn?: string; name?: string }) {
     setBusy("check");
@@ -456,11 +459,35 @@ export function RegistrationModal({
     setBusy("confirm");
     setError(null);
     try {
-      onDone(await api.confirmRegistration(target.applicationId, selected.inn, manual));
+      const result = await api.confirmRegistration(target.applicationId, selected.inn, manual);
+      if (result.payout_held) {
+        setHeld(result);
+        setBusy(null);
+      } else {
+        onDone(result);
+      }
     } catch (err) {
       setError((err as Error).message);
       setBusy(null);
     }
+  }
+
+  if (held) {
+    return (
+      <ModalShell eyebrow="Регистрация компании" onClose={() => onDone(held)} title={target.label}>
+        <div className="payout-check__verdict payout-check__verdict--ok">
+          <CheckCircle2 size={15} /> Регистрация подтверждена — клиент и собственник получили уведомление
+        </div>
+        <ul className="payout-card__blockers">
+          <li><AlertTriangle size={14} /> {held.payout_held}</li>
+        </ul>
+        <div className="payout-modal__actions">
+          <button className="cab-btn cab-btn--primary" onClick={() => onDone(held)} type="button">
+            Понятно
+          </button>
+        </div>
+      </ModalShell>
+    );
   }
 
   return (

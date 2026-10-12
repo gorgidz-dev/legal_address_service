@@ -444,6 +444,18 @@ async def _event(
     )
 
 
+@dataclass
+class RegistrationOutcome:
+    """Итог подтверждения регистрации.
+
+    payout — выплата собственнику, если деньги принимала площадка (None — выплаты
+    по заявке нет). payout_held — почему выплата не перешла «к перечислению»,
+    хотя регистрацию подтвердили (отменена, возврат клиенту): это админу.
+    """
+    payout: Optional[OwnerPayout]
+    payout_held: Optional[str] = None
+
+
 async def confirm_registration(
     db: AsyncSession,
     *,
@@ -454,26 +466,26 @@ async def confirm_registration(
     admin_id: Any,
     now: datetime,
     required_inn: Optional[str] = None,
-) -> Optional[OwnerPayout]:
+) -> RegistrationOutcome:
     """Регистрация компании клиента подтверждена по ЕГРЮЛ.
 
     Это факт о заявке (последний шаг статус-трекера), а не только условие
     выплаты: подтверждать можно любую заявку с выданными документами. Если деньги
     принимала площадка (`payment` — её платёж), выплата собственнику переходит
-    «к перечислению»; иначе (счёт собственника, смена адреса) выплаты нет и
-    возвращается None.
+    «к перечислению». Если выплату двигать нельзя (её отменили, клиенту
+    возвращали деньги), регистрация всё равно подтверждается — иначе трекер
+    клиента и собственника застрял бы навсегда, — а выплата остаётся как была,
+    и причина уходит админу в payout_held.
+
+    Повторно подтверждать можно только ради выплаты, которая ждала: например,
+    возврат не прошёл и деньги остались у площадки.
 
     Заявка и платёж должны быть заблокированы вызывающим (FOR UPDATE).
     """
-    if application.registration_confirmed_at is not None:
-        raise PayoutError("Регистрация по этой заявке уже подтверждена.")
     if application.status not in REGISTRATION_ALLOWED:
         raise PayoutError("Документы клиенту ещё не выданы — регистрацию подтверждать рано.")
+    already = application.registration_confirmed_at is not None
     platform_paid = payment is not None and payment.provider in PLATFORM_COLLECTED
-    if platform_paid:
-        blockers = payout_blockers(application, payment)
-        if blockers:
-            raise PayoutError("Нельзя: " + "; ".join(blockers) + ".")
     if not check.found:
         raise PayoutError("Компания с этим ИНН в ЕГРЮЛ не найдена.")
     if required_inn is not None and check.inn != required_inn:
@@ -491,54 +503,71 @@ async def confirm_registration(
     # Тестовый терминал или заявка без собственника выплаты не порождают —
     # регистрацию это не отменяет.
     payout = await ensure_payout(db, application, payment) if platform_paid else None
-    if payout is not None:
-        if payout.status == CANCELLED:
-            raise PayoutError(
-                "Выплату по этому платежу отменили. Если деньги собственнику всё же положены, "
-                "рассчитайтесь с ним вне реестра."
+    movable = payout is not None and payout.status == AWAITING_REGISTRATION
+    held: Optional[str] = None
+    if payout is not None and payout.status == CANCELLED:
+        held = (
+            "Выплату по этому платежу отменили — она не переоткрывается. Если деньги собственнику "
+            "всё же положены, рассчитайтесь с ним вне реестра."
+        )
+    elif movable:
+        blockers = payout_blockers(application, payment)
+        if blockers:
+            held = (
+                "Выплата осталась в ожидании: " + "; ".join(blockers) + ". Когда станет ясно, "
+                "положена ли она, отмените её или подтвердите регистрацию из реестра ещё раз."
             )
-        if payout.status != AWAITING_REGISTRATION:
-            raise PayoutError(f"Выплата уже в статусе «{payout.status}».")
-        if payout.commission_percent is None:
-            provider = await db.get(Provider, payout.provider_id)
-            percent = resolve_commission_percent(provider) if provider else None
-            if percent is None:
-                raise PayoutError(
-                    "Не задан процент комиссии: укажите его у собственника или общий "
-                    "OWNER_COMMISSION_DEFAULT_PERCENT."
-                )
-            _apply_percent(payout, percent)
+    if already and (not movable or held):
+        raise PayoutError("Регистрация по этой заявке уже подтверждена." + (f" {held}" if held else ""))
+    release = movable and held is None
+    if release and payout.commission_percent is None:
+        # Это поправимо (админ задаст процент) — до любых записей.
+        provider = await db.get(Provider, payout.provider_id)
+        percent = resolve_commission_percent(provider) if provider else None
+        if percent is None:
+            raise PayoutError(
+                "Не задан процент комиссии: укажите его у собственника или общий "
+                "OWNER_COMMISSION_DEFAULT_PERCENT."
+            )
+        _apply_percent(payout, percent)
 
-    snapshot = check.snapshot(now)
-    snapshot["accepted_address_mismatch"] = bool(accept_address_mismatch and mismatched)
-    application.registration_inn = check.inn
-    application.registration_check = snapshot
-    application.registration_confirmed_at = now
-    application.registration_confirmed_by = admin_id
-    if payout is not None:
+    if not already:
+        snapshot = check.snapshot(now)
+        snapshot["accepted_address_mismatch"] = bool(accept_address_mismatch and mismatched)
+        application.registration_inn = check.inn
+        application.registration_check = snapshot
+        application.registration_confirmed_at = now
+        application.registration_confirmed_by = admin_id
+    if release:
         payout.status = DUE
         payout.due_at = now
     await db.flush()
 
-    payload: dict[str, Any] = {"registration_confirmed": True}
-    if payout is not None:
-        payload.update(payout_id=str(payout.id), payout_status=payout.status)
-        owner_title = "Регистрация подтверждена — выплата в очереди"
-        owner_message = (
+    events: list[tuple[NotificationAudience, str, str, dict[str, Any]]] = []
+    if release:
+        events.append((
+            NotificationAudience.OWNER,
+            "Регистрация подтверждена — выплата в очереди",
             f"Компания клиента зарегистрирована по вашему адресу. К выплате {_rub(payout.payout_kopeks)}: "
-            f"оплата {_rub(payout.gross_kopeks)} минус комиссия площадки {payout.commission_percent}%."
-        )
-    else:
-        owner_title = "Регистрация подтверждена"
-        owner_message = "Компания клиента зарегистрирована по вашему адресу — площадка сверила с ЕГРЮЛ."
-    for audience, title, message in (
-        (NotificationAudience.OWNER, owner_title, owner_message),
-        (
+            f"оплата {_rub(payout.gross_kopeks)} минус комиссия площадки {payout.commission_percent}%.",
+            {"registration_confirmed": True, "payout_id": str(payout.id), "payout_status": payout.status},
+        ))
+    elif not already:
+        # Почему выплата встала (отмена, возврат) — внутреннее дело площадки.
+        events.append((
+            NotificationAudience.OWNER,
+            "Регистрация подтверждена",
+            "Компания клиента зарегистрирована по вашему адресу — площадка сверила с ЕГРЮЛ.",
+            {"registration_confirmed": True},
+        ))
+    if not already:
+        events.append((
             NotificationAudience.CLIENT,
             "Регистрация подтверждена",
             "Площадка сверила с ЕГРЮЛ: компания зарегистрирована по адресу из заявки.",
-        ),
-    ):
+            {"registration_confirmed": True},
+        ))
+    for audience, title, message, payload in events:
         await create_application_event(
             db=db,
             application_id=application.id,
@@ -546,11 +575,10 @@ async def confirm_registration(
             audience=audience,
             title=title,
             message=message,
-            # Клиенту — без внутренних полей выплаты.
-            payload=payload if audience == NotificationAudience.OWNER else {"registration_confirmed": True},
+            payload=payload,
             created_by=admin_id,
         )
-    return payout
+    return RegistrationOutcome(payout=payout, payout_held=held)
 
 
 def _payee_snapshot(provider: Provider) -> dict[str, Any]:
