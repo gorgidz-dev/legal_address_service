@@ -230,7 +230,9 @@ async def run_checks() -> None:
         check(r.status_code == 201, f"клиент получил ссылку на оплату ({r.status_code} {r.text[:200]})")
         pay0 = r.json()
         check(pay0["provider"] == "tbank", "провайдер tbank")
-        check((pay0.get("payment_url") or "").startswith("https://pay.tbank.ru/"), "ссылка на форму Т-Банка")
+        # Домен формы банк меняет (pay.tbank.ru → pay.tbank-online.com, 2026-10) — наш код
+        # от него не зависит, проверяем только, что ссылка есть и по https.
+        check((pay0.get("payment_url") or "").startswith("https://"), f"ссылка на форму Т-Банка ({pay0.get('payment_url')})")
         check(bool(pay0.get("provider_payment_id")), "PaymentId банка сохранён строкой")
         check(pay0["amount_kopeks"] == 4_500_000, f"сумма 45 000 ₽ в копейках ({pay0['amount_kopeks']})")
         check((await load_payment(pay0["id"])).provider_account == settings.tbank_terminal_key, "терминал записан в платёж")
