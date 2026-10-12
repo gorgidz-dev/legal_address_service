@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.validators import INNLegal
+from app.validators import BIK, CorrAccount, INNLegal, SettlementAccount
 
 PayoutStatus = Literal["awaiting_registration", "due", "paid", "cancelled"]
 
@@ -55,16 +55,29 @@ class PayoutCancelRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
-class ProviderCommissionUpdate(BaseModel):
-    """NULL — у собственника нет своего процента, действует общий из настроек."""
+class ProviderPayoutSettingsUpdate(BaseModel):
+    """Настройки выплат собственника. Меняются только переданные поля.
+
+    commission_percent: null — своего процента нет, действует общий из настроек.
+    Реквизиты меняет только админ: собственник, сам меняющий счёт для выплат, —
+    готовый способ увести деньги при взломе его входа.
+    """
     commission_percent: Optional[Decimal] = Field(default=None, ge=0, lt=100, decimal_places=2)
+    bank_name: Optional[str] = Field(default=None, max_length=300)
+    settlement_account: Optional[SettlementAccount] = None
+    corr_account: Optional[CorrAccount] = None
+    bik: Optional[BIK] = None
 
 
-class ProviderCommissionRead(BaseModel):
+class ProviderPayoutSettingsRead(BaseModel):
     provider_id: UUID
     commission_percent: Optional[Decimal] = None
     # Что реально применится к новым оплатам: свой процент или общий.
     effective_percent: Optional[Decimal] = None
+    bank_name: Optional[str] = None
+    settlement_account: Optional[str] = None
+    corr_account: Optional[str] = None
+    bik: Optional[str] = None
 
 
 class PayoutPayee(BaseModel):

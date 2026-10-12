@@ -423,3 +423,14 @@ async def test_cancel_awaiting_payout_is_silent_for_owner() -> None:
     payout.status = AWAITING_REGISTRATION
     await owner_payouts.cancel(db, payout=payout, reason="Заявка отменена", admin_id=None, now=NOW)
     assert db.events(NotificationAudience.OWNER) == []
+
+
+@pytest.mark.asyncio
+async def test_mark_paid_needs_owner_bank_details() -> None:
+    provider = _provider()
+    provider.settlement_account = None
+    payout = _due_payout(provider)
+    with pytest.raises(PayoutError, match="реквизиты"):
+        await _mark(_DB(provider=provider), payout, _application(provider=provider), _payment())
+    assert payout.status == DUE
+

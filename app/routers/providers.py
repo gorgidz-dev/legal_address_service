@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import require_admin, require_staff
 from app.database import get_db
 from app.models.provider import Provider
-from app.schemas.owner_payout import ProviderCommissionRead, ProviderCommissionUpdate
+from app.schemas.owner_payout import ProviderPayoutSettingsRead, ProviderPayoutSettingsUpdate
 from app.schemas.provider import ProviderCreate, ProviderRead
 from app.services.owner_payouts import resolve_commission_percent
 
@@ -67,29 +67,32 @@ async def get_provider(
 
 
 @router.patch(
-    "/{provider_id}/commission",
-    response_model=ProviderCommissionRead,
-    summary="Процент комиссии площадки с собственника",
+    "/{provider_id}/payout-settings",
+    response_model=ProviderPayoutSettingsRead,
+    summary="Процент комиссии и реквизиты собственника для выплат",
     dependencies=[Depends(require_admin)],
 )
-async def set_provider_commission(
+async def set_provider_payout_settings(
     provider_id: UUID,
-    payload: ProviderCommissionUpdate,
+    payload: ProviderPayoutSettingsUpdate,
     db: AsyncSession = Depends(get_db),
-) -> ProviderCommissionRead:
-    """Свой процент собственника; null — действует общий из настроек.
-
-    Применяется к новым оплатам: в уже заведённой выплате процент — снимок на
-    момент оплаты (app/services/owner_payouts.py).
+) -> ProviderPayoutSettingsRead:
+    """Меняются только переданные поля. Процент применяется к новым оплатам: в уже
+    заведённой выплате он — снимок на момент оплаты (app/services/owner_payouts.py).
+    Реквизиты в выплату попадают снимком в момент отметки «выплачено».
     """
     provider = await db.get(Provider, provider_id)
     if provider is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Собственник не найден")
-    provider.commission_percent = payload.commission_percent
+    for field in payload.model_fields_set:
+        setattr(provider, field, getattr(payload, field))
     await db.commit()
-    return ProviderCommissionRead(
+    return ProviderPayoutSettingsRead(
         provider_id=provider.id,
         commission_percent=provider.commission_percent,
         effective_percent=resolve_commission_percent(provider),
+        bank_name=provider.bank_name,
+        settlement_account=provider.settlement_account,
+        corr_account=provider.corr_account,
+        bik=provider.bik,
     )
-

@@ -426,13 +426,18 @@ async def mark_paid(
     if not reference:
         raise PayoutError("Укажите номер платёжного поручения.")
     provider = await db.get(Provider, payout.provider_id)
+    if provider is None or not (provider.settlement_account and provider.bik):
+        raise PayoutError(
+            "У собственника не заполнены банковские реквизиты (расчётный счёт и БИК) — "
+            "внесите их в карточке собственника."
+        )
     payout.status = PAID
     payout.paid_on = paid_on
     payout.paid_at = now
     payout.paid_by = admin_id
     payout.bank_reference = reference
     payout.comment = (comment or "").strip() or None
-    payout.payee = _payee_snapshot(provider) if provider else None
+    payout.payee = _payee_snapshot(provider)
     await db.flush()
     await _event(
         db, application.id, NotificationAudience.OWNER,

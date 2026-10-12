@@ -150,7 +150,8 @@ async def seed() -> dict:
         await db.commit()
         return {
             "apps": [str(a.id) for a in apps], "payments": [str(p.id) for p in payments],
-            "tokens": tokens, "provider": str(provider.id), "created": apps[0].created_at.date(),
+            "tokens": tokens, "provider": str(provider.id), "other": str(other.id),
+            "created": apps[0].created_at.date(),
         }
 
 
@@ -227,7 +228,7 @@ async def run_checks() -> None:
         login_as("other_owner")
         r = await http.get("/api/v1/payouts/mine")
         check(r.status_code == 200 and r.json() == [], "чужой собственник чужих выплат не видит")
-        r = await http.patch(f"/api/v1/providers/{ids['provider']}/commission", json={"commission_percent": "1"})
+        r = await http.patch(f"/api/v1/providers/{ids['provider']}/payout-settings", json={"commission_percent": "1"})
         check(r.status_code == 403, f"собственник не меняет себе процент ({r.status_code})")
 
         print("\n== клиент сообщает ИНН ==")
@@ -302,10 +303,19 @@ async def run_checks() -> None:
         check(r.status_code == 200 and r.json()["status"] == "cancelled", f"отменена ({r.status_code})")
 
         print("\n== процент собственника и ограничения базы ==")
-        r = await http.patch(f"/api/v1/providers/{ids['provider']}/commission", json={"commission_percent": "12.5"})
+        r = await http.patch(f"/api/v1/providers/{ids['provider']}/payout-settings", json={"commission_percent": "12.5"})
         check(r.status_code == 200 and Decimal(r.json()["effective_percent"]) == Decimal("12.5"), f"админ задал 12,5% ({r.status_code})")
-        r = await http.patch(f"/api/v1/providers/{ids['provider']}/commission", json={"commission_percent": "100"})
+        r = await http.patch(f"/api/v1/providers/{ids['provider']}/payout-settings", json={"commission_percent": "100"})
         check(r.status_code == 422, f"100% — 422 ({r.status_code})")
+        r = await http.patch(f"/api/v1/providers/{ids['other']}/payout-settings", json={
+            "bank_name": "АО Банк", "settlement_account": "40702810900000000002",
+            "corr_account": "30101810400000000225", "bik": "044525225",
+        })
+        body = r.json()
+        check(r.status_code == 200 and body["bik"] == "044525225" and body["commission_percent"] is None,
+              f"реквизиты заданы, процент не тронут ({r.status_code})")
+        r = await http.patch(f"/api/v1/providers/{ids['other']}/payout-settings", json={"bik": "12"})
+        check(r.status_code == 422, f"кривой БИК — 422 ({r.status_code})")
         await bank_confirms(pays[2])
         third = await payout_for(apps[2])
         check(third.commission_percent == Decimal("12.5") and third.payout_kopeks == 2_625_000, "новая оплата — по новому проценту")
