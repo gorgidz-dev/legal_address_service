@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -25,6 +25,14 @@ class ApplicationDocumentRead(BaseModel):
 class ApplicationDocumentUploadResult(BaseModel):
     application_id: UUID
     application_status: ApplicationStatus
+    document: ApplicationDocumentRead
+
+
+class IfnsReceiptUploadResult(BaseModel):
+    """Ответ на загрузку расписки ИФНС: что теперь показывает трекер."""
+    application_id: UUID
+    registration_expected_on: date
+    ifns_receipt_uploaded_at: datetime
     document: ApplicationDocumentRead
 
 

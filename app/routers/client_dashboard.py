@@ -113,6 +113,8 @@ async def list_client_applications(
             registration_inn=application.registration_inn,
             registration_inn_submitted_at=application.registration_inn_submitted_at,
             registration_confirmed_at=application.registration_confirmed_at,
+            registration_expected_on=application.registration_expected_on,
+            ifns_receipt_uploaded_at=application.ifns_receipt_uploaded_at,
             created_at=application.created_at,
             updated_at=application.updated_at,
         )

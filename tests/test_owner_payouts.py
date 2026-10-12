@@ -338,11 +338,34 @@ async def test_company_not_found_cannot_be_confirmed_even_with_manual_flag() -> 
 
 
 @pytest.mark.asyncio
-async def test_owner_invoice_application_has_nothing_to_confirm() -> None:
+async def test_owner_invoice_application_is_confirmed_without_payout() -> None:
+    """Смена адреса по счёту собственника: регистрация — факт трекера, выплаты нет."""
     provider = _provider()
-    with pytest.raises(PayoutError, match="напрямую"):
-        await _confirm(_DB(provider=provider), _application(provider=provider), _payment("manual_invoice"))
+    db = _DB(provider=provider)
+    application = _application(provider=provider)
+    payout = await _confirm(db, application, _payment("manual_invoice"))
+    assert payout is None
+    assert application.registration_confirmed_at == NOW
+    assert not [item for item in db.added if isinstance(item, OwnerPayout)]
+    owner_events = db.events(NotificationAudience.OWNER)
+    assert [e.title for e in owner_events] == ["Регистрация подтверждена"]
+    assert "выплат" not in owner_events[0].message
 
+
+@pytest.mark.asyncio
+async def test_application_without_any_payment_can_be_confirmed() -> None:
+    provider = _provider()
+    application = _application(provider=provider)
+    assert await _confirm(_DB(provider=provider), application, None) is None
+    assert application.registration_confirmed_at == NOW
+
+
+@pytest.mark.asyncio
+async def test_demo_payment_confirms_registration_without_payout() -> None:
+    provider = _provider()
+    application = _application(provider=provider)
+    payout = await _confirm(_DB(provider=provider), application, _payment(provider_account="1700000000000DEMO"))
+    assert payout is None and application.registration_confirmed_at == NOW
 
 @pytest.mark.asyncio
 async def test_second_confirmation_is_refused() -> None:

@@ -70,6 +70,11 @@ class OwnerApplicationRead(BaseModel):
     # Свой срок собственник видит — в этом весь смысл: напоминание работает
     # только если понятно, к какому дню ждут. Клиенту это поле не уходит.
     sla_due_at: Optional[datetime] = None
+    # Статус-трекер: когда клиент ждёт регистрацию и подтверждена ли она —
+    # от этого зависит выплата собственнику. Сам файл расписки ему не отдаётся.
+    registration_expected_on: Optional[date] = None
+    ifns_receipt_uploaded_at: Optional[datetime] = None
+    registration_confirmed_at: Optional[datetime] = None
 
     created_at: datetime
     updated_at: datetime

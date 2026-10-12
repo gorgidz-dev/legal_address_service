@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user
+from app.auth import get_current_user, utcnow
 from app.database import get_db
 from app.enums import DocumentFileKind
 from app.models.user import User
@@ -14,12 +15,14 @@ from app.schemas.application_document import (
     ApplicationDocumentModerationRead,
     ApplicationDocumentRead,
     ApplicationDocumentUploadResult,
+    IfnsReceiptUploadResult,
 )
 from app.services.application_documents import (
     get_application_document,
     get_application_document_moderation,
     list_application_documents,
     upload_application_document,
+    upload_ifns_receipt,
 )
 from app.services.storage import attachment_disposition, local_stored_file_path, read_stored_file_async
 
@@ -67,6 +70,37 @@ async def upload_document(
     )
     await db.commit()
     return result
+
+
+@router.post(
+    "/{application_id}/ifns-receipt",
+    response_model=IfnsReceiptUploadResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_receipt(
+    application_id: UUID,
+    file: UploadFile = File(...),
+    expected_registration_on: date = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> IfnsReceiptUploadResult:
+    """Клиент: расписка ИФНС о приёме документов + дата регистрации из неё."""
+    application, document = await upload_ifns_receipt(
+        db=db,
+        application_id=application_id,
+        file_content=await file.read(),
+        original_filename=file.filename or "receipt",
+        expected_registration_on=expected_registration_on,
+        user=user,
+        now=utcnow(),
+    )
+    await db.commit()
+    return IfnsReceiptUploadResult(
+        application_id=application.id,
+        registration_expected_on=application.registration_expected_on,
+        ifns_receipt_uploaded_at=application.ifns_receipt_uploaded_at,
+        document=document,
+    )
 
 
 @router.get("/{application_id}/documents/{file_id}/download", response_model=None)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -24,6 +26,7 @@ from app.schemas.application_document import (
 from app.services.application_workflow import next_actions_for_status, workflow_role_for_user
 from app.services.application_sla import apply_sla
 from app.services.notification_events import create_application_event
+from app.services.chat_attachments import content_type_for, ensure_within_limits
 from app.services.storage import create_stored_file_record
 
 
@@ -46,6 +49,25 @@ CLIENT_DOCUMENT_VISIBLE_STATUSES = {
     ApplicationStatus.COMPLETED.value,
     ApplicationStatus.DISPUTE.value,
 }
+
+
+#: Расписку ИФНС клиент загружает, когда документы выданы и он подал их в
+#: налоговую. Спор — нет: пока он открыт, неизвестно, будет ли регистрация.
+IFNS_RECEIPT_STATUSES = {
+    ApplicationStatus.READY_FOR_CLIENT.value,
+    ApplicationStatus.COMPLETED.value,
+}
+#: Расписка — скан или фото: только такие форматы.
+IFNS_RECEIPT_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff"}
+#: Дата регистрации из расписки: ИФНС регистрирует за несколько рабочих дней.
+#: Дальше месяца вперёд — почти наверняка опечатка; раньше трёх месяцев назад —
+#: тоже (такую расписку загружать уже незачем).
+IFNS_DATE_MAX_AHEAD_DAYS = 30
+IFNS_DATE_MAX_BEHIND_DAYS = 90
+#: Расписка с персональными данными клиента собственнику не нужна.
+OWNER_HIDDEN_KINDS = {DocumentFileKind.IFNS_RECEIPT.value}
+#: «Сегодня» для дат из расписки — по Москве (сервер живёт в UTC).
+_MOSCOW = timezone(timedelta(hours=3))
 
 
 def application_document_download_url(application_id: UUID, file_id: UUID) -> str:
@@ -207,11 +229,14 @@ async def list_application_documents(
 ) -> list[ApplicationDocumentRead]:
     application = await load_application_for_documents(db, application_id)
     ensure_application_document_access(application=application, user=user, for_download=True)
+    kinds = [kind.value for kind in DocumentFileKind]
+    if _role_for_user(user) == UserRole.OWNER:
+        kinds = [kind for kind in kinds if kind not in OWNER_HIDDEN_KINDS]
     result = await db.execute(
         select(StoredFile)
         .where(
             StoredFile.application_id == application.id,
-            StoredFile.kind.in_([kind.value for kind in DocumentFileKind]),
+            StoredFile.kind.in_(kinds),
         )
         .order_by(StoredFile.created_at.desc())
     )
@@ -264,4 +289,102 @@ async def get_application_document(
         DocumentFileKind(file_record.kind)
     except ValueError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ заявки не найден") from e
+    if file_record.kind in OWNER_HIDDEN_KINDS and _role_for_user(user) == UserRole.OWNER:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ заявки не найден")
     return file_record
+
+
+async def upload_ifns_receipt(
+    *,
+    db: AsyncSession,
+    application_id: UUID,
+    file_content: bytes,
+    original_filename: str,
+    expected_registration_on: date,
+    user: User | object,
+    now: datetime,
+) -> tuple[Application, ApplicationDocumentRead]:
+    """Клиент загружает расписку ИФНС и дату предстоящей регистрации из неё.
+
+    Повторная загрузка (переподача после отказа, исправленная дата) разрешена:
+    трекер берёт последнюю. После подтверждения регистрации — уже незачем.
+    """
+    application = await load_application_for_documents(db, application_id)
+    if _role_for_user(user) != UserRole.CLIENT or application.created_by != getattr(user, "id", None):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Application {application_id} не найдена")
+    if application.status not in IFNS_RECEIPT_STATUSES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Расписку загружают после получения документов и подачи их в ИФНС.",
+        )
+    if application.registration_confirmed_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Регистрация уже подтверждена — расписка не нужна.")
+    suffix = Path(original_filename or "").suffix.lower()
+    if suffix not in IFNS_RECEIPT_EXTENSIONS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Расписку загрузите сканом или фото: PDF, JPG, PNG, WEBP, HEIC или TIFF.",
+        )
+    ensure_within_limits(content=file_content, original_filename=original_filename)
+    today = now.astimezone(_MOSCOW).date()
+    if expected_registration_on > today + timedelta(days=IFNS_DATE_MAX_AHEAD_DAYS):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Дата регистрации слишком далеко — проверьте дату в расписке.",
+        )
+    if expected_registration_on < today - timedelta(days=IFNS_DATE_MAX_BEHIND_DAYS):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Дата регистрации слишком давняя — проверьте дату в расписке.",
+        )
+
+    file_record = await create_stored_file_record(
+        db=db,
+        content=file_content,
+        kind=DocumentFileKind.IFNS_RECEIPT.value,
+        original_filename=original_filename,
+        content_type=content_type_for(original_filename),
+        application_id=application.id,
+        uploaded_by=getattr(user, "id", None),
+    )
+    application.registration_expected_on = expected_registration_on
+    application.ifns_receipt_uploaded_at = now
+    document = application_document_read(file_record)
+
+    when = expected_registration_on.strftime("%d.%m.%Y")
+    payload = {"file_id": str(document.id), "registration_expected_on": expected_registration_on.isoformat()}
+    created_by = getattr(user, "id", None)
+    await create_application_event(
+        db=db,
+        application_id=application.id,
+        kind=ApplicationEventKind.DOCUMENT_UPLOADED,
+        audience=NotificationAudience.CLIENT,
+        title="Расписка загружена",
+        message=f"Регистрация ожидается {when}. После неё площадка сверит данные с ЕГРЮЛ.",
+        payload=payload,
+        created_by=created_by,
+    )
+    await create_application_event(
+        db=db,
+        application_id=application.id,
+        kind=ApplicationEventKind.DOCUMENT_UPLOADED,
+        audience=NotificationAudience.ADMIN,
+        title="Клиент подал документы в ИФНС",
+        message=f"Загружена расписка, регистрация ожидается {when}. После этой даты сверьте регистрацию с ЕГРЮЛ.",
+        payload=payload,
+        created_by=created_by,
+    )
+    # Собственнику — без файла (в расписке персональные данные клиента), но с
+    # датой: от регистрации зависит его выплата.
+    await create_application_event(
+        db=db,
+        application_id=application.id,
+        kind=ApplicationEventKind.STATUS_CHANGED,
+        audience=NotificationAudience.OWNER,
+        title="Клиент подал документы в ИФНС",
+        message=f"Регистрация по вашему адресу ожидается {when}.",
+        payload={"registration_expected_on": expected_registration_on.isoformat()},
+        created_by=created_by,
+    )
+    await db.flush()
+    return application, document

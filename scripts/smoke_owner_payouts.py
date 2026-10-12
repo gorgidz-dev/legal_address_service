@@ -46,6 +46,7 @@ from app.routers import owner_payouts as payouts_router
 from app.schemas.client import DaDataLookupResponse
 from app.services.auth_security import hash_token
 from app.services.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
+from app.services.owner_payouts import MOSCOW
 from app.services.tbank_payments import apply_bank_state, lock_payment
 
 FAILURES: list[str] = []
@@ -265,7 +266,7 @@ async def run_checks() -> None:
         r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/confirm", json={"inn": "7728168971"})  # верный ИНН, но в подставном ЕГРЮЛ его нет
         check(r.status_code == 409, f"ИНН нет в ЕГРЮЛ — 409 ({r.status_code})")
         r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/confirm", json={"inn": INN_OK})
-        check(r.status_code == 200 and r.json()["status"] == "due", f"подтверждено → к выплате ({r.status_code} {r.text[:150]})")
+        check(r.status_code == 200 and (r.json().get("payout") or {}).get("status") == "due", f"подтверждено → к выплате ({r.status_code} {r.text[:150]})")
         r = await http.post(f"/api/v1/payouts/applications/{apps[0]}/registration/confirm", json={"inn": INN_OK})
         check(r.status_code == 409, f"второе подтверждение — 409 ({r.status_code})")
         async with AsyncSessionLocal() as db:
@@ -277,10 +278,10 @@ async def run_checks() -> None:
         payout_id = str((await payout_for(apps[0])).id)
         r = await http.post(f"/api/v1/payouts/{payout_id}/mark-paid", json={"paid_on": date.today().isoformat(), "bank_reference": ""})
         check(r.status_code == 422, f"без номера платёжки — 422 ({r.status_code})")
-        tomorrow = (utcnow().date() + timedelta(days=1)).isoformat()
+        tomorrow = (utcnow().astimezone(MOSCOW).date() + timedelta(days=1)).isoformat()  # даты платёжек — по Москве
         r = await http.post(f"/api/v1/payouts/{payout_id}/mark-paid", json={"paid_on": tomorrow, "bank_reference": "15"})
         check(r.status_code == 409, f"дата в будущем — 409 ({r.status_code})")
-        today = utcnow().date().isoformat()
+        today = utcnow().astimezone(MOSCOW).date().isoformat()
         r1, r2 = await asyncio.gather(
             http.post(f"/api/v1/payouts/{payout_id}/mark-paid", json={"paid_on": today, "bank_reference": "15"}),
             http.post(f"/api/v1/payouts/{payout_id}/mark-paid", json={"paid_on": today, "bank_reference": "16"}),

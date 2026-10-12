@@ -380,25 +380,31 @@ async def confirm_registration(
     db: AsyncSession,
     *,
     application: Application,
-    payment: Payment,
+    payment: Optional[Payment],
     check: RegistrationCheck,
     accept_address_mismatch: bool,
     admin_id: Any,
     now: datetime,
-) -> OwnerPayout:
-    """Регистрация подтверждена → выплата «к перечислению».
+) -> Optional[OwnerPayout]:
+    """Регистрация компании клиента подтверждена по ЕГРЮЛ.
+
+    Это факт о заявке (последний шаг статус-трекера), а не только условие
+    выплаты: подтверждать можно любую заявку с выданными документами. Если деньги
+    принимала площадка (`payment` — её платёж), выплата собственнику переходит
+    «к перечислению»; иначе (счёт собственника, смена адреса) выплаты нет и
+    возвращается None.
 
     Заявка и платёж должны быть заблокированы вызывающим (FOR UPDATE).
     """
     if application.registration_confirmed_at is not None:
         raise PayoutError("Регистрация по этой заявке уже подтверждена.")
-    if payment.provider not in PLATFORM_COLLECTED:
-        raise PayoutError("Деньги по этой заявке получал собственник напрямую — выплаты нет.")
     if application.status not in REGISTRATION_ALLOWED:
         raise PayoutError("Документы клиенту ещё не выданы — регистрацию подтверждать рано.")
-    blockers = payout_blockers(application, payment)
-    if blockers:
-        raise PayoutError("Нельзя: " + "; ".join(blockers) + ".")
+    platform_paid = payment is not None and payment.provider in PLATFORM_COLLECTED
+    if platform_paid:
+        blockers = payout_blockers(application, payment)
+        if blockers:
+            raise PayoutError("Нельзя: " + "; ".join(blockers) + ".")
     if not check.found:
         raise PayoutError("Компания с этим ИНН в ЕГРЮЛ не найдена.")
     if check.address_matches is not True and not accept_address_mismatch:
@@ -407,25 +413,26 @@ async def confirm_registration(
             "адрес — подтвердите с отметкой «адрес сверен вручную»."
         )
 
-    payout = await ensure_payout(db, application, payment)
-    if payout is None:
-        raise PayoutError("По этому платежу выплата не положена (тестовый терминал или нет собственника).")
-    if payout.status == CANCELLED:
-        raise PayoutError(
-            "Выплату по этому платежу отменили. Если деньги собственнику всё же положены, "
-            "рассчитайтесь с ним вне реестра."
-        )
-    if payout.status != AWAITING_REGISTRATION:
-        raise PayoutError(f"Выплата уже в статусе «{payout.status}».")
-    if payout.commission_percent is None:
-        provider = await db.get(Provider, payout.provider_id)
-        percent = resolve_commission_percent(provider) if provider else None
-        if percent is None:
+    # Тестовый терминал или заявка без собственника выплаты не порождают —
+    # регистрацию это не отменяет.
+    payout = await ensure_payout(db, application, payment) if platform_paid else None
+    if payout is not None:
+        if payout.status == CANCELLED:
             raise PayoutError(
-                "Не задан процент комиссии: укажите его у собственника или общий "
-                "OWNER_COMMISSION_DEFAULT_PERCENT."
+                "Выплату по этому платежу отменили. Если деньги собственнику всё же положены, "
+                "рассчитайтесь с ним вне реестра."
             )
-        _apply_percent(payout, percent)
+        if payout.status != AWAITING_REGISTRATION:
+            raise PayoutError(f"Выплата уже в статусе «{payout.status}».")
+        if payout.commission_percent is None:
+            provider = await db.get(Provider, payout.provider_id)
+            percent = resolve_commission_percent(provider) if provider else None
+            if percent is None:
+                raise PayoutError(
+                    "Не задан процент комиссии: укажите его у собственника или общий "
+                    "OWNER_COMMISSION_DEFAULT_PERCENT."
+                )
+            _apply_percent(payout, percent)
 
     snapshot = check.snapshot(now)
     snapshot["accepted_address_mismatch"] = bool(accept_address_mismatch and check.address_matches is not True)
@@ -433,23 +440,41 @@ async def confirm_registration(
     application.registration_check = snapshot
     application.registration_confirmed_at = now
     application.registration_confirmed_by = admin_id
-    payout.status = DUE
-    payout.due_at = now
+    if payout is not None:
+        payout.status = DUE
+        payout.due_at = now
     await db.flush()
 
-    await _event(
-        db, application.id, NotificationAudience.OWNER,
-        "Регистрация подтверждена — выплата в очереди",
-        f"Компания клиента зарегистрирована по вашему адресу. К выплате {_rub(payout.payout_kopeks)}: "
-        f"оплата {_rub(payout.gross_kopeks)} минус комиссия площадки {payout.commission_percent}%.",
-        payout, admin_id,
-    )
-    await _event(
-        db, application.id, NotificationAudience.CLIENT,
-        "Регистрация подтверждена",
-        "Площадка сверила с ЕГРЮЛ: компания зарегистрирована по адресу из заявки.",
-        payout, admin_id,
-    )
+    payload: dict[str, Any] = {"registration_confirmed": True}
+    if payout is not None:
+        payload.update(payout_id=str(payout.id), payout_status=payout.status)
+        owner_title = "Регистрация подтверждена — выплата в очереди"
+        owner_message = (
+            f"Компания клиента зарегистрирована по вашему адресу. К выплате {_rub(payout.payout_kopeks)}: "
+            f"оплата {_rub(payout.gross_kopeks)} минус комиссия площадки {payout.commission_percent}%."
+        )
+    else:
+        owner_title = "Регистрация подтверждена"
+        owner_message = "Компания клиента зарегистрирована по вашему адресу — площадка сверила с ЕГРЮЛ."
+    for audience, title, message in (
+        (NotificationAudience.OWNER, owner_title, owner_message),
+        (
+            NotificationAudience.CLIENT,
+            "Регистрация подтверждена",
+            "Площадка сверила с ЕГРЮЛ: компания зарегистрирована по адресу из заявки.",
+        ),
+    ):
+        await create_application_event(
+            db=db,
+            application_id=application.id,
+            kind=ApplicationEventKind.STATUS_CHANGED,
+            audience=audience,
+            title=title,
+            message=message,
+            # Клиенту — без внутренних полей выплаты.
+            payload=payload if audience == NotificationAudience.OWNER else {"registration_confirmed": True},
+            created_by=admin_id,
+        )
     return payout
 
 

@@ -13,6 +13,7 @@ from sqlalchemy import (
     Index,
     SmallInteger,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -56,6 +57,13 @@ class Application(UUIDPKMixin, TimestampMixin, Base):
         Index("ix_applications_status_expires_at", "status", "expires_at"),
         Index("ix_applications_provider_address", "provider_id", "address_id"),
         Index("ix_applications_client_id", "client_id"),
+        Index(
+            "ix_applications_registration_expected_on",
+            "registration_expected_on",
+            postgresql_where=text(
+                "registration_expected_on IS NOT NULL AND registration_confirmed_at IS NULL"
+            ),
+        ),
         Index("ix_applications_parent_application_id", "parent_application_id"),
         Index("ix_applications_type_status", "type", "status"),
     )
@@ -115,3 +123,8 @@ class Application(UUIDPKMixin, TimestampMixin, Base):
     registration_confirmed_by: Mapped[Optional[UUID]] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"),
     )
+    # Статус-трекер (этап 6): клиент сам подаёт документы в ИФНС и загружает
+    # расписку о приёме (stored_files, kind = ifns_receipt) с датой предстоящей
+    # регистрации — от неё строится прогноз и напоминание «пора сверить».
+    registration_expected_on: Mapped[Optional[date]] = mapped_column(Date)
+    ifns_receipt_uploaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

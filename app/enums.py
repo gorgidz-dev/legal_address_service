@@ -127,6 +127,9 @@ class DocumentFileKind(str, Enum):
     POSTAL_SERVICE = "postal_service"
     ADMIN_REVIEW_FILE = "admin_review_file"
     INVOICE = "invoice"  # счёт на оплату для юр.лица — owner-uploaded
+    # Расписка ИФНС о приёме документов — загружает клиент после подачи
+    # (этап 6, статус-трекер). Собственнику не показывается: персональные данные.
+    IFNS_RECEIPT = "ifns_receipt"
 
 
 class ApplicationEventKind(str, Enum):

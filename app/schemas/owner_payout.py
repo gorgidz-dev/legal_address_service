@@ -123,9 +123,20 @@ class AdminPayoutRead(OwnerPayoutRead):
     registration_inn: Optional[str] = None
     registration_inn_submitted_at: Optional[datetime] = None
     registration_confirmed_at: Optional[datetime] = None
+    # Дата регистрации из расписки ИФНС — раньше неё сверять ЕГРЮЛ бесполезно.
+    registration_expected_on: Optional[date] = None
     registration_check: Optional[dict[str, Any]] = None
     # ИНН, который можно подставить в проверку: сообщённый клиентом, а для смены
     # адреса — ИНН самой компании из заявки.
     suggested_inn: Optional[str] = None
     # Почему двигать выплату сейчас нельзя (пусто — можно).
     blockers: list[str] = []
+
+
+class RegistrationConfirmResult(BaseModel):
+    """Регистрация подтверждена. payout — выплата собственнику, если деньги
+    принимала площадка; null — выплаты по заявке нет (счёт собственника)."""
+    application_id: UUID
+    registration_confirmed_at: datetime
+    payout: Optional[AdminPayoutRead] = None
+

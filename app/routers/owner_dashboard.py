@@ -133,6 +133,9 @@ async def get_owner_dashboard(
                 available_actions=role_actions_for_status(UserRole.OWNER, application.status),
                 events=events_by_application[application.id],
                 sla_due_at=application.sla_due_at,
+                registration_expected_on=application.registration_expected_on,
+                ifns_receipt_uploaded_at=application.ifns_receipt_uploaded_at,
+                registration_confirmed_at=application.registration_confirmed_at,
                 created_at=application.created_at,
                 updated_at=application.updated_at,
             )

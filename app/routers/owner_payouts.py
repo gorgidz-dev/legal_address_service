@@ -39,6 +39,7 @@ from app.schemas.owner_payout import (
     PayoutPayee,
     PayoutStatus,
     RegistrationCheckRead,
+    RegistrationConfirmResult,
     RegistrationConfirmRequest,
     RegistrationInnRequest,
 )
@@ -182,6 +183,7 @@ async def _admin_views(db: AsyncSession, payouts: list[OwnerPayout]) -> list[Adm
                 registration_inn=application.registration_inn,
                 registration_inn_submitted_at=application.registration_inn_submitted_at,
                 registration_confirmed_at=application.registration_confirmed_at,
+                registration_expected_on=application.registration_expected_on,
                 registration_check=application.registration_check,
                 suggested_inn=suggested,
                 blockers=owner_payouts.payout_blockers(application, payment) if live else [],
@@ -307,28 +309,26 @@ async def check_registration(
 
 
 @router.post(
-    "/applications/{application_id}/registration/confirm", response_model=AdminPayoutRead
+    "/applications/{application_id}/registration/confirm", response_model=RegistrationConfirmResult
 )
 async def confirm_registration(
     application_id: UUID,
     payload: RegistrationConfirmRequest,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin),
-) -> AdminPayoutRead:
-    """Регистрация подтверждена → выплата собственнику «к перечислению»."""
+) -> RegistrationConfirmResult:
+    """Регистрация компании клиента подтверждена по ЕГРЮЛ (последний шаг трекера).
+
+    Если деньги принимала площадка — выплата собственнику «к перечислению».
+    """
     # Запрос в ЕГРЮЛ — до блокировок: сеть не должна держать строки.
     _, check = await _run_check(db, application_id, payload.inn)
 
     payment_id = await _platform_payment_id(db, application_id)
-    if payment_id is None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Оплаты через площадку по заявке нет — выплачивать собственнику нечего.",
-        )
-    payment = await lock_payment(db, payment_id)
+    payment = await lock_payment(db, payment_id) if payment_id is not None else None
     application = await _lock_application(db, application_id)
-    if payment is None or application is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка или платёж не найдены")
+    if application is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заявка не найдена")
     try:
         payout = await owner_payouts.confirm_registration(
             db,
@@ -349,7 +349,11 @@ async def confirm_registration(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Выплату по заявке только что изменили — обновите реестр."
         ) from e
-    return await _admin_view(db, payout)
+    return RegistrationConfirmResult(
+        application_id=application.id,
+        registration_confirmed_at=application.registration_confirmed_at,
+        payout=await _admin_view(db, payout) if payout is not None else None,
+    )
 
 
 @router.post(

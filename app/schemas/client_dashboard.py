@@ -63,6 +63,9 @@ class ClientApplicationRead(BaseModel):
     registration_inn: Optional[str] = None
     registration_inn_submitted_at: Optional[datetime] = None
     registration_confirmed_at: Optional[datetime] = None
+    # Статус-трекер: дата регистрации из расписки ИФНС и когда расписка загружена.
+    registration_expected_on: Optional[date] = None
+    ifns_receipt_uploaded_at: Optional[datetime] = None
 
     created_at: datetime
     updated_at: datetime
