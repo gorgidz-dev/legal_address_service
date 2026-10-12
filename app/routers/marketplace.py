@@ -40,6 +40,8 @@ from app.models.provider_connection_request import ProviderConnectionRequest
 from app.models.user import User
 from app.schemas.address_photo import AddressPhotoRead
 from app.schemas.marketplace import (
+    CatalogPriceSummary,
+    PriceRange,
     ProviderConnectionRequestCreate,
     ProviderConnectionRequestRead,
     PublicAddressServiceRead,
@@ -248,6 +250,47 @@ async def public_fns_options(
         for row in rows
     ]
 
+
+
+@router.get("/price-summary", response_model=CatalogPriceSummary)
+async def public_price_summary(
+    db: AsyncSession = Depends(get_db),
+) -> CatalogPriceSummary:
+    """Минимум и максимум цен по опубликованному каталогу (те же условия, что у
+    выдачи): аренда за 6 и 11 месяцев и приём корреспонденции в месяц.
+
+    Раздел «Цены и тарифы» берёт диапазон отсюда, а не из кода: цены задают
+    собственники, и захардкоженное «от 15 000 ₽» разошлось бы с каталогом.
+    """
+    row = (
+        await db.execute(
+            select(
+                func.count(Address.id).label("addresses"),
+                func.min(Address.price_6m).label("min_6m"),
+                func.max(Address.price_6m).label("max_6m"),
+                func.min(Address.price_11m).label("min_11m"),
+                func.max(Address.price_11m).label("max_11m"),
+                func.min(Address.correspondence_price).label("min_corr"),
+                func.max(Address.correspondence_price).label("max_corr"),
+            )
+            .join(Provider, Provider.id == Address.provider_id)
+            .where(
+                Provider.is_active.is_(True),
+                Address.is_available.is_(True),
+                Address.publication_status == AddressPublicationStatus.PUBLISHED.value,
+            )
+        )
+    ).one()
+
+    def _range(low, high) -> Optional[PriceRange]:
+        return None if low is None or high is None else PriceRange(min=low, max=high)
+
+    return CatalogPriceSummary(
+        addresses=row.addresses,
+        price_6m=_range(row.min_6m, row.max_6m),
+        price_11m=_range(row.min_11m, row.max_11m),
+        correspondence=_range(row.min_corr, row.max_corr),
+    )
 
 @router.get("/geo")
 async def public_geo_tree(

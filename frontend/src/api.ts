@@ -45,6 +45,7 @@ import type {
   ProviderConnectionRequestCreate,
   ProviderConnectionRequestStatusUpdate,
   PublicAddress,
+  CatalogPriceSummary,
   PublicReview,
   MyReview,
   ModerationReview,
@@ -232,6 +233,8 @@ export const api = {
 
   // Дерево Регион → Город → ИФНС для каскадного фильтра.
   publicGeoTree: () => request<GeoRegion[]>("/marketplace/geo"),
+  /** Диапазоны цен по всему каталогу — для раздела «Цены и тарифы». */
+  publicPriceSummary: () => request<CatalogPriceSummary>("/marketplace/price-summary"),
 
   // --- Отзывы об адресах ---
   listAddressReviews: (addressId: string) =>

@@ -133,6 +133,8 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path == f"{API_PREFIX}/marketplace/fns-options" and method == "GET":
         return True
+    if path == f"{API_PREFIX}/marketplace/price-summary" and method == "GET":
+        return True
     if path == f"{API_PREFIX}/marketplace/geo" and method == "GET":
         return True
     # Одна карточка каталога по прямой ссылке: /marketplace/addresses/{id}.

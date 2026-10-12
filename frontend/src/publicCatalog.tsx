@@ -30,6 +30,7 @@ import { HomeFAQ } from "./sections/HomeFAQ";
 import { HomeForOwners } from "./sections/HomeForOwners";
 import { HomeCases } from "./sections/HomeCases";
 import { HomeSteps } from "./sections/HomeSteps";
+import { HomePricing } from "./sections/HomePricing";
 import { HomeAbout } from "./sections/HomeAbout";
 import { LEGAL_TITLES } from "./sections/LegalPage";
 import { StarRating } from "./sections/StarRating";
@@ -121,6 +122,7 @@ const initialFilters: CatalogFilters = {
 const MENU_LINKS: Array<{ href: string; label: string }> = [
   { href: "#catalog", label: "Каталог" },
   { href: "#how", label: "Как это работает" },
+  { href: "#pricing", label: "Цены" },
   { href: "#owners", label: "Для собственников" },
   { href: "#about", label: "О нас" },
 ];
@@ -1724,6 +1726,7 @@ export default function PublicCatalog({
       </div>
 
       <HomeSteps />
+      <HomePricing onOpenLegal={onOpenLegal} />
       <HomeForOwners onCTAClick={() => setOwnerOpen(true)} />
       <HomeCases />
       <HomeFAQ />

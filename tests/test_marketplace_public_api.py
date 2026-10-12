@@ -16,6 +16,8 @@ def test_marketplace_public_paths_do_not_require_auth() -> None:
     assert _is_public_path("/api/v1/marketplace/addresses", "GET")
     assert _is_public_path("/api/v1/marketplace/addresses/search", "GET")
     assert _is_public_path("/api/v1/marketplace/fns-options", "GET")
+    assert _is_public_path("/api/v1/marketplace/price-summary", "GET")
+    assert not _is_public_path("/api/v1/marketplace/price-summary", "POST")
     assert _is_public_path("/api/v1/marketplace/provider-requests", "POST")
     assert not _is_public_path("/api/v1/marketplace/provider-requests", "GET")
 
@@ -222,3 +224,47 @@ def test_public_addresses_search_validates_page_params() -> None:
         client.get("/api/v1/marketplace/addresses/search?term_months=12").status_code
         == 422
     )
+
+
+def _price_summary_response(row: SimpleNamespace) -> dict:
+    class FakeResult:
+        def one(self):
+            return row
+
+    class FakeSession:
+        async def execute(self, _stmt):
+            return FakeResult()
+
+    async def override_db():
+        yield FakeSession()
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/api/v1/marketplace/price-summary")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_price_summary_returns_catalog_ranges() -> None:
+    body = _price_summary_response(SimpleNamespace(
+        addresses=26,
+        min_6m=Decimal("12000.00"), max_6m=Decimal("40000.00"),
+        min_11m=Decimal("18000.00"), max_11m=Decimal("65000.00"),
+        min_corr=Decimal("500.00"), max_corr=Decimal("1500.00"),
+    ))
+    assert body["addresses"] == 26
+    assert Decimal(body["price_6m"]["min"]) == Decimal("12000")
+    assert Decimal(body["price_11m"]["max"]) == Decimal("65000")
+    assert Decimal(body["correspondence"]["min"]) == Decimal("500")
+
+
+def test_price_summary_empty_catalog_has_no_ranges() -> None:
+    """Пустой каталог (или ни у одного адреса нет почты) — null, а не «от 0 ₽»."""
+    body = _price_summary_response(SimpleNamespace(
+        addresses=0, min_6m=None, max_6m=None, min_11m=None, max_11m=None,
+        min_corr=None, max_corr=None,
+    ))
+    assert body == {"addresses": 0, "price_6m": None, "price_11m": None, "correspondence": None}
+

@@ -354,6 +354,20 @@ export interface PublicAddressService {
   is_active: boolean;
 }
 
+/** Диапазон цен (Decimal приходит строкой). */
+export interface PriceRange {
+  min: string;
+  max: string;
+}
+
+/** GET /marketplace/price-summary — диапазоны по всему опубликованному каталогу. */
+export interface CatalogPriceSummary {
+  addresses: number;
+  price_6m: PriceRange | null;
+  price_11m: PriceRange | null;
+  correspondence: PriceRange | null;
+}
+
 export interface PublicAddress {
   id: string;
   provider_id: string;

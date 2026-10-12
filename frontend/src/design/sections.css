@@ -1228,6 +1228,181 @@ legend.ds-configurator__label {
   }
 }
 
+/* ── Цены и тарифы (sections/HomePricing.tsx) — в одной системе с .ds-steps ── */
+.ds-pricing {
+  max-width: var(--ds-prose-max-width);
+  margin: var(--ds-space-20) auto;
+  width: 100%;
+  box-sizing: border-box;
+  scroll-margin-top: var(--ds-space-8);
+}
+.ds-pricing__inner {
+  padding: 0 var(--ds-page-pad-x);
+  display: grid;
+  gap: var(--ds-space-4);
+}
+.ds-pricing__intro {
+  text-align: center;
+  margin-bottom: var(--ds-space-4);
+}
+.ds-pricing__eyebrow {
+  display: inline-block;
+  font-size: var(--ds-text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ds-tracking-wide);
+  color: var(--ds-indigo-600);
+  margin-bottom: var(--ds-space-2);
+}
+.ds-pricing__title {
+  font-size: var(--ds-text-display-md);
+  font-weight: 700;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-tight);
+  margin: 0;
+}
+.ds-pricing__sub {
+  max-width: 640px;
+  margin: var(--ds-space-3) auto 0;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-md);
+  line-height: 1.55;
+}
+.ds-pricing__terms {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ds-space-4);
+}
+.ds-pricing__term,
+.ds-pricing__block {
+  background: #ffffff;
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-xl);
+  padding: var(--ds-space-6);
+  box-shadow: var(--ds-shadow-sm);
+  min-width: 0;
+}
+.ds-pricing__term {
+  display: grid;
+  gap: var(--ds-space-1);
+}
+.ds-pricing__term-label {
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+  font-weight: 600;
+}
+.ds-pricing__term-price {
+  color: var(--ds-indigo-950);
+  font-size: var(--ds-text-heading-lg);
+  font-weight: 700;
+  letter-spacing: var(--ds-tracking-tight);
+  font-variant-numeric: tabular-nums;
+}
+.ds-pricing__term-note {
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+}
+/* Формула суммы: три части и знаки между ними; на узком экране — столбиком. */
+.ds-pricing__formula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-4) var(--ds-space-6);
+  background: var(--ds-indigo-50);
+  border: 1px solid var(--ds-slate-200);
+  border-radius: var(--ds-radius-xl);
+}
+.ds-pricing__formula-part {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+.ds-pricing__formula-part b {
+  color: var(--ds-indigo-950);
+  font-weight: 650;
+  font-size: var(--ds-text-body-md);
+}
+.ds-pricing__formula-part small {
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+}
+.ds-pricing__formula-part--total b {
+  color: var(--ds-indigo-600);
+}
+.ds-pricing__formula-op {
+  color: var(--ds-indigo-600);
+  font-size: var(--ds-text-heading-md);
+  font-weight: 700;
+  line-height: 1;
+}
+.ds-pricing__columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ds-space-4);
+}
+.ds-pricing__block h3 {
+  margin: 0 0 var(--ds-space-4);
+  font-size: var(--ds-text-heading-sm);
+  font-weight: 650;
+  color: var(--ds-indigo-950);
+  letter-spacing: var(--ds-tracking-snug);
+}
+.ds-pricing__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--ds-space-4);
+}
+.ds-pricing__list li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: var(--ds-space-3);
+  align-items: start;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+  line-height: 1.55;
+}
+.ds-pricing__list b {
+  display: block;
+  color: var(--ds-indigo-950);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.ds-pricing__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-indigo-50);
+  color: var(--ds-indigo-600);
+}
+.ds-pricing__footnote {
+  margin: 0;
+  text-align: center;
+  color: var(--ds-slate-500);
+  font-size: var(--ds-text-body-sm);
+  line-height: 1.55;
+}
+@media (min-width: 640px) {
+  .ds-pricing__terms {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 768px) {
+  .ds-pricing__columns {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 479px) {
+  .ds-pricing__formula {
+    flex-direction: column;
+  }
+}
+
 /* =====================================================================
    ПРАВОВЫЕ ДОКУМЕНТЫ (/legal/*) + ПОДВАЛ
    ===================================================================== */

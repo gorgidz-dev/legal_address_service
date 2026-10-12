@@ -248,3 +248,20 @@ class ReviewModerationAction(BaseModel):
 
 class OwnerReplyCreate(BaseModel):
     body: str = Field(min_length=1, max_length=1000)
+
+
+class PriceRange(BaseModel):
+    min: Decimal
+    max: Decimal
+
+
+class CatalogPriceSummary(BaseModel):
+    """Диапазоны цен по всему опубликованному каталогу — для раздела «Цены и тарифы».
+
+    Считается по каталогу, а не по выдаче: фильтры посетителя не должны менять
+    «от и до» в описании тарифов. None — в каталоге нет ни одного значения.
+    """
+    addresses: int
+    price_6m: Optional[PriceRange] = None
+    price_11m: Optional[PriceRange] = None
+    correspondence: Optional[PriceRange] = None
