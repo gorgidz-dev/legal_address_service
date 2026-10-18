@@ -69,7 +69,7 @@ async def get_provider(
 @router.patch(
     "/{provider_id}/payout-settings",
     response_model=ProviderPayoutSettingsRead,
-    summary="Процент комиссии и реквизиты собственника для выплат",
+    summary="Процент комиссии и реквизиты собственника (выплаты, агентский чек)",
     dependencies=[Depends(require_admin)],
 )
 async def set_provider_payout_settings(
@@ -86,6 +86,13 @@ async def set_provider_payout_settings(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Собственник не найден")
     for field in payload.model_fields_set:
         setattr(provider, field, getattr(payload, field))
+    if provider.kpp and provider.inn and len(provider.inn) == 12:
+        # КПП бывает только у организаций (ИНН из 10 цифр).
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "КПП бывает только у организаций — у ИП и физлица (ИНН из 12 цифр) оставьте поле пустым.",
+        )
     await db.commit()
     return ProviderPayoutSettingsRead(
         provider_id=provider.id,
@@ -95,4 +102,9 @@ async def set_provider_payout_settings(
         settlement_account=provider.settlement_account,
         corr_account=provider.corr_account,
         bik=provider.bik,
+        full_name=provider.full_name,
+        inn=provider.inn,
+        kpp=provider.kpp,
+        phone=provider.phone,
+        receipt_vat=provider.receipt_vat,
     )

@@ -21,6 +21,7 @@ import type {
   OwnerPayout,
   PayoutStatus,
   Provider,
+  ReceiptVat,
   RegistrationConfirmResult,
   RegistrationLookup
 } from "../types";
@@ -741,6 +742,29 @@ function CancelModal({
 // Админ: процент и реквизиты собственника
 // ============================================================
 
+const RECEIPT_VAT_OPTIONS: Array<{ value: ReceiptVat | ""; label: string }> = [
+  { value: "", label: "не указана" },
+  { value: "none", label: "без НДС" },
+  { value: "vat0", label: "0%" },
+  { value: "vat5", label: "5%" },
+  { value: "vat7", label: "7%" },
+  { value: "vat10", label: "10%" },
+  { value: "vat22", label: "22%" }
+];
+
+/**
+ * Чего у собственника не хватает для агентского чека (данные поставщика):
+ * без этого сервер не начнёт оплату по его адресам.
+ */
+export function receiptDataMissing(provider: Provider): string[] {
+  const missing: string[] = [];
+  if (!provider.full_name?.trim()) missing.push("наименование");
+  if (!provider.inn) missing.push("ИНН");
+  if (!provider.phone) missing.push("телефон");
+  if (!provider.receipt_vat) missing.push("НДС");
+  return missing;
+}
+
 export function ProviderPayoutSettingsModal({
   provider,
   onClose,
@@ -752,6 +776,11 @@ export function ProviderPayoutSettingsModal({
 }) {
   const [form, setForm] = useState({
     commission_percent: provider.commission_percent ?? "",
+    full_name: provider.full_name ?? "",
+    inn: provider.inn ?? "",
+    kpp: provider.kpp ?? "",
+    phone: provider.phone ?? "",
+    receipt_vat: (provider.receipt_vat ?? "") as ReceiptVat | "",
     bank_name: provider.bank_name ?? "",
     settlement_account: provider.settlement_account ?? "",
     corr_account: provider.corr_account ?? "",
@@ -760,11 +789,12 @@ export function ProviderPayoutSettingsModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const field = (key: keyof typeof form) => ({
+  const field = (key: Exclude<keyof typeof form, "receipt_vat">) => ({
     value: form[key],
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: event.target.value })
   });
   const orNull = (value: string) => value.trim() || null;
+  const digits = (value: string) => orNull(value.replace(/\s/g, ""));
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -773,10 +803,15 @@ export function ProviderPayoutSettingsModal({
     try {
       await api.setProviderPayoutSettings(provider.id, {
         commission_percent: orNull(form.commission_percent.replace(",", ".")),
+        full_name: form.full_name.trim(),
+        inn: digits(form.inn),
+        kpp: digits(form.kpp),
+        phone: orNull(form.phone),
+        receipt_vat: form.receipt_vat || null,
         bank_name: orNull(form.bank_name),
-        settlement_account: orNull(form.settlement_account.replace(/\s/g, "")),
-        corr_account: orNull(form.corr_account.replace(/\s/g, "")),
-        bik: orNull(form.bik.replace(/\s/g, ""))
+        settlement_account: digits(form.settlement_account),
+        corr_account: digits(form.corr_account),
+        bik: digits(form.bik)
       });
       onSaved();
       onClose();
@@ -787,14 +822,43 @@ export function ProviderPayoutSettingsModal({
   }
 
   return (
-    <ModalShell eyebrow="Выплаты собственнику" onClose={onClose} title={provider.short_name}>
+    <ModalShell eyebrow="Реквизиты и выплаты" onClose={onClose} title={provider.short_name}>
       <p className="payout-modal__text">
-        Процент применяется к новым оплатам — в уже заведённых выплатах он не меняется. Пустое поле —
-        действует общий процент площадки.
+        Наименование, ИНН, телефон и ставка НДС попадают в кассовый чек клиента как данные поставщика: площадка
+        принимает оплату как агент собственника. Пока их нет, оплату по адресам собственника клиенты не смогут начать.
       </p>
       <form className="payout-modal__form" onSubmit={submit}>
+        <label className="field payout-modal__wide">
+          <span>Полное наименование (как в ЕГРЮЛ/ЕГРИП или ФИО)</span>
+          <input maxLength={500} required {...field("full_name")} />
+        </label>
         <label className="field">
-          <span>Комиссия площадки, %</span>
+          <span>ИНН</span>
+          <input inputMode="numeric" maxLength={12} {...field("inn")} />
+        </label>
+        <label className="field">
+          <span>КПП (только у организаций)</span>
+          <input inputMode="numeric" maxLength={9} {...field("kpp")} />
+        </label>
+        <label className="field">
+          <span>Телефон</span>
+          <input inputMode="tel" maxLength={30} placeholder="+7…" {...field("phone")} />
+        </label>
+        <label className="field">
+          <span>НДС собственника</span>
+          <select
+            onChange={(event) => setForm({ ...form, receipt_vat: event.target.value as ReceiptVat | "" })}
+            value={form.receipt_vat}
+          >
+            {RECEIPT_VAT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Комиссия площадки, % (пусто — общий)</span>
           <input inputMode="decimal" placeholder="общий" {...field("commission_percent")} />
         </label>
         <label className="field">
@@ -813,6 +877,9 @@ export function ProviderPayoutSettingsModal({
           <span>Корр. счёт</span>
           <input inputMode="numeric" maxLength={24} {...field("corr_account")} />
         </label>
+        <p className="payout-modal__text payout-modal__wide">
+          Процент применяется к новым оплатам — в уже заведённых выплатах он не меняется.
+        </p>
         <ErrorLine message={error} />
         <div className="payout-modal__actions payout-modal__wide">
           <button className="cab-btn cab-btn--primary" disabled={busy} type="submit">

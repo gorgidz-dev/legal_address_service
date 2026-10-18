@@ -99,7 +99,7 @@ async def seed() -> dict:
     async with AsyncSessionLocal() as db:
         provider = Provider(
             code=f"smoke-pay-{uuid4().hex[:6]}", full_name='ООО "Собственник"', short_name="ООО Собственник",
-            inn="7701111111", bank_name="Банк", settlement_account="40702810000000000001",
+            inn="7710140679", bank_name="Банк", settlement_account="40702810000000000001",
             corr_account="30101810000000000001", bik="044525000", commission_percent=Decimal("20"),
         )
         other = Provider(code=f"smoke-pay-{uuid4().hex[:6]}", full_name='ООО "Другой"', short_name="ООО Другой")
@@ -326,6 +326,32 @@ async def run_checks() -> None:
               f"реквизиты заданы, процент не тронут ({r.status_code})")
         r = await http.patch(f"/api/v1/providers/{ids['other']}/payout-settings", json={"bik": "12"})
         check(r.status_code == 422, f"кривой БИК — 422 ({r.status_code})")
+
+        print("\n== реквизиты собственника для агентского чека ==")
+        url = f"/api/v1/providers/{ids['other']}/payout-settings"
+        r = await http.patch(url, json={
+            "full_name": "  ИП Петров Пётр Петрович ", "inn": "500100732259",
+            "phone": "8 (916) 123-45-67", "receipt_vat": "none",
+        })
+        body = r.json()
+        check(
+            r.status_code == 200 and body["full_name"] == "ИП Петров Пётр Петрович" and body["inn"] == "500100732259"
+            and body["phone"] == "+79161234567" and body["receipt_vat"] == "none" and body["bik"] == "044525225",
+            f"наименование, ИНН, телефон и НДС сохранены, банк не тронут ({r.status_code} {r.text[:200]})",
+        )
+        r = await http.patch(url, json={"kpp": "770101001"})
+        check(r.status_code == 422 and "КПП" in r.text, f"КПП у ИНН из 12 цифр — 422 ({r.status_code})")
+        r = await http.patch(url, json={"inn": "500100732250"})
+        check(r.status_code == 422, f"ИНН с неверной контрольной суммой — 422 ({r.status_code})")
+        r = await http.patch(url, json={"full_name": " "})
+        check(r.status_code == 422, f"пустое наименование — 422 ({r.status_code})")
+        r = await http.patch(url, json={"receipt_vat": "vat20"})
+        check(r.status_code == 422, f"ставки 20% больше нет — 422 ({r.status_code})")
+        r = await http.patch(url, json={"receipt_vat": None})
+        check(r.status_code == 200 and r.json()["receipt_vat"] is None, f"ставку можно сбросить ({r.status_code})")
+        r = await http.get("/api/v1/providers")
+        row = next((x for x in r.json() if x["id"] == ids["other"]), {})
+        check(r.status_code == 200 and "receipt_vat" in row, "список собственников отдаёт ставку НДС")
         await bank_confirms(pays[2])
         third = await payout_for(apps[2])
         check(third.commission_percent == Decimal("12.5") and third.payout_kopeks == 2_625_000, "новая оплата — по новому проценту")

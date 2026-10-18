@@ -49,6 +49,7 @@ import {
   AdminPayoutsView,
   OwnerPayoutsView,
   ProviderPayoutSettingsModal,
+  receiptDataMissing,
   RegistrationModal
 } from "./sections/Payouts";
 import {
@@ -4663,10 +4664,18 @@ function ProvidersView({
                 <small>
                   Комиссия: {provider.commission_percent !== null ? `${Number(provider.commission_percent).toLocaleString("ru-RU")}%` : "общая"}
                   {" · "}
-                  {provider.settlement_account && provider.bik ? "реквизиты есть" : "реквизитов нет"}
+                  {provider.settlement_account && provider.bik ? "счёт есть" : "счёта нет"}
+                  {" · "}
+                  {receiptDataMissing(provider).length ? (
+                    <span className="provider-payouts__warn">
+                      для чека нет: {receiptDataMissing(provider).join(", ")}
+                    </span>
+                  ) : (
+                    "данные для чека есть"
+                  )}
                 </small>
                 <button className="text-action" onClick={() => setPayoutProvider(provider)} type="button">
-                  Выплаты
+                  Реквизиты и выплаты
                 </button>
               </span>
             ) : null}

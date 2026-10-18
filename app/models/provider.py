@@ -22,6 +22,10 @@ class Provider(UUIDPKMixin, TimestampMixin, Base):
             "commission_percent IS NULL OR (commission_percent >= 0 AND commission_percent < 100)",
             name="commission_percent_range",
         ),
+        CheckConstraint(
+            "receipt_vat IS NULL OR receipt_vat IN ('none', 'vat0', 'vat5', 'vat7', 'vat10', 'vat22')",
+            name="receipt_vat_valid",
+        ),
         Index("ix_providers_is_active", "is_active"),
     )
 
@@ -47,6 +51,9 @@ class Provider(UUIDPKMixin, TimestampMixin, Base):
     corr_account: Mapped[Optional[str]] = mapped_column(Text)
     bik: Mapped[Optional[str]] = mapped_column(Text)
     phone: Mapped[Optional[str]] = mapped_column(Text)
+    # Ставка НДС собственника для агентского чека (миграция 0039): none — без НДС.
+    # NULL — не указана: оплату по его адресам не принимаем (tbank_receipts).
+    receipt_vat: Mapped[Optional[str]] = mapped_column(Text)
 
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
 

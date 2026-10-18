@@ -1381,6 +1381,7 @@
 /* Админ: процент и реквизиты в списке собственников. */
 .provider-payouts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .provider-payouts small { color: var(--ds-slate-500); }
+.provider-payouts__warn { color: var(--ds-warning-fg); font-weight: 600; }
 
 /* Сверка первичной регистрации: кандидаты из ЕГРЮЛ по названию. */
 .registration-candidates { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 280px; overflow-y: auto; }

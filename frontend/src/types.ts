@@ -153,6 +153,8 @@ export interface Provider {
   bik: string | null;
   /** Комиссия площадки, % (строка-Decimal); null — общий процент из настроек. */
   commission_percent: string | null;
+  /** Ставка НДС собственника в агентском чеке; null — не указана, оплату не примем. */
+  receipt_vat: ReceiptVat | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -927,6 +929,8 @@ export interface AdminPayout extends OwnerPayout {
   blockers: string[];
 }
 
+export type ReceiptVat = "none" | "vat0" | "vat5" | "vat7" | "vat10" | "vat22";
+
 export interface ProviderPayoutSettings {
   provider_id: string;
   commission_percent: string | null;
@@ -935,6 +939,12 @@ export interface ProviderPayoutSettings {
   settlement_account: string | null;
   corr_account: string | null;
   bik: string | null;
+  /** Наименование, ИНН, телефон и НДС — ещё и данные поставщика в агентском чеке. */
+  full_name: string;
+  inn: string | null;
+  kpp: string | null;
+  phone: string | null;
+  receipt_vat: ReceiptVat | null;
 }
 
 

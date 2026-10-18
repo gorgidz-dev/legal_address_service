@@ -6,11 +6,14 @@ from decimal import Decimal
 from typing import Any, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from app.validators import BIK, CorrAccount, INNLegal, SettlementAccount
+from app.contacts import OptionalPhone
+from app.validators import BIK, INN, KPP, CorrAccount, INNLegal, SettlementAccount
 
 PayoutStatus = Literal["awaiting_registration", "due", "paid", "cancelled"]
+#: Ставка НДС собственника в агентском чеке (тег 1199): none — без НДС.
+ReceiptVat = Literal["none", "vat0", "vat5", "vat7", "vat10", "vat22"]
 
 
 class RegistrationLookupRequest(BaseModel):
@@ -65,17 +68,34 @@ class PayoutCancelRequest(BaseModel):
 
 
 class ProviderPayoutSettingsUpdate(BaseModel):
-    """Настройки выплат собственника. Меняются только переданные поля.
+    """Настройки выплат и реквизиты собственника. Меняются только переданные поля.
 
     commission_percent: null — своего процента нет, действует общий из настроек.
     Реквизиты меняет только админ: собственник, сам меняющий счёт для выплат, —
     готовый способ увести деньги при взломе его входа.
+
+    full_name, inn, phone, receipt_vat — ещё и данные поставщика в агентском
+    чеке (app/services/tbank_receipts.py): без них оплату по адресам
+    собственника не принимаем.
     """
     commission_percent: Optional[Decimal] = Field(default=None, ge=0, lt=100, decimal_places=2)
     bank_name: Optional[str] = Field(default=None, max_length=300)
     settlement_account: Optional[SettlementAccount] = None
     corr_account: Optional[CorrAccount] = None
     bik: Optional[BIK] = None
+    full_name: Optional[str] = Field(default=None, max_length=500)
+    inn: Optional[INN] = None
+    kpp: Optional[KPP] = None
+    phone: OptionalPhone = None
+    receipt_vat: Optional[ReceiptVat] = None
+
+    @model_validator(mode="after")
+    def _full_name_is_not_cleared(self) -> "ProviderPayoutSettingsUpdate":
+        if "full_name" in self.model_fields_set:
+            self.full_name = (self.full_name or "").strip()
+            if not self.full_name:
+                raise ValueError("Полное наименование собственника не может быть пустым")
+        return self
 
 
 class ProviderPayoutSettingsRead(BaseModel):
@@ -87,6 +107,11 @@ class ProviderPayoutSettingsRead(BaseModel):
     settlement_account: Optional[str] = None
     corr_account: Optional[str] = None
     bik: Optional[str] = None
+    full_name: str
+    inn: Optional[str] = None
+    kpp: Optional[str] = None
+    phone: Optional[str] = None
+    receipt_vat: Optional[str] = None
 
 
 class PayoutPayee(BaseModel):

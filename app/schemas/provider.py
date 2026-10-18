@@ -59,5 +59,7 @@ class ProviderRead(ProviderBase):
     # Комиссия площадки, % (null — общий процент из настроек). Меняется отдельно:
     # PATCH /providers/{id}/commission, только админ.
     commission_percent: Optional[Decimal] = None
+    # Ставка НДС собственника в агентском чеке; null — не указана (оплату не принимаем).
+    receipt_vat: Optional[str] = None
     created_at: datetime
     updated_at: datetime
