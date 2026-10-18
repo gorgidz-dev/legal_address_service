@@ -16,8 +16,10 @@ from fastapi import HTTPException
 from app.enums import ApplicationStatus, PaymentProvider, PaymentStatus, UserRole
 from app.models.address import Address
 from app.models.application import Application
+from app.models.application_event import ApplicationEvent
 from app.models.owner_payout import OwnerPayout
 from app.models.payment import Payment
+from app.models.provider import Provider
 from app.routers import payments as payments_router
 from app.schemas.payment import PaymentInitiateRequest, PaymentRefundRequest
 from app.services import tbank_payments
@@ -111,16 +113,32 @@ class _Result:
         return self._value
 
 
+def _provider(provider_id, **kw):
+    """Собственник с заполненными данными для агентского чека."""
+    values = dict(
+        full_name="ИП Петров Пётр Петрович", short_name="ИП Петров П. П.", inn="500100732259",
+        phone="+79161234567", receipt_vat="none",
+    )
+    values.update(kw)
+    provider = Provider(**values)
+    provider.id = provider_id
+    return provider
+
+
 class _FakeDB:
-    def __init__(self, *, address=None, application=None, payment=None, users=()):
+    def __init__(self, *, address=None, application=None, payment=None, users=(), provider=None):
         self._address, self._application, self._payment = address, application, payment
+        self._provider = provider
         self._users = {u.id: u for u in users}
         self.added: list = []
         self.commits = 0
         self.rollbacks = 0
 
     async def get(self, model, key):
-        for obj, cls in ((self._application, Application), (self._address, Address), (self._payment, Payment)):
+        for obj, cls in (
+            (self._application, Application), (self._address, Address), (self._payment, Payment),
+            (self._provider, Provider),
+        ):
             if model is cls and obj is not None and obj.id == key:
                 return obj
         return self._users.get(key)
@@ -131,6 +149,8 @@ class _FakeDB:
             return _Result(self._application)
         if entity is OwnerPayout:  # owner_payouts.ensure_payout: живых выплат ещё нет
             return _Result(None)
+        if entity is ApplicationEvent:  # «уже предупредили админа?» — по добавленным событиям
+            return _Result(next((e.id for e in self.added if isinstance(e, ApplicationEvent)), None))
         raise RuntimeError("no subscriptions in unit tests")  # dispatch_event внутри событий
 
     def add(self, item):
@@ -234,7 +254,10 @@ def _setup(active_payment=None, *, app_status=ApplicationStatus.AWAITING_PAYMENT
     payment = active_payment(application) if callable(active_payment) else None
     if payment is not None and payment.initiated_by is None:
         payment.initiated_by = user.id
-    db = _FakeDB(address=address, application=application, payment=payment, users=[user, ADMIN])
+    db = _FakeDB(
+        address=address, application=application, payment=payment, users=[user, ADMIN],
+        provider=_provider(address.provider_id),
+    )
     return db, application, payment, user
 
 
@@ -1075,8 +1098,39 @@ async def test_init_sends_prepayment_receipt_to_the_applicant(tbank, monkeypatch
     assert receipt["Taxation"] == "osn"
     [item] = receipt["Items"]
     assert item["Amount"] == AMOUNT and item["PaymentMethod"] == "full_prepayment"
-    assert item["Tax"] == "vat122"
+    # Агентская схема: поставщик — собственник адреса, НДС — его.
+    assert item["Tax"] == "none"
+    assert item["AgentData"] == {"AgentSign": "another"}
+    assert item["SupplierInfo"] == {"Phones": ["+79161234567"], "Name": "ИП Петров Пётр Петрович", "Inn": "500100732259"}
     assert result.receipt == receipt  # снимок для закрывающего чека
+
+
+@pytest.mark.asyncio
+async def test_owner_without_receipt_data_blocks_payment_and_alerts_admin_once(tbank, monkeypatch) -> None:
+    monkeypatch.setattr(payments_router.settings, "tbank_receipts_enabled", True)
+    db, application, _, user = _setup()
+    db._provider.inn = None
+    db._provider.receipt_vat = None
+    for _ in range(2):
+        with pytest.raises(HTTPException) as exc:
+            await _initiate(db, application, user)
+        assert exc.value.status_code == 409 and "данные собственника" in exc.value.detail
+    assert tbank.service.calls == [] and db.new_payments() == []
+    alerts = [e for e in db.added if isinstance(e, ApplicationEvent)]
+    assert len(alerts) == 1 and alerts[0].audience == "admin"
+    assert "ИНН, ставка НДС" in alerts[0].message
+    assert db.commits >= 1  # уведомление сохранено, хотя запрос отклонён
+
+
+@pytest.mark.asyncio
+async def test_own_service_receipt_needs_no_owner_data(tbank, monkeypatch) -> None:
+    monkeypatch.setattr(payments_router.settings, "tbank_receipts_enabled", True)
+    monkeypatch.setattr(payments_router.settings, "tbank_receipt_agent_sign", "")
+    db, application, _, user = _setup()
+    db._provider.inn = None
+    await _initiate(db, application, user)
+    [(_, kw)] = tbank.service.calls
+    assert "AgentData" not in kw["receipt"]["Items"][0]
 
 
 @pytest.mark.asyncio
@@ -1093,12 +1147,15 @@ async def test_init_without_buyer_contact_is_refused(tbank, monkeypatch) -> None
 
 
 def _closed(app, **kw):
-    from app.services.tbank_receipts import build_prepayment_receipt
+    from app.services.tbank_receipts import Supplier, build_prepayment_receipt
 
     return _tbank_payment(
         app, status=kw.pop("status", PaymentStatus.SUCCEEDED),
         provider_status=kw.pop("provider_status", "CONFIRMED"),
-        receipt=build_prepayment_receipt(amount_kopeks=AMOUNT, email="ivan@example.ru", phone=None),
+        receipt=build_prepayment_receipt(
+            amount_kopeks=AMOUNT, email="ivan@example.ru", phone=None,
+            supplier=Supplier("ИП Иванов Иван Иванович", "500100732259", "+79161234567", "none"),
+        ),
         closing_receipt_attempts=kw.pop("closing_receipt_attempts", 5),
         **kw,
     )

@@ -40,12 +40,99 @@ def _now():
 # Сборка чеков
 # ============================================================
 
+#: Собственник адреса — поставщик в агентском чеке.
+SUPPLIER = tbank_receipts.Supplier(
+    name="Индивидуальный предприниматель Иванов Иван Иванович",
+    inn="500100732259",
+    phone="+79161234567",
+    vat="none",
+)
 
-def test_prepayment_receipt_matches_osn_two_receipt_scheme() -> None:
-    receipt = build_prepayment_receipt(amount_kopeks=AMOUNT, email="client@example.ru", phone=None)
-    assert receipt["Taxation"] == "osn"
+
+def _prepayment(**kw):
+    return build_prepayment_receipt(
+        amount_kopeks=kw.pop("amount_kopeks", AMOUNT),
+        email=kw.pop("email", "a@b.ru"),
+        phone=kw.pop("phone", None),
+        supplier=kw.pop("supplier", SUPPLIER),
+    )
+
+
+def test_agent_receipt_sells_owners_service_with_owners_vat() -> None:
+    """Агентская схема (решение владельца 18.10.2026): позиция — услуга собственника."""
+    receipt = _prepayment(email="client@example.ru")
+    assert receipt["Taxation"] == "osn"  # СНО — пользователя кассы, то есть ООО
     assert receipt["Email"] == "client@example.ru"
-    assert receipt["FfdVersion"] == "1.2"  # совпадает с кассой и ЛК
+    assert receipt["FfdVersion"] == "1.2"
+    [item] = receipt["Items"]
+    assert item == {
+        "Name": "Предоставление юридического адреса",
+        "Price": AMOUNT,
+        "Quantity": 1,
+        "Amount": AMOUNT,
+        "Tax": "none",  # собственник без НДС — НДС ООО к позиции отношения не имеет
+        "PaymentMethod": "full_prepayment",
+        "PaymentObject": "service",
+        "MeasurementUnit": "шт",
+        "AgentData": {"AgentSign": "another"},
+        "SupplierInfo": {
+            "Phones": ["+79161234567"],
+            "Name": "Индивидуальный предприниматель Иванов Иван Иванович",
+            "Inn": "500100732259",
+        },
+    }
+
+
+@pytest.mark.parametrize(("vat", "prepaid", "full"), [("vat22", "vat122", "vat22"), ("vat5", "vat105", "vat5"), ("none", "none", "none")])
+def test_owner_vat_payer_gets_calculated_rate_then_full_rate(vat, prepaid, full) -> None:
+    prepayment = _prepayment(supplier=tbank_receipts.Supplier("ООО «Адрес»", "7707083893", "+79161234567", vat))
+    assert prepayment["Items"][0]["Tax"] == prepaid
+    closing = build_closing_receipt(prepayment)
+    [item] = closing["Items"]
+    assert item["Tax"] == full
+    # Поставщик и признак агента — те же, что в чеке предоплаты.
+    assert item["AgentData"] == prepayment["Items"][0]["AgentData"]
+    assert item["SupplierInfo"] == prepayment["Items"][0]["SupplierInfo"]
+
+
+def test_long_supplier_name_leaves_room_for_phone() -> None:
+    receipt = _prepayment(supplier=tbank_receipts.Supplier("Я" * 300, "500100732259", "+79161234567", "none"))
+    info = receipt["Items"][0]["SupplierInfo"]
+    # Тег 1225: наименование + (телефон + 4) на каждый — не больше 239.
+    assert len(info["Name"]) + len(info["Phones"][0]) + 4 == 239
+
+
+def test_agent_receipt_without_supplier_is_refused() -> None:
+    with pytest.raises(tbank_receipts.SupplierDataMissing):
+        build_prepayment_receipt(amount_kopeks=AMOUNT, email="a@b.ru", phone=None)
+
+
+def _provider(**kw):
+    values = dict(
+        full_name="ИП Иванов Иван Иванович", inn="500100732259", phone="8 (916) 123-45-67", receipt_vat="none",
+    )
+    values.update(kw)
+    return SimpleNamespace(**values)
+
+
+def test_supplier_is_taken_from_owner_card() -> None:
+    supplier = tbank_receipts.supplier_from_provider(_provider())
+    assert supplier == tbank_receipts.Supplier("ИП Иванов Иван Иванович", "500100732259", "+79161234567", "none")
+
+
+def test_missing_owner_data_is_listed_not_guessed() -> None:
+    with pytest.raises(tbank_receipts.SupplierDataMissing) as caught:
+        tbank_receipts.supplier_from_provider(_provider(inn=None, phone="12", receipt_vat=None, full_name=" "))
+    # Ставку НДС не подставляем «без НДС» молча: ошибка в чеке — штраф.
+    assert caught.value.missing == ["полное наименование", "ИНН", "телефон", "ставка НДС"]
+    with pytest.raises(tbank_receipts.SupplierDataMissing):
+        tbank_receipts.supplier_from_provider(None)
+
+
+def test_own_service_receipt_when_agent_scheme_is_off(monkeypatch) -> None:
+    """Прежняя схема (признак агента пуст): вся сумма — услуга ООО с НДС ООО."""
+    monkeypatch.setattr(tbank_receipts.settings, "tbank_receipt_agent_sign", "")
+    receipt = build_prepayment_receipt(amount_kopeks=AMOUNT, email="client@example.ru", phone=None)
     [item] = receipt["Items"]
     assert item == {
         "Name": "Услуги по подбору юридического адреса и подготовке документов",
@@ -57,11 +144,12 @@ def test_prepayment_receipt_matches_osn_two_receipt_scheme() -> None:
         "PaymentObject": "service",
         "MeasurementUnit": "шт",
     }
+    assert build_closing_receipt(receipt)["Items"][0]["Tax"] == "vat22"
 
 
 def test_receipt_amount_equals_payment_amount() -> None:
     # Требование Init: сумма позиций чека = Amount платежа, иначе банк откажет.
-    receipt = build_prepayment_receipt(amount_kopeks=1_234_567, email="a@b.ru", phone=None)
+    receipt = _prepayment(amount_kopeks=1_234_567)
     assert sum(item["Amount"] for item in receipt["Items"]) == 1_234_567
 
 
@@ -70,17 +158,18 @@ def test_receipt_amount_equals_payment_amount() -> None:
     [("+7 925 747-11-03", "+79257471103"), ("89257471103", "+79257471103"), ("9257471103", "+79257471103")],
 )
 def test_phone_is_used_when_email_is_missing(phone, expected) -> None:
-    receipt = build_prepayment_receipt(amount_kopeks=AMOUNT, email=None, phone=phone)
+    receipt = _prepayment(email=None, phone=phone)
     assert receipt["Phone"] == expected
     assert "Email" not in receipt
 
 
 def test_no_contact_means_no_receipt() -> None:
     with pytest.raises(ReceiptContactMissing):
-        build_prepayment_receipt(amount_kopeks=AMOUNT, email="", phone="12")
+        _prepayment(email="", phone="12")
 
 
 def test_settings_drive_rate_and_ffd(monkeypatch) -> None:
+    monkeypatch.setattr(tbank_receipts.settings, "tbank_receipt_agent_sign", "")
     monkeypatch.setattr(tbank_receipts.settings, "tbank_receipt_vat", "none")
     monkeypatch.setattr(tbank_receipts.settings, "tbank_receipt_ffd_version", "")
     monkeypatch.setattr(tbank_receipts.settings, "tbank_receipt_item_name", "Я" * 200)
@@ -91,11 +180,10 @@ def test_settings_drive_rate_and_ffd(monkeypatch) -> None:
 
 
 def test_closing_receipt_is_full_payment_by_advance() -> None:
-    prepayment = build_prepayment_receipt(amount_kopeks=AMOUNT, email="a@b.ru", phone=None)
+    prepayment = _prepayment()
     closing = build_closing_receipt(prepayment)
     [item] = closing["Items"]
     assert item["PaymentMethod"] == "full_payment"
-    assert item["Tax"] == "vat22"
     assert item["Amount"] == AMOUNT and item["Name"] == prepayment["Items"][0]["Name"]
     assert closing["Email"] == "a@b.ru"
     # Новых денег нет — зачёт аванса (тег 1215); сумма видов оплаты = сумме позиций.
@@ -120,9 +208,7 @@ def _payment(**kw) -> Payment:
         pay_for="Юр. адрес",
         provider_payment_id=kw.pop("provider_payment_id", "9287980194"),
         provider_account=kw.pop("provider_account", TERMINAL),
-        receipt=kw.pop(
-            "receipt", build_prepayment_receipt(amount_kopeks=AMOUNT, email="a@b.ru", phone=None)
-        ),
+        receipt=kw.pop("receipt", _prepayment()),
         closing_receipt_attempts=kw.pop("closing_receipt_attempts", 1),
         **kw,
     )

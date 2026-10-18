@@ -99,7 +99,11 @@ ta.TBankClient.send_closing_receipt = lambda self, **kw: BANK.send_closing_recei
 
 async def seed(n_apps: int) -> dict:
     async with AsyncSessionLocal() as db:
-        provider = Provider(code=f"rcpt-{uuid4().hex[:8]}", full_name='ООО "Смоук"', short_name="ООО Смоук")
+        # Собственник — плательщик НДС: в агентской позиции его ставка, 22/122 → 22%.
+        provider = Provider(
+            code=f"rcpt-{uuid4().hex[:8]}", full_name='ООО "Смоук"', short_name="ООО Смоук",
+            inn="7710140679", phone="+79161234567", receipt_vat="vat22",
+        )
         db.add(provider)
         await db.flush()
         address = Address(
@@ -133,7 +137,7 @@ async def seed(n_apps: int) -> dict:
                                expires_at=now + timedelta(hours=2), created_at=now, session_type="web"))
             tokens[key] = raw
         await db.commit()
-        return {"apps": [str(a.id) for a in apps], "tokens": tokens}
+        return {"apps": [str(a.id) for a in apps], "tokens": tokens, "provider": provider.id}
 
 
 async def load_payment(payment_id: str) -> Payment:
@@ -186,7 +190,7 @@ async def receipt_is_sql_null(payment_id: str) -> bool:
 
 
 async def run_checks() -> None:
-    ids = await seed(6)
+    ids = await seed(7)
     apps, tokens = ids["apps"], ids["tokens"]
     csrf = secrets.token_urlsafe(16)
     async with AsyncClient(
@@ -220,7 +224,14 @@ async def run_checks() -> None:
         check(sent is not None and sent["Taxation"] == "osn", "Receipt в Init, СНО osn")
         check(sent["Email"] == CLIENT_EMAIL, "чек — на почту заявителя")
         check(sent["Items"][0]["Tax"] == "vat122" and sent["Items"][0]["PaymentMethod"] == "full_prepayment",
-              "предоплата 100%, НДС 22/122")
+              "предоплата 100%, НДС собственника 22/122")
+        check(
+            sent["Items"][0].get("AgentData") == {"AgentSign": settings.tbank_receipt_agent_sign}
+            and sent["Items"][0].get("SupplierInfo") == {
+                "Phones": ["+79161234567"], "Name": 'ООО "Смоук"', "Inn": "7710140679",
+            },
+            f"агентская позиция: поставщик — собственник ({sent['Items'][0].get('SupplierInfo')})",
+        )
         stored = await load_payment(pay0["id"])
         check(stored.receipt == sent, "снимок чека в JSONB совпадает с отправленным")
         check(stored.status == PaymentStatus.SUCCEEDED.value, f"платёж оплачен ({stored.status})")
@@ -234,7 +245,9 @@ async def run_checks() -> None:
         check(len(BANK.closing) == 1, f"ровно один запрос в банк ({len(BANK.closing)})")
         closing = BANK.closing[0]["receipt"]
         check(closing["Items"][0]["PaymentMethod"] == "full_payment" and closing["Items"][0]["Tax"] == "vat22",
-              "полный расчёт, НДС 22%")
+              "полный расчёт, НДС собственника 22%")
+        check(closing["Items"][0].get("SupplierInfo") == sent["Items"][0]["SupplierInfo"],
+              "в закрывающем чеке тот же поставщик")
         check(closing["Payments"] == {"Electronic": 0, "AdvancePayment": pay0["amount_kopeks"]}, "зачёт аванса")
         check(BANK.closing[0]["payment_id"] == pay0["provider_payment_id"], "по PaymentId банка")
         await tbank_receipts.send_due_for_application(UUID(apps[0]))
@@ -342,6 +355,24 @@ async def run_checks() -> None:
         check(await admin_events(apps[1], "Касса не пробила чек") == 1, "админ предупреждён")
         await http.post(NOTIFY, content=json.dumps(body), headers=JSON)
         check(await admin_events(apps[1], "Касса не пробила чек") == 1, "повтор уведомления не дублирует алерт")
+
+        print("\n== агентский чек: без ИНН собственника оплату не начинаем ==")
+        async with AsyncSessionLocal() as db:
+            await db.execute(update(Provider).where(Provider.id == ids["provider"]).values(inn=None))
+            await db.commit()
+        inits_before = len(BANK.inits)
+        login_as("client")
+        for _ in range(2):
+            r = await http.post("/api/v1/payments/initiate", json={"application_id": apps[6]})
+            check(r.status_code == 409 and "данные собственника" in r.text, f"клиенту — понятный отказ ({r.status_code})")
+        check(len(BANK.inits) == inits_before, "в банк ничего не ушло")
+        title = "Клиент не может оплатить: нет данных собственника для чека"
+        check(await admin_events(apps[6], title) == 1, "админ предупреждён один раз")
+        async with AsyncSessionLocal() as db:
+            payments = (await db.execute(
+                select(func.count()).select_from(Payment).where(Payment.application_id == UUID(apps[6]))
+            )).scalar_one()
+        check(payments == 0, "платёж не заведён")
 
 
 async def main() -> int:

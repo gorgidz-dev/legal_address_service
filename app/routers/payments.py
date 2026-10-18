@@ -42,8 +42,10 @@ from app.enums import (
 from app.models.address import Address
 from app.services.application_pricing import build_price_breakdown
 from app.models.application import Application
+from app.models.application_event import ApplicationEvent
 from app.models.payment import Payment
 from app.models.payment_attachment import PaymentAttachment
+from app.models.provider import Provider
 from app.models.stored_file import StoredFile
 from app.models.user import User
 from app.schemas.payment import (
@@ -352,6 +354,54 @@ async def _retire_dead_tbank_payment(db: AsyncSession, payment: Payment) -> Opti
     return None
 
 
+_SUPPLIER_MISSING_KEY = "receipt_supplier_missing"
+
+
+async def _receipt_supplier(db: AsyncSession, application: Application) -> tbank_receipts.Supplier:
+    """Поставщик агентского чека — собственник адреса.
+
+    Без его данных чек не пробить, а с подключённой кассой банк без чека не
+    примет оплату. Клиенту — понятный отказ, админу — одно уведомление на
+    заявку, что заполнить в карточке собственника.
+    """
+    provider = await db.get(Provider, application.provider_id) if application.provider_id else None
+    try:
+        return tbank_receipts.supplier_from_provider(provider)
+    except tbank_receipts.SupplierDataMissing as e:
+        already = (
+            await db.execute(
+                select(ApplicationEvent.id)
+                .where(
+                    ApplicationEvent.application_id == application.id,
+                    ApplicationEvent.payload.has_key(_SUPPLIER_MISSING_KEY),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if already is None:
+            await create_application_event(
+                db=db,
+                application_id=application.id,
+                kind=ApplicationEventKind.STATUS_CHANGED,
+                audience=NotificationAudience.ADMIN,
+                title="Клиент не может оплатить: нет данных собственника для чека",
+                message=(
+                    f"У собственника {getattr(provider, 'short_name', '') or '—'} не заполнено: "
+                    f"{', '.join(e.missing)}. «Собственники» → «Выплаты и реквизиты»."
+                ),
+                payload={_SUPPLIER_MISSING_KEY: e.missing},
+                created_by=None,
+            )
+        # Отказ — после фиксации: и уведомление, и уже закрытая прошлая ссылка
+        # должны остаться в базе.
+        await db.commit()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Оплата по этому адресу пока недоступна: площадка заполняет данные собственника "
+            "для кассового чека. Попробуйте позже или напишите в поддержку.",
+        ) from e
+
+
 async def _initiate_tbank(db: AsyncSession, application: Application, user: User) -> Payment:
     service = _tbank_service_or_503()
     _assert_may_pay_on_terminal(service, user)
@@ -365,11 +415,13 @@ async def _initiate_tbank(db: AsyncSession, application: Application, user: User
     if settings.tbank_receipts_enabled:
         # Чек «предоплата 100%» (54-ФЗ). Покупатель — заявитель: если платёж
         # создаёт админ за клиента, чек всё равно уходит клиенту.
+        supplier = await _receipt_supplier(db, application) if tbank_receipts.agent_receipts() else None
         try:
             receipt = build_prepayment_receipt(
                 amount_kopeks=amount_kopeks,
                 email=application.contact_email,
                 phone=application.contact_phone,
+                supplier=supplier,
             )
         except ReceiptContactMissing as e:
             raise HTTPException(

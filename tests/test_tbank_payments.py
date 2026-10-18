@@ -486,9 +486,12 @@ def test_card_expiry_is_not_stored() -> None:
 
 
 def _with_receipt(**kw):
-    from app.services.tbank_receipts import build_prepayment_receipt
+    from app.services.tbank_receipts import Supplier, build_prepayment_receipt
 
-    return build_prepayment_receipt(amount_kopeks=AMOUNT, email="a@b.ru", phone=None)
+    return build_prepayment_receipt(
+        amount_kopeks=AMOUNT, email="a@b.ru", phone=None,
+        supplier=Supplier("ИП Иванов Иван Иванович", "500100732259", "+79161234567", "none"),
+    )
 
 
 @pytest.mark.asyncio

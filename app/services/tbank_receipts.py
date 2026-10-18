@@ -33,11 +33,18 @@
 Закрывающий чек — один на заявку: при повторном входе в «Готово» (после
 спора) и при лишней оплате второй не заводится. После частичного возврата в
 ЛК сумма чека предоплаты больше не верна — такой чек только вручную в ЛК.
+
+Агентская схема (решение владельца 18.10.2026, settings.tbank_receipt_agent_sign):
+ООО принимает деньги за собственника адреса и удерживает комиссию из его доли.
+Позиция чека — услуга собственника: признак агента (тег 1222), поставщик —
+собственник (тег 1224: ИНН, наименование, телефон), НДС — собственника. Наша
+комиссия в чек покупателя не входит: это расчёт ООО с собственником.
 """
 from __future__ import annotations
 
 import copy
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Optional
 from uuid import UUID
@@ -54,6 +61,7 @@ from app.enums import (
     PaymentProvider,
     PaymentStatus,
 )
+from app.contacts import PhoneFormatError, normalize_phone
 from app.models.payment import Payment
 from app.services.notification_events import create_application_event
 from app.services.tbank_acquiring import TBankError, TBankNotConfigured, get_tbank_service
@@ -90,8 +98,15 @@ _PREPAYMENT_VAT = {
     "vat22": "vat122",
 }
 
+# Обратно: ставка полного расчёта по расчётной ставке предоплаты. Нужна
+# закрывающему чеку агентской позиции — там НДС собственника из снимка.
+_FULL_VAT = {prepaid: full for full, prepaid in _PREPAYMENT_VAT.items()}
+
 _NAME_MAX = 128  # тег 1030 в ФФД 1.2 / maxLength в OpenAPI
 _EMAIL_MAX = 64  # maxLength Email/Phone в Receipt
+# Тег 1225: наименование поставщика вместе с его телефонами — не длиннее 239
+# символов, на каждый телефон ещё 4 (OpenAPI Т-Банка, SupplierInfo.Name).
+_SUPPLIER_TEXT_MAX = 239
 
 # Чек предоплаты действительно есть — именно JSON-объект. Колонка пишет None
 # как SQL NULL (none_as_null), а проверка типа — страховка от JSON 'null'.
@@ -134,16 +149,81 @@ def _buyer_contact(email: Optional[str], phone: Optional[str]) -> dict[str, str]
     raise ReceiptContactMissing("Для чека нужен e-mail или телефон покупателя")
 
 
+@dataclass(frozen=True)
+class Supplier:
+    """Поставщик в агентском чеке — собственник адреса."""
+    name: str
+    inn: str
+    phone: str  # E.164, «+{Ц}» по OpenAPI
+    vat: str  # ставка полного расчёта: none, vat0, vat5, vat7, vat10, vat22
+
+
+class SupplierDataMissing(ValueError):
+    """У собственника не хватает данных для агентского чека."""
+
+    def __init__(self, missing: list[str]) -> None:
+        self.missing = missing
+        super().__init__("Для кассового чека у собственника не заполнено: " + ", ".join(missing))
+
+
+def agent_receipts() -> bool:
+    """Чеки включены и идут по агентской схеме — нужен поставщик."""
+    return settings.tbank_receipts_enabled and bool(settings.tbank_receipt_agent_sign)
+
+
+def supplier_from_provider(provider: Any) -> Supplier:
+    """Данные поставщика из карточки собственника; чего не хватает — SupplierDataMissing.
+
+    Ошибка в реквизитах чека — штраф, поэтому не угадываем: нет ставки НДС —
+    не считаем её «без НДС», а просим админа указать.
+    """
+    name = (getattr(provider, "full_name", None) or "").strip()
+    inn = (getattr(provider, "inn", None) or "").strip()
+    vat = getattr(provider, "receipt_vat", None)
+    try:
+        phone = normalize_phone(getattr(provider, "phone", None) or "")
+    except PhoneFormatError:
+        phone = ""
+    missing = []
+    if not name:
+        missing.append("полное наименование")
+    if not (inn.isdigit() and len(inn) in (10, 12)):
+        missing.append("ИНН")
+    if not phone:
+        missing.append("телефон")
+    if vat not in _PREPAYMENT_VAT:
+        missing.append("ставка НДС")
+    if missing:
+        raise SupplierDataMissing(missing)
+    return Supplier(name=name, inn=inn, phone=phone, vat=vat)
+
+
+def _agent_fields(supplier: Supplier) -> dict[str, Any]:
+    name_max = _SUPPLIER_TEXT_MAX - (len(supplier.phone) + 4)
+    return {
+        "AgentData": {"AgentSign": settings.tbank_receipt_agent_sign},
+        "SupplierInfo": {
+            "Phones": [supplier.phone],
+            "Name": supplier.name[:name_max],
+            "Inn": supplier.inn,
+        },
+    }
+
+
 def build_prepayment_receipt(
-    *, amount_kopeks: int, email: Optional[str], phone: Optional[str]
+    *,
+    amount_kopeks: int,
+    email: Optional[str],
+    phone: Optional[str],
+    supplier: Optional[Supplier] = None,
 ) -> dict[str, Any]:
     """Receipt для Init: одна позиция «предоплата 100%» на всю сумму.
 
-    Одна позиция, а не разбивка по строкам цены: по оферте ООО продаёт одну
-    собственную услугу (п. 2), а «аренда адреса» в строках цены — договор
-    клиента с собственником, который ООО не заключает.
+    Одна позиция, а не разбивка по строкам цены. По агентской схеме это
+    услуга собственника (supplier обязателен) с его НДС; без неё — собственная
+    услуга ООО по оферте (п. 2) с НДС ООО.
     """
-    item = {
+    item: dict[str, Any] = {
         "Name": settings.tbank_receipt_item_name[:_NAME_MAX],
         "Price": int(amount_kopeks),
         "Quantity": 1,
@@ -153,6 +233,12 @@ def build_prepayment_receipt(
         "PaymentObject": "service",
         "MeasurementUnit": settings.tbank_receipt_measurement_unit,
     }
+    if settings.tbank_receipt_agent_sign:
+        if supplier is None:
+            raise SupplierDataMissing(["собственник"])
+        item["Name"] = settings.tbank_receipt_agent_item_name[:_NAME_MAX]
+        item["Tax"] = _PREPAYMENT_VAT[supplier.vat]
+        item.update(_agent_fields(supplier))
     receipt: dict[str, Any] = {
         "Taxation": settings.tbank_receipt_taxation,
         "Items": [item],
@@ -170,12 +256,18 @@ def build_closing_receipt(prepayment: dict[str, Any]) -> dict[str, Any]:
     ставка полного расчёта: её определяет дата оказания услуги, а не дата
     предоплаты (так ФНС разобрала переход 20→22%: письмо от 15.12.2025
     № АБ-4-20/11248@). Оплата — зачётом аванса (тег 1215), без новых денег.
+
+    Агентская позиция (есть AgentData) — с теми же данными поставщика, а НДС
+    в ней собственника: полная ставка по расчётной из чека предоплаты.
     """
     receipt = copy.deepcopy(prepayment)
     total = 0
     for item in receipt["Items"]:
         item["PaymentMethod"] = "full_payment"
-        item["Tax"] = settings.tbank_receipt_vat
+        if "AgentData" in item:
+            item["Tax"] = _FULL_VAT.get(item["Tax"], item["Tax"])
+        else:
+            item["Tax"] = settings.tbank_receipt_vat
         total += int(item["Amount"])
     receipt["Taxation"] = settings.tbank_receipt_taxation
     # Electronic обязателен по схеме; 0 — новых безналичных денег в этом чеке нет.
