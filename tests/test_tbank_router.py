@@ -1263,6 +1263,59 @@ async def test_link_issued_before_receipts_were_enabled_is_replaced(tbank, monke
     assert tbank.service.calls[-1][1]["receipt"] is not None
 
 
+def _receipt_for(vat: str):
+    from app.services.tbank_receipts import Supplier, build_prepayment_receipt
+
+    return build_prepayment_receipt(
+        amount_kopeks=AMOUNT, email="ivan@example.ru", phone=None,
+        supplier=Supplier("ИП Петров Пётр Петрович", "500100732259", "+79161234567", vat),
+    )
+
+
+@pytest.mark.asyncio
+async def test_link_with_outdated_owner_data_in_receipt_is_replaced(tbank, monkeypatch) -> None:
+    """Админ исправил НДС собственника, пока у клиента живая ссылка: оплата по
+    ней дала бы чек со старой ставкой — ссылку закрываем и выдаём новую."""
+    monkeypatch.setattr(payments_router.settings, "tbank_receipts_enabled", True)
+    db, application, old, user = _setup(
+        lambda app: _tbank_payment(app, expires_at=_now() + timedelta(hours=5), receipt=_receipt_for("vat22"))
+    )
+    tbank.active = old
+    tbank.service = _FakeTBank(state="NEW")
+    result = await _initiate(db, application, user)  # у собственника в карточке «без НДС»
+    assert tbank.service.names() == ["get_state", "cancel", "init"]
+    assert old.status == PaymentStatus.EXPIRED.value
+    assert result.receipt["Items"][0]["Tax"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_link_with_current_receipt_is_reused(tbank, monkeypatch) -> None:
+    monkeypatch.setattr(payments_router.settings, "tbank_receipts_enabled", True)
+    db, application, old, user = _setup(
+        lambda app: _tbank_payment(app, expires_at=_now() + timedelta(hours=5), receipt=_receipt_for("none"))
+    )
+    tbank.active = old
+    tbank.service = _FakeTBank(state="NEW")
+    assert await _initiate(db, application, user) is old
+    assert tbank.service.calls == []
+
+
+@pytest.mark.asyncio
+async def test_link_is_closed_when_owner_data_became_incomplete(tbank, monkeypatch) -> None:
+    monkeypatch.setattr(payments_router.settings, "tbank_receipts_enabled", True)
+    db, application, old, user = _setup(
+        lambda app: _tbank_payment(app, expires_at=_now() + timedelta(hours=5), receipt=_receipt_for("none"))
+    )
+    db._provider.inn = None
+    tbank.active = old
+    tbank.service = _FakeTBank(state="NEW")
+    with pytest.raises(HTTPException) as exc:
+        await _initiate(db, application, user)
+    assert exc.value.status_code == 409
+    assert tbank.service.names() == ["get_state", "cancel"]  # старую закрыли, новую не выдали
+    assert old.status == PaymentStatus.EXPIRED.value
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("closing_status", [None, "sent", "sending"])
 async def test_mark_sent_refused_when_nothing_to_mark(tbank, closing_status) -> None:

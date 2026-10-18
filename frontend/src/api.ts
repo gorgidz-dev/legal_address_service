@@ -462,7 +462,7 @@ export const api = {
     request<AdminPayout>(`/payouts/${payoutId}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
   setProviderPayoutSettings: (
     providerId: string,
-    body: Partial<Omit<ProviderPayoutSettings, "provider_id" | "effective_percent">>
+    body: Partial<Omit<ProviderPayoutSettings, "provider_id" | "effective_percent" | "closed_payment_links">>
   ) =>
     request<ProviderPayoutSettings>(`/providers/${providerId}/payout-settings`, {
       method: "PATCH",

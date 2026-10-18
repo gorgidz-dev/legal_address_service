@@ -62,7 +62,9 @@ from app.enums import (
     PaymentStatus,
 )
 from app.contacts import PhoneFormatError, normalize_phone
+from app.models.application import Application
 from app.models.payment import Payment
+from app.models.provider import Provider
 from app.services.notification_events import create_application_event
 from app.services.tbank_acquiring import TBankError, TBankNotConfigured, get_tbank_service
 
@@ -210,6 +212,22 @@ def _agent_fields(supplier: Supplier) -> dict[str, Any]:
     }
 
 
+def receipt_is_current(receipt: dict[str, Any], supplier: Optional[Supplier]) -> bool:
+    """Чек из уже выданной ссылки совпадает с тем, что пробили бы сейчас.
+
+    Нет — если агентскую схему включили, выключили или сменили признак, или
+    админ исправил данные собственника. Оплата по такой ссылке дала бы чек с
+    неверными реквизитами (а закрывающий повторил бы их), поэтому ссылку меняют.
+    """
+    items = receipt.get("Items") or []
+    if not settings.tbank_receipt_agent_sign:
+        return not any("AgentData" in item for item in items)
+    if supplier is None or not items:
+        return False
+    expected = {**_agent_fields(supplier), "Tax": _PREPAYMENT_VAT[supplier.vat]}
+    return all(all(item.get(key) == value for key, value in expected.items()) for item in items)
+
+
 def build_prepayment_receipt(
     *,
     amount_kopeks: int,
@@ -338,7 +356,33 @@ async def mark_closing_receipt_due(db: AsyncSession, application_id: UUID) -> Op
         return None
     target.closing_receipt_status = DUE
     target.closing_receipt_error = None
+    await _warn_if_owner_vat_changed(db, target)
     return target
+
+
+async def _warn_if_owner_vat_changed(db: AsyncSession, payment: Payment) -> None:
+    """Закрывающий чек берёт НДС собственника из чека предоплаты. Если в карточке
+    собственника ставка с тех пор другая (сменил режим, админ исправил ошибку),
+    админу — проверить, не нужен ли чек коррекции. Какая ставка верна в закрывающем
+    чеке — на дату оплаты или оказания услуги — решает бухгалтер."""
+    agent_items = [item for item in payment.receipt.get("Items", []) if "AgentData" in item]
+    if not agent_items:
+        return
+    application = await db.get(Application, payment.application_id)
+    provider = await db.get(Provider, application.provider_id) if application else None
+    current = getattr(provider, "receipt_vat", None)
+    paid_with = _FULL_VAT.get(agent_items[0].get("Tax"))
+    if current is None or current == paid_with:
+        return
+    await _admin_event(
+        db, payment,
+        title="НДС собственника изменился после оплаты",
+        message=(
+            f"В чеке предоплаты НДС собственника — «{paid_with}», в карточке сейчас — «{current}». "
+            "Закрывающий чек уйдёт со ставкой из чека предоплаты; проверьте с бухгалтером, "
+            "не нужен ли чек коррекции."
+        ),
+    )
 
 
 def give_up_closing_receipt(payment: Payment, reason: str) -> None:

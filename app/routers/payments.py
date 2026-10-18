@@ -357,6 +357,63 @@ async def _retire_dead_tbank_payment(db: AsyncSession, payment: Payment) -> Opti
 _SUPPLIER_MISSING_KEY = "receipt_supplier_missing"
 
 
+async def _receipt_outdated(db: AsyncSession, application: Application, payment: Payment) -> bool:
+    """Чек в выданной ссылке не совпадает с нынешними данными собственника и схемой."""
+    if not settings.tbank_receipts_enabled or not isinstance(payment.receipt, dict):
+        return False
+    supplier = None
+    if tbank_receipts.agent_receipts():
+        provider = await db.get(Provider, application.provider_id) if application.provider_id else None
+        try:
+            supplier = tbank_receipts.supplier_from_provider(provider)
+        except tbank_receipts.SupplierDataMissing:
+            return True
+    return not tbank_receipts.receipt_is_current(payment.receipt, supplier)
+
+
+async def retire_links_with_outdated_receipts(db: AsyncSession, provider_id: UUID) -> int:
+    """Админ изменил данные собственника для чека: выданные, но не оплаченные
+    ссылки Т-Банка по его заявкам закрываем в банке — иначе клиент с уже
+    открытой формой оплаты получил бы чек со старыми реквизитами. Новую ссылку
+    он получит, нажав «Оплатить» ещё раз.
+
+    Ссылку, по которой оплата идёт прямо сейчас, не трогаем (как и для
+    просроченной). Сбой связи с банком сохранению реквизитов не мешает: такую
+    ссылку заменит следующий initiate (_receipt_outdated). Возвращает, сколько
+    ссылок закрыто.
+    """
+    try:
+        get_tbank_service()
+    except TBankNotConfigured:
+        return 0
+    rows = (
+        await db.execute(
+            select(Payment.id, Payment.application_id)
+            .join(Application, Application.id == Payment.application_id)
+            .where(
+                Application.provider_id == provider_id,
+                Payment.provider == PaymentProvider.TBANK.value,
+                Payment.status.in_(list(_ACTIVE)),
+            )
+        )
+    ).all()
+    closed = 0
+    for payment_id, application_id in rows:
+        payment = await db.get(Payment, payment_id)
+        application = await db.get(Application, application_id)
+        if payment is None or application is None or not await _receipt_outdated(db, application, payment):
+            continue
+        try:
+            still_open = await _retire_dead_tbank_payment(db, payment)
+            await db.commit()
+        except HTTPException:
+            await db.rollback()
+            continue
+        if still_open is None:
+            closed += 1
+    return closed
+
+
 async def _receipt_supplier(db: AsyncSession, application: Application) -> tbank_receipts.Supplier:
     """Поставщик агентского чека — собственник адреса.
 
@@ -572,6 +629,10 @@ async def _initiate(db: AsyncSession, payload: PaymentInitiateRequest, user: Use
                 dead = dead or (
                     settings.tbank_receipts_enabled and not isinstance(active.receipt, dict)
                 )
+                # Чек в ссылке устарел: данные собственника исправили или сменили
+                # схему чека. Если данных собственника теперь не хватает, старую
+                # ссылку тоже закрываем, а новую _receipt_supplier не выдаст (409).
+                dead = dead or await _receipt_outdated(db, application, active)
         if not dead:
             return active
         still_open = await _retire_dead_tbank_payment(db, active)

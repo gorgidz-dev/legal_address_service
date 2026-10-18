@@ -118,7 +118,12 @@ def signed(payment: dict, **fields) -> dict:
 
 async def seed() -> dict:
     async with AsyncSessionLocal() as db:
-        provider = Provider(code=f"smoke-{uuid4().hex[:8]}", full_name='ООО "Смоук"', short_name="ООО Смоук")
+        # Данные поставщика для агентского чека (TBANK_RECEIPT_AGENT_SIGN): без них
+        # initiate при включённых чеках отвечает 409.
+        provider = Provider(
+            code=f"smoke-{uuid4().hex[:8]}", full_name='ООО "Смоук"', short_name="ООО Смоук",
+            inn="7710140679", phone="+79161234567", receipt_vat="vat22",
+        )
         db.add(provider)
         await db.flush()
         address = Address(
@@ -236,6 +241,15 @@ async def run_checks() -> None:
         check(bool(pay0.get("provider_payment_id")), "PaymentId банка сохранён строкой")
         check(pay0["amount_kopeks"] == 4_500_000, f"сумма 45 000 ₽ в копейках ({pay0['amount_kopeks']})")
         check((await load_payment(pay0["id"])).provider_account == settings.tbank_terminal_key, "терминал записан в платёж")
+        if settings.tbank_receipts_enabled and settings.tbank_receipt_agent_sign:
+            # Банк принял Init (201 выше) — значит, принял и агентский формат позиции.
+            item = (await load_payment(pay0["id"])).receipt["Items"][0]
+            check(
+                item.get("AgentData") == {"AgentSign": settings.tbank_receipt_agent_sign}
+                and item.get("SupplierInfo") == {"Phones": ["+79161234567"], "Name": 'ООО "Смоук"', "Inn": "7710140679"}
+                and item.get("Tax") == "vat122",
+                f"Init принят с агентской позицией: {item.get('AgentData')} {item.get('SupplierInfo')} {item.get('Tax')}",
+            )
 
         r = await http.post("/api/v1/payments/initiate", json={"application_id": apps[0]})
         check(r.json()["id"] == pay0["id"], "повторное «Оплатить» отдаёт ту же ссылку")

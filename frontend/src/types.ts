@@ -945,6 +945,8 @@ export interface ProviderPayoutSettings {
   kpp: string | null;
   phone: string | null;
   receipt_vat: ReceiptVat | null;
+  /** Сколько выданных ссылок на оплату закрыто: чек в них был со старыми данными. */
+  closed_payment_links: number;
 }
 
 

@@ -60,6 +60,7 @@ class FakeBank:
 
     def __init__(self):
         self.inits: list[dict] = []
+        self.cancels: list[str] = []
         self.closing: list[dict] = []
         self.closing_error: Exception | None = None
         self.closing_delay = 0.0
@@ -80,6 +81,7 @@ class FakeBank:
         return ta.TBankState(payment_id=payment_id, status=status, amount_kopeks=amount, order_id=order_id)
 
     async def cancel(self, client, **kw):
+        self.cancels.append(kw.get("payment_id"))
         return ta.TBankCancelResult(status="CANCELED", original_amount_kopeks=None, new_amount_kopeks=0)
 
     async def send_closing_receipt(self, client, *, payment_id, receipt):
@@ -356,6 +358,26 @@ async def run_checks() -> None:
         await http.post(NOTIFY, content=json.dumps(body), headers=JSON)
         check(await admin_events(apps[1], "Касса не пробила чек") == 1, "повтор уведомления не дублирует алерт")
 
+        print("\n== данные собственника исправили — выданную ссылку закрываем ==")
+        login_as("client")
+        r = await http.post("/api/v1/payments/initiate", json={"application_id": apps[6]})
+        check(r.status_code == 201, f"ссылка выдана ({r.status_code})")
+        link = r.json()
+        check(BANK.inits[-1]["receipt"]["Items"][0]["Tax"] == "vat122", "в ней НДС собственника 22/122")
+        login_as("admin")
+        r = await http.patch(f"/api/v1/providers/{ids['provider']}/payout-settings", json={"receipt_vat": "none"})
+        check(r.status_code == 200 and r.json()["closed_payment_links"] == 1,
+              f"НДС исправлен — ссылка со старым чеком закрыта ({r.status_code} {r.text[-60:]})")
+        check(link["provider_payment_id"] in BANK.cancels, "в банк ушёл Cancel")
+        check((await load_payment(link["id"])).status == PaymentStatus.EXPIRED.value, "у нас ссылка закрыта")
+        r = await http.patch(f"/api/v1/providers/{ids['provider']}/payout-settings", json={"receipt_vat": "none"})
+        check(r.status_code == 200 and r.json()["closed_payment_links"] == 0, "повтор ничего не закрывает")
+        login_as("client")
+        r = await http.post("/api/v1/payments/initiate", json={"application_id": apps[6]})
+        check(r.status_code == 201 and BANK.inits[-1]["receipt"]["Items"][0]["Tax"] == "none",
+              f"новая ссылка — с новым НДС ({r.status_code})")
+        fresh = r.json()
+
         print("\n== агентский чек: без ИНН собственника оплату не начинаем ==")
         async with AsyncSessionLocal() as db:
             await db.execute(update(Provider).where(Provider.id == ids["provider"]).values(inn=None))
@@ -365,14 +387,18 @@ async def run_checks() -> None:
         for _ in range(2):
             r = await http.post("/api/v1/payments/initiate", json={"application_id": apps[6]})
             check(r.status_code == 409 and "данные собственника" in r.text, f"клиенту — понятный отказ ({r.status_code})")
-        check(len(BANK.inits) == inits_before, "в банк ничего не ушло")
+        check(len(BANK.inits) == inits_before, "новых ссылок банк не выдавал")
+        check(fresh["provider_payment_id"] in BANK.cancels, "прежнюю ссылку закрыли: чек в ней уже не пробить")
         title = "Клиент не может оплатить: нет данных собственника для чека"
         check(await admin_events(apps[6], title) == 1, "админ предупреждён один раз")
         async with AsyncSessionLocal() as db:
-            payments = (await db.execute(
-                select(func.count()).select_from(Payment).where(Payment.application_id == UUID(apps[6]))
+            active = (await db.execute(
+                select(func.count()).select_from(Payment).where(
+                    Payment.application_id == UUID(apps[6]),
+                    Payment.status.in_([PaymentStatus.PENDING.value, PaymentStatus.AWAITING_USER.value]),
+                )
             )).scalar_one()
-        check(payments == 0, "платёж не заведён")
+        check(active == 0, "живых ссылок по заявке нет")
 
 
 async def main() -> int:

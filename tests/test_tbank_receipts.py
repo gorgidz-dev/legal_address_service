@@ -12,8 +12,10 @@ from uuid import uuid4
 import pytest
 
 from app.enums import NotificationAudience, PaymentProvider, PaymentStatus
+from app.models.application import Application
 from app.models.application_event import ApplicationEvent
 from app.models.payment import Payment
+from app.models.provider import Provider
 from app.services import tbank_receipts
 from app.services.tbank_acquiring import TBankError
 from app.services.tbank_receipts import (
@@ -147,6 +149,25 @@ def test_own_service_receipt_when_agent_scheme_is_off(monkeypatch) -> None:
     assert build_closing_receipt(receipt)["Items"][0]["Tax"] == "vat22"
 
 
+def test_link_receipt_is_current_only_with_same_owner_data(monkeypatch) -> None:
+    receipt = _prepayment()
+    assert tbank_receipts.receipt_is_current(receipt, SUPPLIER)
+    for changed in (
+        tbank_receipts.Supplier(SUPPLIER.name, SUPPLIER.inn, SUPPLIER.phone, "vat22"),  # исправили НДС
+        tbank_receipts.Supplier(SUPPLIER.name, "7707083893", SUPPLIER.phone, "none"),  # исправили ИНН
+    ):
+        assert not tbank_receipts.receipt_is_current(receipt, changed)
+    assert not tbank_receipts.receipt_is_current(receipt, None)
+    # Схему выключили: агентский чек в ссылке устарел, а чек ООО — нет.
+    monkeypatch.setattr(tbank_receipts.settings, "tbank_receipt_agent_sign", "")
+    assert not tbank_receipts.receipt_is_current(receipt, None)
+    own = build_prepayment_receipt(amount_kopeks=AMOUNT, email="a@b.ru", phone=None)
+    assert tbank_receipts.receipt_is_current(own, None)
+    # И обратно: чек ООО при включённой агентской схеме устарел.
+    monkeypatch.setattr(tbank_receipts.settings, "tbank_receipt_agent_sign", "another")
+    assert not tbank_receipts.receipt_is_current(own, SUPPLIER)
+
+
 def test_receipt_amount_equals_payment_amount() -> None:
     # Требование Init: сумма позиций чека = Amount платежа, иначе банк откажет.
     receipt = _prepayment(amount_kopeks=1_234_567)
@@ -229,10 +250,19 @@ class _Rows:
 
 
 class _FakeDB:
-    def __init__(self, rows=()):
+    def __init__(self, rows=(), *, owner_vat="none"):
         self.rows = list(rows)
         self.added: list = []
         self.commits = 0
+        # Заявка и собственник для сверки НДС при постановке закрывающего чека.
+        self.provider = SimpleNamespace(id=uuid4(), receipt_vat=owner_vat)
+
+    async def get(self, model, key):
+        if model is Application:
+            return SimpleNamespace(id=key, provider_id=self.provider.id)
+        if model is Provider and key == self.provider.id:
+            return self.provider
+        return None
 
     async def execute(self, stmt):
         if hasattr(stmt, "column_descriptions") and stmt.column_descriptions[0].get("entity") is Payment:
@@ -263,6 +293,17 @@ async def test_documents_ready_queues_closing_receipt() -> None:
     db = _FakeDB([payment])
     assert await mark_closing_receipt_due(db, payment.application_id) is payment
     assert payment.closing_receipt_status == DUE
+
+
+@pytest.mark.asyncio
+async def test_owner_vat_changed_after_payment_warns_admin() -> None:
+    payment = _payment()  # оплачено, когда собственник был «без НДС»
+    db = _FakeDB([payment], owner_vat="vat5")
+    assert await mark_closing_receipt_due(db, payment.application_id) is payment
+    assert db.admin_titles() == ["НДС собственника изменился после оплаты"]
+    same = _FakeDB([payment := _payment()], owner_vat="none")
+    assert await mark_closing_receipt_due(same, payment.application_id) is payment
+    assert same.admin_titles() == []
 
 
 @pytest.mark.asyncio

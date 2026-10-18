@@ -801,7 +801,7 @@ export function ProviderPayoutSettingsModal({
     setBusy(true);
     setError(null);
     try {
-      await api.setProviderPayoutSettings(provider.id, {
+      const saved = await api.setProviderPayoutSettings(provider.id, {
         commission_percent: orNull(form.commission_percent.replace(",", ".")),
         full_name: form.full_name.trim(),
         inn: digits(form.inn),
@@ -813,6 +813,13 @@ export function ProviderPayoutSettingsModal({
         corr_account: digits(form.corr_account),
         bik: digits(form.bik)
       });
+      if (saved.closed_payment_links) {
+        // Чек в выданных ссылках был со старыми данными — клиенты получат новые.
+        window.alert(
+          `Закрыто выданных ссылок на оплату: ${saved.closed_payment_links}. ` +
+            "Клиенты получат новую ссылку с исправленными данными, нажав «Оплатить» ещё раз."
+        );
+      }
       onSaved();
       onClose();
     } catch (err) {

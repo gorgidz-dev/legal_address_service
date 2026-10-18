@@ -112,6 +112,8 @@ class ProviderPayoutSettingsRead(BaseModel):
     kpp: Optional[str] = None
     phone: Optional[str] = None
     receipt_vat: Optional[str] = None
+    # Сколько выданных ссылок на оплату закрыто: чек в них был со старыми данными.
+    closed_payment_links: int = 0
 
 
 class PayoutPayee(BaseModel):

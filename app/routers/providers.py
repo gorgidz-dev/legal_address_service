@@ -66,6 +66,10 @@ async def get_provider(
     return provider
 
 
+#: Поля собственника, которые попадают в агентский чек (поставщик и его НДС).
+_RECEIPT_FIELDS = frozenset({"full_name", "inn", "phone", "receipt_vat"})
+
+
 @router.patch(
     "/{provider_id}/payout-settings",
     response_model=ProviderPayoutSettingsRead,
@@ -94,6 +98,13 @@ async def set_provider_payout_settings(
             "КПП бывает только у организаций — у ИП и физлица (ИНН из 12 цифр) оставьте поле пустым.",
         )
     await db.commit()
+    closed_links = 0
+    if payload.model_fields_set & _RECEIPT_FIELDS:
+        # Импорт здесь: роутер оплат тяжёлый, а нужен только при смене данных чека.
+        from app.routers.payments import retire_links_with_outdated_receipts
+
+        closed_links = await retire_links_with_outdated_receipts(db, provider_id)
+        provider = await db.get(Provider, provider_id)
     return ProviderPayoutSettingsRead(
         provider_id=provider.id,
         commission_percent=provider.commission_percent,
@@ -107,4 +118,5 @@ async def set_provider_payout_settings(
         kpp=provider.kpp,
         phone=provider.phone,
         receipt_vat=provider.receipt_vat,
+        closed_payment_links=closed_links,
     )
